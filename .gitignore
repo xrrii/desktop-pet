@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build and packaged output
+dist/
+release/
+
+# Logs
+*.log
+tools/electron-probe/*.log
+
+# Local environment and machine-specific files
+.env
+.env.*
+!.env.example
+*.local
+
+# Temporary asset backups
+assets/pets/*/spritesheet.before-*.webp
