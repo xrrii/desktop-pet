@@ -1,7 +1,7 @@
 import './styles.css'
 import { PetAnimator, loadImage } from './pet/animation'
 import { attachDragController } from './pet/drag'
-import { loadPetManifest, getSpritesheetUrl, type PetStateName } from './pet/petManifest'
+import { loadPetManifest, loadPetSpritesheetUrl, type PetStateName } from './pet/petManifest'
 import { PetStateMachine } from './pet/stateMachine'
 
 const canvas = document.querySelector<HTMLCanvasElement>('#pet-canvas')
@@ -23,7 +23,7 @@ async function bootstrap(): Promise<void> {
 
     const loadPet = async (petId: string): Promise<void> => {
       const manifest = await loadPetManifest(petId)
-      const image = await loadImage(getSpritesheetUrl(manifest))
+      const image = await loadImage(await loadPetSpritesheetUrl(manifest))
       root.style.width = `${Math.round(manifest.atlas.cellWidth * scale)}px`
       root.style.height = `${Math.round(manifest.atlas.cellHeight * scale)}px`
       errorPanel.hidden = true

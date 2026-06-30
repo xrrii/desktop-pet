@@ -56,7 +56,8 @@ export function createPetWindow(): BrowserWindow {
     skipTaskbar: true,
     hasShadow: false,
     show: false,
-    title: 'Desktop Pet',
+    title: 'PetDock',
+    icon: getAssetPath('assets', 'app', 'icon.png'),
     backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

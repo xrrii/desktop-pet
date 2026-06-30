@@ -30,6 +30,22 @@ interface AvailablePet {
   description: string
 }
 
+interface PetManifest {
+  id: string
+  displayName: string
+  description: string
+  spritesheetPath: string
+  atlas: {
+    columns: number
+    rows: number
+    cellWidth: number
+    cellHeight: number
+    width: number
+    height: number
+  }
+  states: Record<string, { row: number; frames: number; fps: number }>
+}
+
 interface DragMoveResult {
   x: number
   y: number
@@ -57,6 +73,10 @@ const api = {
     ipcRenderer.invoke('pet:reset-position'),
   getSettings: (): Promise<PetSettings> => ipcRenderer.invoke('pet:get-settings'),
   listAvailablePets: (): Promise<AvailablePet[]> => ipcRenderer.invoke('pet:list-available'),
+  loadPetManifest: (petId: string): Promise<Partial<PetManifest> | null> =>
+    ipcRenderer.invoke('pet:load-manifest', petId),
+  loadPetSpritesheet: (petId: string, spritesheetPath: string): Promise<string | null> =>
+    ipcRenderer.invoke('pet:load-spritesheet', petId, spritesheetPath),
   setCurrentPet: (petId: string): Promise<boolean> => ipcRenderer.invoke('pet:set-current', petId),
   setAlwaysOnTop: (value: boolean): Promise<boolean> =>
     ipcRenderer.invoke('pet:set-always-on-top', value),

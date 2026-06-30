@@ -1,6 +1,12 @@
 import { BrowserWindow, app, ipcMain } from 'electron'
 import { logError, logInfo } from './logger'
-import { isAvailablePet, listAvailablePets } from './pets'
+import {
+  ensureUserPetsRoot,
+  isAvailablePet,
+  listAvailablePets,
+  readPetManifest,
+  readPetSpritesheetDataUrl
+} from './pets'
 import { flushSettings, loadSettings, updateSettings } from './store'
 import { createPetContextMenu, createTray, rebuildTrayMenu } from './tray'
 import {
@@ -17,6 +23,7 @@ import {
 let petWindow: BrowserWindow | null = null
 
 app.disableHardwareAcceleration()
+app.setAppUserModelId('com.local.petdock')
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('no-sandbox')
 app.commandLine.appendSwitch('disable-software-rasterizer')
@@ -102,6 +109,20 @@ function registerIpc(): void {
 
   ipcMain.handle('pet:list-available', () => listAvailablePets())
 
+  ipcMain.handle('pet:load-manifest', (_event, petId: string) => {
+    if (!isAvailablePet(petId)) {
+      return null
+    }
+    return readPetManifest(petId)
+  })
+
+  ipcMain.handle('pet:load-spritesheet', (_event, petId: string, spritesheetPath: string) => {
+    if (!isAvailablePet(petId)) {
+      return null
+    }
+    return readPetSpritesheetDataUrl(petId, spritesheetPath)
+  })
+
   ipcMain.handle('pet:set-current', (event, petId: string) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     if (!window || !isAvailablePet(petId)) {
@@ -126,6 +147,7 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   logInfo('app ready')
+  ensureUserPetsRoot()
   ensureSelectedPetIsAvailable()
   registerIpc()
   petWindow = createPetWindow()

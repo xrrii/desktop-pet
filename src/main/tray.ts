@@ -1,6 +1,6 @@
-import { BrowserWindow, Menu, Tray, app, nativeImage } from 'electron'
-import { listAvailablePets } from './pets'
-import { resetPetWindowPosition, setAlwaysOnTop, setClickThrough } from './window'
+import { BrowserWindow, Menu, Tray, app, nativeImage, shell } from 'electron'
+import { ensureUserPetsRoot, listAvailablePets } from './pets'
+import { getAssetPath, resetPetWindowPosition, setAlwaysOnTop, setClickThrough } from './window'
 import { loadSettings, updateSettings } from './store'
 
 type PetAction =
@@ -15,7 +15,7 @@ type PetAction =
 let tray: Tray | null = null
 
 const label = {
-  title: '\u96f7\u9524\u5c0f\u4eba',
+  title: 'PetDock',
   pets: '\u684c\u5ba0',
   actions: '\u52a8\u4f5c',
   idle: '\u5f85\u673a',
@@ -29,6 +29,8 @@ const label = {
   clickThrough: '\u70b9\u51fb\u7a7f\u900f',
   launchAtStartup: '\u5f00\u673a\u542f\u52a8',
   resetPosition: '\u91cd\u7f6e\u4f4d\u7f6e',
+  openPetsFolder: '\u6253\u5f00\u684c\u5ba0\u6587\u4ef6\u5939',
+  refreshPets: '\u5237\u65b0\u684c\u5ba0\u5217\u8868',
   show: '\u663e\u793a',
   hide: '\u9690\u85cf\u5230\u6258\u76d8',
   quit: '\u9000\u51fa'
@@ -107,6 +109,18 @@ export function rebuildTrayMenu(window: BrowserWindow): void {
       label: label.resetPosition,
       click: () => {
         resetPetWindowPosition(window)
+      }
+    },
+    {
+      label: label.openPetsFolder,
+      click: () => {
+        void shell.openPath(ensureUserPetsRoot())
+      }
+    },
+    {
+      label: label.refreshPets,
+      click: () => {
+        rebuildTrayMenu(window)
       }
     },
     { type: 'separator' },
@@ -198,9 +212,7 @@ function createPetsMenu(window: BrowserWindow): Electron.MenuItemConstructorOpti
 }
 
 function createTrayIcon(): Electron.NativeImage {
-  return nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAB5ElEQVR4nO2bv07DMBDGz586ZGbnQVhaJt6iIxsLEgMDTCwgIbEgFsa8BROw8CDdmbMVdaiEoHb853x2cv6NydX3feez4yoKUaPRaDT0YiSTre6GrW/sx20nos3UZLpEMUytpqWKYaZiPFchQBM0z5kPUzTPmdeUFlB6SWAO5lP0QDJZbmJ0QSKJJKH6FlSI9/Xbv2un/Zm4DiM9+4eM5yiE76aI2syHxHHoBedgnKakigASINYMRxGSC7CqfNdP1Y/cAlJnMXcXgJSDObe/jw+QckDKQe72Tz3VcR2PbX5AyoFEkthZlPhztOAcrD8frPc2tKTj4dN7rE23dI63fu2oqg7oHWJ/m/LBJ84nn1gB+gAxO3M2g657qXmzLYE+UkSI0bH8KcsBpByQckDKASkHpd/PS2HzA1IOUgfgOpGVyg/XTd9lsBfx8nBDNZp3+QCXmL15qSJwdd6CMrAvwtfRI9UOxgJ8lsHJ91XQdUnG9CM1gcvkLDrAVcXazft0LzgHqwn2t8N/B6159kMmCzEJajYfCuZmPnSpgmZEzD6FkODry4ttrbMfu0mbqZtPfTrBN/D+6dnYrpd6RHLkRUjwzqytENJF4MpnYn+4WxK2Yqj9XuAQKr8YmdI3Q41Go0Ga+QH08N0uWOpvhQAAAABJRU5ErkJggg=='
-  )
+  return nativeImage.createFromPath(getAssetPath('assets', 'app', 'icon.png'))
 }
 
 function setLaunchAtStartup(value: boolean): void {

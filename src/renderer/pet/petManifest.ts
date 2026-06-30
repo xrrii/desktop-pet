@@ -32,16 +32,22 @@ export interface PetManifest {
 }
 
 export async function loadPetManifest(petId = 'hammer-dude'): Promise<PetManifest> {
-  const response = await fetch(`./pets/${petId}/pet.json`)
-  if (!response.ok) {
-    throw new Error(`Unable to load pet manifest: ${response.status}`)
+  const manifest = await window.desktopPet.loadPetManifest(petId)
+  if (!manifest) {
+    throw new Error(`Unable to load pet manifest: ${petId}`)
   }
-  const manifest = (await response.json()) as Partial<PetManifest>
   return normalizePetManifest(manifest, petId)
 }
 
-export function getSpritesheetUrl(manifest: PetManifest): string {
-  return `./pets/${manifest.id}/${manifest.spritesheetPath}`
+export async function loadPetSpritesheetUrl(manifest: PetManifest): Promise<string> {
+  const spritesheetUrl = await window.desktopPet.loadPetSpritesheet(
+    manifest.id,
+    manifest.spritesheetPath
+  )
+  if (!spritesheetUrl) {
+    throw new Error(`Unable to load pet spritesheet: ${manifest.id}/${manifest.spritesheetPath}`)
+  }
+  return spritesheetUrl
 }
 
 function normalizePetManifest(manifest: Partial<PetManifest>, fallbackId: string): PetManifest {

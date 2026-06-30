@@ -1,7 +1,7 @@
 {
-  "name": "desktop-pets",
-  "version": "0.1.0",
-  "description": "A transparent Electron desktop pet powered by a spritesheet atlas.",
+  "name": "petdock",
+  "version": "0.1.1",
+  "description": "A transparent Electron desktop pet dock powered by spritesheet atlases.",
   "author": "Local",
   "license": "MIT",
   "private": true,
@@ -16,8 +16,8 @@
     "dist": "npm run build && electron-builder"
   },
   "build": {
-    "appId": "com.local.desktopPets",
-    "productName": "Desktop Pets",
+    "appId": "com.local.petdock",
+    "productName": "PetDock",
     "asar": false,
     "directories": {
       "output": "release"
@@ -28,15 +28,22 @@
       "package.json"
     ],
     "win": {
-      "signAndEditExecutable": false,
+      "icon": "assets/app/icon.ico",
       "target": [
         "nsis",
         "portable"
       ]
     },
     "nsis": {
+      "installerIcon": "assets/app/icon.ico",
+      "uninstallerIcon": "assets/app/icon.ico",
+      "installerHeaderIcon": "assets/app/icon.ico",
+      "artifactName": "PetDock Setup ${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "PetDock Portable ${version}.${ext}"
     }
   },
   "devDependencies": {

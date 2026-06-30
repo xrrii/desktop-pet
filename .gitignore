@@ -17,3 +17,6 @@ tools/electron-probe/*.log
 
 # Temporary asset backups
 assets/pets/*/spritesheet.before-*.webp
+
+# Generated previews
+outputs/
