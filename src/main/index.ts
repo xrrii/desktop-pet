@@ -2,6 +2,8 @@ import { BrowserWindow, app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent
 import type {
   AssistantAskInput,
   AssistantLayoutTrace,
+  MemoryClearScope,
+  MemoryItemKind,
   AssistantPermissionResolution
 } from '../shared/assistant'
 import { AssistantManager } from './assistant/assistantManager'
@@ -217,6 +219,44 @@ function registerIpc(): void {
     return assistantManager.resolvePermission(input)
   })
 
+  ipcMain.handle('assistant:get-memory', (event) => {
+    requirePetSender(event)
+    return assistantManager.getMemorySnapshot()
+  })
+
+  ipcMain.handle('assistant:get-conversation-messages', (event, conversationId: string) => {
+    requirePetSender(event)
+    requireMemoryId(conversationId)
+    return assistantManager.getConversationMessages(conversationId)
+  })
+
+  ipcMain.handle('assistant:delete-memory-item', (event, kind: MemoryItemKind, id: string) => {
+    requirePetSender(event)
+    requireMemoryKind(kind)
+    requireMemoryId(id)
+    return assistantManager.deleteMemoryItem(kind, id)
+  })
+
+  ipcMain.handle('assistant:clear-memory', (event, scope: MemoryClearScope) => {
+    requirePetSender(event)
+    requireMemoryScope(scope)
+    return assistantManager.clearMemory(scope)
+  })
+
+  ipcMain.handle(
+    'assistant:resolve-memory-candidate',
+    (event, candidateId: number, decision: 'confirmed' | 'rejected') => {
+      requirePetSender(event)
+      if (!Number.isInteger(candidateId) || candidateId < 1) {
+        throw new TypeError('Memory candidate id is invalid.')
+      }
+      if (decision !== 'confirmed' && decision !== 'rejected') {
+        throw new TypeError('Memory candidate decision is invalid.')
+      }
+      return assistantManager.resolveMemoryCandidate(candidateId, decision)
+    }
+  )
+
   ipcMain.handle('assistant:close', (event) => {
     const window = requirePetSender(event)
     if (!isAssistantExpanded(window)) {
@@ -288,6 +328,24 @@ function requireBoolean(value: unknown): asserts value is boolean {
 function requireString(value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new TypeError('IPC value must be a non-empty string.')
+  }
+}
+
+function requireMemoryKind(value: unknown): asserts value is MemoryItemKind {
+  if (value !== 'conversation' && value !== 'memory' && value !== 'app' && value !== 'directory') {
+    throw new TypeError('Memory item kind is invalid.')
+  }
+}
+
+function requireMemoryScope(value: unknown): asserts value is MemoryClearScope {
+  if (value !== 'all' && value !== 'conversations' && value !== 'memories' && value !== 'tool_logs') {
+    throw new TypeError('Memory clear scope is invalid.')
+  }
+}
+
+function requireMemoryId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 512) {
+    throw new TypeError('Memory item id is invalid.')
   }
 }
 

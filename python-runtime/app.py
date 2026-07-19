@@ -11,8 +11,11 @@ import uvicorn
 from petdock_runtime.config import RuntimeConfig
 from petdock_runtime.server import create_app
 
+"""Runtime 进程入口：绑定本机随机端口并输出单行 readiness JSON。"""
+
 
 async def run() -> None:
+    """创建监听 socket、启动 FastAPI，并等待优雅关闭信号。"""
     config = RuntimeConfig.from_environment()
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

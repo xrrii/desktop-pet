@@ -123,15 +123,41 @@ async function main() {
       throw new Error('Assistant UI did not reach the expected completed state.')
     }
 
+    await evaluate(petClient, `document.querySelector('#memory-button').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#memory-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
+    const memoryState = await evaluate(
+      petClient,
+      `(() => ({
+        conversationHidden: document.querySelector('#conversation').hidden,
+        hasConversation: document.querySelectorAll('#memory-content .memory-row').length > 0,
+        tabCount: document.querySelectorAll('#memory-tabs [data-memory-tab]').length
+      }))()`
+    )
+    if (memoryState.conversationHidden !== true || !memoryState.hasConversation || memoryState.tabCount !== 3) {
+      throw new Error(`Memory management view did not load: ${JSON.stringify(memoryState)}`)
+    }
+    await evaluate(petClient, `document.querySelector('#memory-back').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#memory-view').hidden`,
+      (value) => value === true,
+      5_000
+    )
+
     if (backend === 'mock') {
       await evaluate(petClient, `document.querySelector('#new-conversation').click()`)
       await submitMessage(petClient, '请生成一段需要较长时间完成的取消测试内容')
       await delay(100)
-      await evaluate(petClient, `document.querySelector('#stop-button').click()`)
+      await evaluate(petClient, `document.querySelector('#send-button').click()`)
       await waitForEvaluation(
         petClient,
-        `document.querySelector('#send-button').hidden`,
-        (value) => value === false,
+        `document.querySelector('#send-button').getAttribute('aria-label')`,
+        (value) => value === '发送',
         5_000
       )
       const cancelledText = await evaluate(

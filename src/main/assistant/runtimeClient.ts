@@ -1,9 +1,14 @@
 import type {
+  AssistantMemorySnapshot,
+  AssistantConversationMessage,
   AssistantEvent,
   AssistantRequest,
   AssistantRuntimeReady,
-  AssistantToolResultRequest
+  AssistantToolResultRequest,
+  MemoryClearScope,
+  MemoryItemKind
 } from '../../shared/assistant'
+import type { ToolAuditEntry } from './auditLog'
 
 export class AssistantRuntimeClient {
   private readonly baseUrl: string
@@ -72,6 +77,49 @@ export class AssistantRuntimeClient {
       method: 'POST',
       body: JSON.stringify(request)
     })
+  }
+
+  async getMemorySnapshot(): Promise<AssistantMemorySnapshot> {
+    const response = await this.request('/v1/memory', { method: 'GET' })
+    return (await response.json()) as AssistantMemorySnapshot
+  }
+
+  async getConversationMessages(conversationId: string): Promise<AssistantConversationMessage[]> {
+    const response = await this.request(`/v1/memory/conversation/${encodeURIComponent(conversationId)}`, { method: 'GET' })
+    const payload = (await response.json()) as { messages?: unknown }
+    return Array.isArray(payload.messages) ? (payload.messages as AssistantConversationMessage[]) : []
+  }
+
+  async recordToolLog(entry: ToolAuditEntry): Promise<void> {
+    await this.request('/v1/memory/tool-log', {
+      method: 'POST',
+      body: JSON.stringify(entry)
+    })
+  }
+
+  async deleteMemoryItem(kind: MemoryItemKind, id: string): Promise<boolean> {
+    const response = await this.request('/v1/memory/item', {
+      method: 'DELETE',
+      body: JSON.stringify({ kind, id })
+    })
+    const payload = (await response.json()) as { deleted?: unknown }
+    return payload.deleted === true
+  }
+
+  async clearMemory(scope: MemoryClearScope): Promise<void> {
+    await this.request('/v1/memory/clear', {
+      method: 'POST',
+      body: JSON.stringify({ scope })
+    })
+  }
+
+  async resolveMemoryCandidate(candidateId: number, decision: 'confirmed' | 'rejected'): Promise<boolean> {
+    const response = await this.request(`/v1/memory/candidate/${candidateId}`, {
+      method: 'POST',
+      body: JSON.stringify({ decision })
+    })
+    const payload = (await response.json()) as { accepted?: unknown }
+    return payload.accepted === true
   }
 
   async shutdown(): Promise<void> {

@@ -4,8 +4,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+"""PetDock Assistant Runtime 的 HTTP 协议模型。
+
+所有请求模型都禁止未知字段，避免 Renderer 或外部调用方悄悄扩展权限边界。
+"""
+
 
 class AssistantContext(BaseModel):
+    """描述本次对话所处的桌宠、语言和时区上下文。"""
     model_config = ConfigDict(extra="forbid")
 
     activePetId: str = Field(min_length=1, max_length=128)
@@ -14,6 +20,7 @@ class AssistantContext(BaseModel):
 
 
 class AssistantRequest(BaseModel):
+    """创建一个新的助手任务请求。"""
     model_config = ConfigDict(extra="forbid")
 
     protocolVersion: Literal[1]
@@ -35,3 +42,45 @@ class ToolResultRequest(BaseModel):
     decision: Literal["approved", "denied", "cancelled"]
     result: Any | None = None
     error: str | None = Field(default=None, max_length=4_000)
+
+
+class MemoryItemRequest(BaseModel):
+    """删除单条记忆或索引记录。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["conversation", "memory", "app", "directory"]
+    id: str = Field(min_length=1, max_length=512)
+
+
+class MemoryClearRequest(BaseModel):
+    """按范围清理本地助手数据。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["all", "conversations", "memories", "tool_logs"]
+
+
+class MemoryCandidateResolutionRequest(BaseModel):
+    """用户确认或忽略后台分析出的记忆候选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["confirmed", "rejected"]
+
+
+class ToolLogRequest(BaseModel):
+    """Electron Main 回传已经过权限校验的工具审计记录。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    taskId: str = Field(min_length=1, max_length=128)
+    toolCallId: str = Field(min_length=1, max_length=128)
+    toolName: str = Field(min_length=1, max_length=64)
+    args: Any = None
+    risk: str = Field(min_length=1, max_length=32)
+    policyDecision: str = Field(min_length=1, max_length=32)
+    userDecision: str | None = Field(default=None, max_length=32)
+    ok: bool | None = None
+    error: str | None = Field(default=None, max_length=4_000)
+    durationMs: int | None = Field(default=None, ge=0, le=86_400_000)

@@ -25,7 +25,7 @@ AI 助手总体状态：In Progress
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
-Python LangChain Runtime：Done（阶段 2）
+Python LangChain Runtime：Done（阶段 3）
 RAG 文档管理：Placeholder
 Skill 系统：Placeholder
 ```
@@ -160,17 +160,23 @@ Skill 系统：Placeholder
 
 - TypeScript 单元测试覆盖 URL 协议、应用白名单、路径存在性和未知工具拒绝。
 
-### 阶段 3：记忆
+### 阶段 3：记忆与记忆管理界面
 
-状态：Not Started
+状态：Done
 
-- [ ] 设计 SQLite schema。
-- [ ] 保存会话历史。
-- [ ] 保存用户偏好。
-- [ ] 保存常用应用。
-- [ ] 保存常用目录。
-- [ ] 保存工具执行日志。
-- [ ] 支持清理记忆。
+- [x] 设计并实现 SQLite schema 与自动迁移。
+- [x] 保存会话历史和用户/助手/工具消息。
+- [x] Runtime 重启后恢复 LangChain 会话上下文。
+- [x] 支持明确“记住”表达的用户偏好记忆。
+- [x] 根据成功工具执行记录常用应用和目录。
+- [x] 工具审计日志同步保存到 SQLite，并保留原有脱敏 JSONL 日志。
+- [x] 增加记忆摘要、会话消息恢复和清理 API。
+- [x] 增加助手内“会话历史 / 长期记忆 / 使用记录”管理面板。
+- [x] 支持单条删除、按类别清理和全部记忆清理。
+- [x] 路径和工具参数在 Runtime 返回 Renderer 前脱敏。
+- [x] 增加 Runtime 内部结构化记忆工具：`remember_preference`、`forget_memory`、`list_memories`。
+- [x] 增加主任务完成后的异步记忆分析器，不阻塞主代理回复。
+- [x] 增加待确认记忆候选，支持用户确认或忽略后再写入长期记忆。
 
 验收标准：
 
@@ -255,3 +261,14 @@ Skill 系统：Placeholder
 - 修复 LangChain 工具调用结果回传时 assistant `tool_calls` 消息未及时写入历史，导致模型拒绝后续 `tool` 消息的问题。
 - 放宽工具调用 ID 的下划线校验，修复 LangChain `call_...` ID 点击允许时无法回传的问题。
 - 增加 `~` 快捷命令菜单，减少用户重复输入“打开”；预留 `$` 作为后续 Skill 入口。
+
+### 2026-07-19（阶段 3）
+
+- 增加 `assistant.db` SQLite 存储，默认位于 PetDock 用户数据目录。
+- 将 Runtime 会话历史从进程内字典迁移到 SQLite，支持重启后恢复上下文。
+- 增加用户偏好、常用应用、常用目录和工具日志持久化。
+- 增加受鉴权保护的记忆查询、单条删除、分类清理和全部清理接口。
+- 增加助手记忆管理界面，复用透明窗口、左右停靠和五套主题。
+- 增加会话恢复、路径脱敏和记忆数据 Runtime 测试。
+- 补齐 Python Runtime 全部类/方法的中文 docstring，并将注释约定写入开发文档。
+- 当前 Electron 开发模式冒烟测试受本机 GPU 进程和用户目录缓存权限影响，未能启动窗口；类型、单元、Runtime 测试和生产构建均通过。

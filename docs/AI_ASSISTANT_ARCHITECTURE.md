@@ -663,10 +663,13 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 ### 阶段 3：记忆
 
-- SQLite 会话历史。
-- 用户偏好记忆。
-- 常用应用和目录记录。
-- 工具执行日志。
+- SQLite 会话历史、用户偏好、常用应用、常用目录和工具执行日志。
+- Runtime 通过 `/v1/memory`、`/v1/memory/conversation/:id`、`/v1/memory/item` 和 `/v1/memory/clear` 提供受鉴权的查询、恢复和清理接口。
+- 数据库位于 Electron 用户数据目录的 `assistant.db`，由 Python Runtime 管理，Renderer 不直接访问文件。
+- 目录和工具参数返回 Renderer 前必须脱敏；工具审计仍保留独立 JSONL 日志。
+- 助手窗口提供会话历史、长期记忆、使用记录和清理操作，不新增独立窗口。
+- LangChain 主代理可以调用 Runtime 内部的 `remember_preference`、`forget_memory` 和 `list_memories` 工具；这些工具只操作本地记忆，不经过 OS 工具权限流程。
+- 每轮主代理任务结束后，Runtime 异步运行受约束的记忆分析器，生成待确认候选；候选默认不写入正式记忆，用户确认后才生效。
 
 验收：
 

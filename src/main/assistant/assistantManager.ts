@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto'
 import type {
   AssistantAskInput,
   AssistantAskResult,
+  AssistantConversationMessage,
   AssistantEvent,
+  AssistantMemorySnapshot,
   AssistantPermissionResolution,
   AssistantRequest,
   AssistantRuntimeStatus,
@@ -131,7 +133,7 @@ export class AssistantManager {
     }
     clearTimeout(pending.timeout)
     this.pendingPermissions.delete(key)
-    writeToolAudit({
+    this.recordToolAudit({
       taskId: pending.taskId,
       toolCallId: pending.call.id,
       toolName: pending.call.name,
@@ -188,6 +190,44 @@ export class AssistantManager {
     await this.runtime.stop()
   }
 
+  /** 获取 Runtime 返回的脱敏记忆摘要，Renderer 不直接访问数据库。 */
+  async getMemorySnapshot(): Promise<AssistantMemorySnapshot> {
+    const client = await this.runtime.start()
+    return client.getMemorySnapshot()
+  }
+
+  async getConversationMessages(conversationId: string): Promise<AssistantConversationMessage[]> {
+    if (typeof conversationId !== 'string' || !/^[a-zA-Z0-9-]{1,128}$/.test(conversationId)) {
+      throw new TypeError('Conversation id is invalid.')
+    }
+    const client = await this.runtime.start()
+    return client.getConversationMessages(conversationId)
+  }
+
+  async deleteMemoryItem(
+    kind: 'conversation' | 'memory' | 'app' | 'directory',
+    id: string
+  ): Promise<boolean> {
+    const client = await this.runtime.start()
+    return client.deleteMemoryItem(kind, id)
+  }
+
+  async clearMemory(scope: 'all' | 'conversations' | 'memories' | 'tool_logs'): Promise<void> {
+    const client = await this.runtime.start()
+    await client.clearMemory(scope)
+  }
+
+  async resolveMemoryCandidate(
+    candidateId: number,
+    decision: 'confirmed' | 'rejected'
+  ): Promise<boolean> {
+    if (!Number.isInteger(candidateId) || candidateId < 1) {
+      throw new TypeError('Memory candidate id is invalid.')
+    }
+    const client = await this.runtime.start()
+    return client.resolveMemoryCandidate(candidateId, decision)
+  }
+
   private handleRuntimeEvent(event: AssistantEvent): void {
     const state = this.activeTasks.get(event.taskId)
     if (!state || event.sequence <= state.lastRuntimeSequence) {
@@ -232,7 +272,7 @@ export class AssistantManager {
       type: 'tool_call',
       payload: call
     })
-    writeToolAudit({
+    this.recordToolAudit({
       taskId,
       toolCallId: call.id,
       toolName: call.name,
@@ -328,7 +368,7 @@ export class AssistantManager {
     } catch (error) {
       logError('assistant tool result failed to submit', error)
     }
-    writeToolAudit({
+    this.recordToolAudit({
       taskId: pending.taskId,
       toolCallId: pending.call.id,
       toolName: pending.call.name,
@@ -364,6 +404,18 @@ export class AssistantManager {
   private cleanupTask(taskId: string): void {
     this.clearPendingPermissions(taskId)
     this.activeTasks.delete(taskId)
+  }
+
+  /** 同时保留现有脱敏 JSONL 审计，并异步写入 SQLite。 */
+  private recordToolAudit(entry: Parameters<typeof writeToolAudit>[0]): void {
+    writeToolAudit(entry)
+    if (this.runtime.getStatus().state !== 'ready') {
+      return
+    }
+    void this.runtime
+      .start()
+      .then((client) => client.recordToolLog(entry))
+      .catch((error: unknown) => logError('assistant memory tool log failed', error))
   }
 }
 

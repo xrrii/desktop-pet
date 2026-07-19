@@ -75,6 +75,7 @@ export class AssistantRuntimeProcess {
       env: {
         ...process.env,
         PETDOCK_RUNTIME_TOKEN: token,
+        PETDOCK_MEMORY_DB_PATH: join(app.getPath('userData'), 'assistant.db'),
         PYTHONUNBUFFERED: '1'
       },
       stdio: ['pipe', 'pipe', 'pipe'],

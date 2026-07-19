@@ -2,11 +2,15 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AssistantAskInput,
   AssistantAskResult,
+  AssistantConversationMessage,
   AssistantEvent,
   AssistantLayoutTrace,
+  AssistantMemorySnapshot,
   AssistantPermissionResolution,
   AssistantRuntimeStatus,
-  AssistantWindowLayout
+  AssistantWindowLayout,
+  MemoryClearScope,
+  MemoryItemKind
 } from '../shared/assistant'
 import type { AssistantThemeId } from '../shared/theme'
 import type {
@@ -59,6 +63,18 @@ const api = {
     ipcRenderer.invoke('assistant:cancel', taskId),
   resolveAssistantPermission: (input: AssistantPermissionResolution): Promise<boolean> =>
     ipcRenderer.invoke('assistant:resolve-permission', input),
+  getAssistantMemory: (): Promise<AssistantMemorySnapshot> =>
+    ipcRenderer.invoke('assistant:get-memory'),
+  getAssistantConversationMessages: (conversationId: string): Promise<AssistantConversationMessage[]> =>
+    ipcRenderer.invoke('assistant:get-conversation-messages', conversationId),
+  deleteAssistantMemoryItem: (kind: MemoryItemKind, id: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:delete-memory-item', kind, id),
+  clearAssistantMemory: (scope: MemoryClearScope): Promise<void> =>
+    ipcRenderer.invoke('assistant:clear-memory', scope),
+  resolveAssistantMemoryCandidate: (
+    candidateId: number,
+    decision: 'confirmed' | 'rejected'
+  ): Promise<boolean> => ipcRenderer.invoke('assistant:resolve-memory-candidate', candidateId, decision),
   closeAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:close'),
   acknowledgeAssistantLayout: (revision: number): void =>
     ipcRenderer.send('assistant:layout-applied', revision),
@@ -107,6 +123,11 @@ const api = {
     }
     ipcRenderer.on('assistant:theme', listener)
     return () => ipcRenderer.removeListener('assistant:theme', listener)
+  },
+  onAssistantOpenMemory: (callback: () => void): (() => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on('assistant:open-memory', listener)
+    return () => ipcRenderer.removeListener('assistant:open-memory', listener)
   }
 }
 

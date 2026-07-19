@@ -13,6 +13,29 @@
     <section id="assistant-panel" class="assistant-shell" aria-label="AI 助手" hidden>
       <section id="conversation" class="conversation" aria-live="polite"></section>
 
+      <section id="memory-view" class="memory-view" aria-label="记忆管理" hidden>
+        <header class="memory-header">
+          <h2>记忆管理</h2>
+          <div class="memory-header-actions">
+            <button id="memory-clear-open" class="icon-button" type="button" title="清理当前类别" aria-label="清理当前类别">⌫</button>
+            <button id="memory-back" class="icon-button" type="button" title="返回聊天" aria-label="返回聊天">←</button>
+          </div>
+        </header>
+        <nav id="memory-tabs" class="memory-tabs" aria-label="记忆类别" role="tablist">
+          <button class="memory-tab is-selected" type="button" role="tab" aria-selected="true" data-memory-tab="conversations">会话历史</button>
+          <button class="memory-tab" type="button" role="tab" aria-selected="false" data-memory-tab="memories">长期记忆</button>
+          <button class="memory-tab" type="button" role="tab" aria-selected="false" data-memory-tab="toolLogs">使用记录</button>
+        </nav>
+        <div id="memory-content" class="memory-content" role="tabpanel"></div>
+        <div id="memory-clear" class="memory-clear" hidden>
+          <p id="memory-clear-title">确认清理？</p>
+          <div class="memory-clear-actions">
+            <button id="memory-clear-cancel" class="secondary-button" type="button">取消</button>
+            <button id="memory-clear-confirm" class="primary-button" type="button">确认清理</button>
+          </div>
+        </div>
+      </section>
+
       <div id="error-banner" class="error-banner" role="alert" hidden></div>
 
       <div
@@ -40,8 +63,8 @@
         ></textarea>
         <div class="composer-actions">
           <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">+</button>
-          <button id="stop-button" class="secondary-button" type="button" hidden>停止</button>
-          <button id="send-button" class="primary-button" type="submit">发送</button>
+          <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">◈</button>
+          <button id="send-button" class="primary-button icon-action-button" type="submit" title="发送" aria-label="发送">↑</button>
           <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>
         </div>
       </form>

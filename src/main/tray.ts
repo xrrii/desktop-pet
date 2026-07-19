@@ -12,6 +12,7 @@ let openAssistant: (() => void) | null = null
 const label = {
   title: 'PetDock',
   assistant: '\u6253\u5f00\u52a9\u624b',
+  memory: '\u8bb0\u5fc6\u7ba1\u7406',
   assistantTheme: '\u52a9\u624b\u4e3b\u9898',
   pets: '\u684c\u5ba0',
   actions: '\u52a8\u4f5c',
@@ -65,6 +66,14 @@ export function rebuildTrayMenu(window: BrowserWindow): void {
       label: label.assistant,
       enabled: openAssistant !== null,
       click: () => openAssistant?.()
+    },
+    {
+      label: label.memory,
+      enabled: openAssistant !== null,
+      click: () => {
+        openAssistant?.()
+        window.webContents.send('assistant:open-memory')
+      }
     },
     { type: 'separator' },
     createPetsMenu(window),
@@ -156,6 +165,14 @@ export function createPetContextMenu(window: BrowserWindow): Menu {
       label: label.assistant,
       enabled: openAssistant !== null,
       click: () => openAssistant?.()
+    },
+    {
+      label: label.memory,
+      enabled: openAssistant !== null,
+      click: () => {
+        openAssistant?.()
+        window.webContents.send('assistant:open-memory')
+      }
     },
     { type: 'separator' },
     createPetsMenu(window),

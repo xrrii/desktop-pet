@@ -50,6 +50,77 @@ export interface AssistantAskResult {
   taskId: string
 }
 
+export type MemoryClearScope = 'all' | 'conversations' | 'memories' | 'tool_logs'
+export type MemoryItemKind = 'conversation' | 'memory' | 'app' | 'directory'
+
+export interface AssistantMemorySnapshot {
+  conversations: AssistantConversationSummary[]
+  memories: AssistantMemorySummary[]
+  candidates: AssistantMemoryCandidateSummary[]
+  apps: AssistantAppSummary[]
+  directories: AssistantDirectorySummary[]
+  toolLogs: AssistantToolLogSummary[]
+}
+
+export interface AssistantMemoryCandidateSummary {
+  id: number
+  kind: 'preference'
+  content: string
+  confidence: number
+  reason: string
+  createdAt: string
+}
+
+export interface AssistantConversationSummary {
+  id: string
+  title: string
+  preview: string
+  createdAt: string
+  updatedAt: string
+  messageCount: number
+}
+
+export interface AssistantConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
+
+export interface AssistantMemorySummary {
+  id: number
+  kind: 'preference'
+  value: string
+  source: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AssistantAppSummary {
+  appId: string
+  displayName: string
+  useCount: number
+  lastUsedAt: string
+}
+
+export interface AssistantDirectorySummary {
+  id: string
+  displayPath: string
+  useCount: number
+  lastUsedAt: string
+}
+
+export interface AssistantToolLogSummary {
+  id: number
+  toolName: string
+  risk: string
+  policyDecision: string
+  userDecision: string | null
+  ok: boolean | null
+  error: string | null
+  durationMs: number | null
+  createdAt: string
+}
+
 export interface AssistantPermissionResolution {
   taskId: string
   toolCallId: string

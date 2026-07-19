@@ -5,11 +5,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .backends import AssistantBackend, ToolCallRequest
+from .memory_extractor import MemoryExtractor
 from .protocol import AssistantRequest, ToolResultRequest
+
+"""Runtime 任务生命周期、SSE 事件和工具结果等待逻辑。"""
 
 
 @dataclass
 class TaskSession:
+    """保存单个任务的事件队列、取消状态和待处理工具结果。"""
     queue: asyncio.Queue[dict[str, Any] | None] = field(default_factory=asyncio.Queue)
     task: asyncio.Task[None] | None = None
     consumed: bool = False
@@ -18,11 +22,16 @@ class TaskSession:
 
 
 class AssistantService:
-    def __init__(self, backend: AssistantBackend) -> None:
+    """编排后端流式输出，并在外部工具调用时暂停等待 Main。"""
+
+    def __init__(self, backend: AssistantBackend, extractor: MemoryExtractor | None = None) -> None:
+        """绑定模型后端和可选的异步记忆分析器。"""
         self._backend = backend
+        self._extractor = extractor
         self._sessions: dict[str, TaskSession] = {}
 
     def start(self, request: AssistantRequest) -> None:
+        """创建任务会话并启动后台执行协程。"""
         if request.taskId in self._sessions:
             raise ValueError("Task already exists.")
         session = TaskSession()
@@ -30,6 +39,7 @@ class AssistantService:
         session.task = asyncio.create_task(self._run(request, session))
 
     async def events(self, task_id: str):
+        """消费指定任务的单次 SSE 事件流，并在结束后释放会话。"""
         session = self._sessions.get(task_id)
         if not session:
             raise KeyError(task_id)
@@ -47,6 +57,7 @@ class AssistantService:
             self._sessions.pop(task_id, None)
 
     def cancel(self, task_id: str) -> bool:
+        """取消仍在运行的任务，返回是否成功找到可取消任务。"""
         session = self._sessions.get(task_id)
         if not session or not session.task or session.task.done():
             return False
@@ -65,10 +76,14 @@ class AssistantService:
         return True
 
     async def _run(self, request: AssistantRequest, session: TaskSession) -> None:
+        """转发后端输出、暂停外部工具调用并最终发送 done/error 事件。"""
         sequence = 0
         tool_result: ToolResultRequest | None = None
+        assistant_text_parts: list[str] = []
+        completed = False
 
         async def emit(event_type: str, payload: dict[str, Any]) -> None:
+            """为事件分配单调序号并写入任务队列。"""
             nonlocal sequence
             sequence += 1
             await session.queue.put(
@@ -87,6 +102,7 @@ class AssistantService:
                 async for output in self._backend.stream(request, tool_result):
                     tool_result = None
                     if isinstance(output, str):
+                        assistant_text_parts.append(output)
                         await emit("message_delta", {"delta": output})
                         continue
 
@@ -133,7 +149,10 @@ class AssistantService:
             await emit("done", {"finishReason": "error"})
         else:
             await emit("done", {"finishReason": "stop"})
+            completed = True
         finally:
+            if completed and self._extractor:
+                self._extractor.schedule(request, "".join(assistant_text_parts))
             if session.pending_tool_result and not session.pending_tool_result.done():
                 session.pending_tool_result.cancel()
             await session.queue.put(None)
