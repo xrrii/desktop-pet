@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,3 +22,16 @@ class AssistantRequest(BaseModel):
     input: str = Field(min_length=1, max_length=12_000)
     source: Literal["pet", "assistant-window", "shortcut"]
     context: AssistantContext
+
+
+class ToolResultRequest(BaseModel):
+    """Electron Main 回传的工具执行结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    protocolVersion: Literal[1]
+    taskId: str = Field(min_length=1, max_length=128)
+    toolCallId: str = Field(min_length=1, max_length=128)
+    decision: Literal["approved", "denied", "cancelled"]
+    result: Any | None = None
+    error: str | None = Field(default=None, max_length=4_000)

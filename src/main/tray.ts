@@ -1,8 +1,10 @@
 import { BrowserWindow, Menu, Tray, app, nativeImage, shell } from 'electron'
 import type { PetAction } from '../shared/pet'
+import { ASSISTANT_THEME_OPTIONS } from '../shared/theme'
 import { ensureUserPetsRoot, listAvailablePets } from './pets'
 import { getAssetPath, resetPetWindowPosition, setAlwaysOnTop, setClickThrough } from './window'
 import { loadSettings, updateSettings } from './store'
+import { setAssistantTheme } from './theme'
 
 let tray: Tray | null = null
 let openAssistant: (() => void) | null = null
@@ -10,6 +12,7 @@ let openAssistant: (() => void) | null = null
 const label = {
   title: 'PetDock',
   assistant: '\u6253\u5f00\u52a9\u624b',
+  assistantTheme: '\u52a9\u624b\u4e3b\u9898',
   pets: '\u684c\u5ba0',
   actions: '\u52a8\u4f5c',
   idle: '\u5f85\u673a',
@@ -65,6 +68,7 @@ export function rebuildTrayMenu(window: BrowserWindow): void {
     },
     { type: 'separator' },
     createPetsMenu(window),
+    createAssistantThemeMenu(window),
     { type: 'separator' },
     {
       label: label.actions,
@@ -155,6 +159,7 @@ export function createPetContextMenu(window: BrowserWindow): Menu {
     },
     { type: 'separator' },
     createPetsMenu(window),
+    createAssistantThemeMenu(window),
     { type: 'separator' },
     createActionItem(window, label.waving, 'waving'),
     createActionItem(window, label.jumping, 'jumping'),
@@ -184,6 +189,22 @@ export function createPetContextMenu(window: BrowserWindow): Menu {
       click: () => app.quit()
     }
   ])
+}
+
+function createAssistantThemeMenu(window: BrowserWindow): Electron.MenuItemConstructorOptions {
+  const settings = loadSettings()
+  return {
+    label: label.assistantTheme,
+    submenu: ASSISTANT_THEME_OPTIONS.map((theme) => ({
+      label: theme.label,
+      type: 'radio' as const,
+      checked: theme.id === settings.assistantTheme,
+      click: () => {
+        setAssistantTheme(window, theme.id)
+        rebuildTrayMenu(window)
+      }
+    }))
+  }
 }
 
 function createActionItem(window: BrowserWindow, itemLabel: string, action: PetAction) {

@@ -2,8 +2,9 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { PetSettings } from '../shared/pet'
+import { isAssistantThemeId } from '../shared/theme'
 
-const currentSettingsVersion = 2
+const currentSettingsVersion = 3
 
 const defaultSettings: PetSettings = {
   settingsVersion: currentSettingsVersion,
@@ -12,7 +13,8 @@ const defaultSettings: PetSettings = {
   scale: 0.85,
   alwaysOnTop: true,
   clickThrough: false,
-  launchAtStartup: false
+  launchAtStartup: false,
+  assistantTheme: 'quiet'
 }
 
 let cachedSettings: PetSettings | null = null
@@ -57,7 +59,10 @@ function normalizeSettings(value: Partial<PetSettings>): PetSettings {
     launchAtStartup:
       typeof value.launchAtStartup === 'boolean'
         ? value.launchAtStartup
-        : defaultSettings.launchAtStartup
+        : defaultSettings.launchAtStartup,
+    assistantTheme: isAssistantThemeId(value.assistantTheme)
+      ? value.assistantTheme
+      : defaultSettings.assistantTheme
   }
 }
 

@@ -25,7 +25,7 @@ AI 助手总体状态：In Progress
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
-Python LangChain Runtime：Done（阶段 1）
+Python LangChain Runtime：Done（阶段 2）
 RAG 文档管理：Placeholder
 Skill 系统：Placeholder
 ```
@@ -103,6 +103,8 @@ Skill 系统：Placeholder
 - [x] 展开助手时扩大窗口，收起后恢复桌宠原始尺寸和屏幕位置。
 - [x] 桌宠左侧空间充足时输入框从右向左展开，否则在右侧从左向右展开。
 - [x] 展开状态拖动整个组合窗口，桌宠与输入框保持固定锚点。
+- [x] 支持五套助手主题切换：雾白实用、墨线便笺、夜航玻璃、像素伙伴、苹果毛玻璃。
+- [x] 主题选择持久化到用户设置，重启后恢复上次选择。
 - [x] 双击桌宠或使用托盘菜单唤起助手。
 - [x] 输入框支持发送、取消、加载状态和新对话。
 - [x] Electron Main 管理 Python Runtime 启动、健康检查和优雅退出。
@@ -124,25 +126,28 @@ Skill 系统：Placeholder
 
 - `npm.cmd run check` 通过：7 个 TypeScript 测试、3 个 Python 测试。
 - `npm.cmd run test:e2e:assistant` 通过。
-- `npm.cmd run test:e2e:assistant:dev` 覆盖 electron-vite 开发模式、透明背景、CSS 加载和左右展开方向。
+- `npm.cmd run test:e2e:assistant:dev` 覆盖 electron-vite 开发模式、透明背景、CSS 加载、左右展开方向和五套主题切换。
 - `npm.cmd run pack` 通过，包含独立 `petdock-assistant.exe`。
 - `npm.cmd run test:e2e:assistant:packaged` 通过。
 - `npm.cmd run test:e2e:assistant:langchain` 通过，打包版 `ChatOpenAI.astream()` 已连接本地 OpenAI-compatible 测试服务。
-- 端到端测试覆盖单窗口展开/收起、左右停靠、桌宠与输入框锚点、透明气泡样式、流式回复、取消和 Runtime 退出。
+- 端到端测试覆盖单窗口展开/收起、左右停靠、桌宠与输入框锚点、透明气泡样式、五套主题、流式回复、取消和 Runtime 退出。
 
 ### 阶段 2：工具调用
 
-状态：Not Started
+状态：Done
 
-- [ ] 设计工具调用协议。
-- [ ] Python Runtime 生成 tool call。
-- [ ] Electron Main 接收 tool call。
-- [ ] Electron Main 做权限校验。
-- [ ] 支持 `open_url`。
-- [ ] 支持 `open_app`。
-- [ ] 支持 `open_file_or_folder`。
-- [ ] 高风险操作弹确认框。
-- [ ] 记录工具执行日志。
+- [x] 设计工具调用协议和 `/v1/tool-result` 回传接口。
+- [x] Python Runtime 生成 tool call，并暂停任务等待执行结果。
+- [x] Electron Main 接收 tool call，统一编排 UI 事件序号。
+- [x] Electron Main 对工具名称、参数、URL、应用和路径做权限校验。
+- [x] 支持 `open_url`，仅允许 `http` 和 `https`。
+- [x] 支持 `open_app`，仅允许记事本、资源管理器和计算器白名单。
+- [x] 支持 `open_file_or_folder`，打开前解析真实路径并确认文件存在。
+- [x] 应用和文件/文件夹操作显示确认卡片；未知和危险工具直接拒绝。
+- [x] 工具确认 60 秒超时，任务取消或助手关闭后自动失效。
+- [x] 工具请求、策略判断、用户决策和执行结果写入独立审计日志。
+- [x] 输入 `~` 弹出快捷命令菜单，支持“打开网站”和“打开应用”。
+- [x] 快捷命令支持鼠标、上下方向键、回车和 Esc，`$` 保留给后续 Skill 菜单。
 
 验收标准：
 
@@ -150,6 +155,10 @@ Skill 系统：Placeholder
 - AI 能打开白名单应用。
 - AI 能打开指定文件或文件夹。
 - 需要确认的操作不会直接执行。
+
+验证方式：
+
+- TypeScript 单元测试覆盖 URL 协议、应用白名单、路径存在性和未知工具拒绝。
 
 ### 阶段 3：记忆
 
@@ -243,3 +252,6 @@ Skill 系统：Placeholder
 - 阶段 1 助手界面改为跟随桌宠的透明气泡窗口。
 - 增加左右空间自适应停靠、相反方向展开动画和开发模式 CSS 回归测试。
 - 将桌宠与助手迁移到单一透明窗口，修复拖动时两个原生窗口不同步和输入框下沉问题。
+- 修复 LangChain 工具调用结果回传时 assistant `tool_calls` 消息未及时写入历史，导致模型拒绝后续 `tool` 消息的问题。
+- 放宽工具调用 ID 的下划线校验，修复 LangChain `call_...` ID 点击允许时无法回传的问题。
+- 增加 `~` 快捷命令菜单，减少用户重复输入“打开”；预留 `$` 作为后续 Skill 入口。

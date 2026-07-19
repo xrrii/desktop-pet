@@ -9,13 +9,12 @@ const canvas = requireElement<HTMLCanvasElement>('#pet-canvas')
 const root = requireElement<HTMLElement>('#pet-root')
 const errorPanel = requireElement<HTMLElement>('#pet-error')
 
-initializeAssistant()
-
 void bootstrap()
 
 async function bootstrap(): Promise<void> {
   try {
     const settings = await window.desktopPet.getSettings()
+    initializeAssistant(settings.assistantTheme)
     const stateMachine = new PetStateMachine()
     const scale = settings.scale > 0 ? settings.scale : 1
     let animator: PetAnimator | null = null

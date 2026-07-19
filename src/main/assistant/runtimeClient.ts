@@ -1,4 +1,9 @@
-import type { AssistantEvent, AssistantRequest, AssistantRuntimeReady } from '../../shared/assistant'
+import type {
+  AssistantEvent,
+  AssistantRequest,
+  AssistantRuntimeReady,
+  AssistantToolResultRequest
+} from '../../shared/assistant'
 
 export class AssistantRuntimeClient {
   private readonly baseUrl: string
@@ -60,6 +65,13 @@ export class AssistantRuntimeClient {
     })
     const payload = (await response.json()) as { cancelled?: unknown }
     return payload.cancelled === true
+  }
+
+  async submitToolResult(request: AssistantToolResultRequest): Promise<void> {
+    await this.request('/v1/tool-result', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
   }
 
   async shutdown(): Promise<void> {

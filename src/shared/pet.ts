@@ -1,3 +1,5 @@
+import type { AssistantThemeId } from './theme'
+
 export type PetStateName =
   | 'idle'
   | 'runningRight'
@@ -45,6 +47,7 @@ export interface PetSettings {
   alwaysOnTop: boolean
   clickThrough: boolean
   launchAtStartup: boolean
+  assistantTheme: AssistantThemeId
 }
 
 export interface AvailablePet {

@@ -2,6 +2,7 @@ export const ASSISTANT_PROTOCOL_VERSION = 1 as const
 
 export type AssistantSource = 'pet' | 'assistant-window' | 'shortcut'
 export type ToolRisk = 'safe' | 'confirm' | 'dangerous'
+export type ToolDecision = 'approved' | 'denied' | 'cancelled'
 export type AssistantRuntimeState = 'stopped' | 'starting' | 'ready' | 'stopping' | 'failed'
 export type AssistantBackend = 'mock' | 'langchain'
 export type AssistantDockSide = 'left' | 'right'
@@ -49,6 +50,12 @@ export interface AssistantAskResult {
   taskId: string
 }
 
+export interface AssistantPermissionResolution {
+  taskId: string
+  toolCallId: string
+  decision: Extract<ToolDecision, 'approved' | 'denied'>
+}
+
 export interface AssistantRuntimeReady {
   type: 'ready'
   protocolVersion: typeof ASSISTANT_PROTOCOL_VERSION
@@ -76,6 +83,15 @@ export interface ToolCall {
   args: unknown
   risk: ToolRisk
   preview: string
+}
+
+export interface AssistantToolResultRequest {
+  protocolVersion: typeof ASSISTANT_PROTOCOL_VERSION
+  taskId: string
+  toolCallId: string
+  decision: ToolDecision
+  result?: unknown
+  error?: string
 }
 
 export type AssistantEvent =

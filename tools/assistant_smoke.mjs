@@ -24,6 +24,7 @@ const rightScreenshotPath = join(
 )
 const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' ? 'langchain' : 'mock'
 const expectedResponse = backend === 'langchain' ? '本地模型适配测试通过' : '离线模式回应'
+const assistantThemes = ['quiet', 'note', 'glass', 'pixel', 'apple']
 let child
 
 async function main() {
@@ -83,6 +84,7 @@ async function main() {
       (value) => value === true,
       5_000
     )
+    const originalSettings = await evaluate(petClient, 'window.desktopPet.getSettings()', true)
     originalPetPosition = await evaluate(
       petClient,
       'window.desktopPet.getWindowPosition()',
@@ -100,7 +102,7 @@ async function main() {
     )
     await waitForExpandedWindow(petClient)
     await assertAssistantLayout(petClient, 'left')
-
+    await assertAssistantThemes(petClient, originalSettings.assistantTheme)
     await submitMessage(petClient, '阶段一冒烟测试')
     const conversationText = await waitForEvaluation(
       petClient,
@@ -140,6 +142,7 @@ async function main() {
         throw new Error('Assistant cancellation did not interrupt the stream.')
       }
       await assertConversationWheelScroll(petClient)
+
     }
 
     await movePetToHorizontalEdge(petClient, 'left', originalPetPosition.y)
@@ -261,6 +264,25 @@ function openAssistantWithTrace(client) {
       return window.desktopPet.openAssistant()
     })()`,
     true
+  )
+}
+
+async function assertAssistantThemes(client, originalTheme) {
+  for (const theme of assistantThemes) {
+    await evaluate(client, `window.desktopPet.setAssistantTheme(${JSON.stringify(theme)})`, true)
+    await waitForEvaluation(
+      client,
+      'document.body.dataset.theme',
+      (value) => value === theme,
+      5_000
+    )
+  }
+  await evaluate(client, `window.desktopPet.setAssistantTheme(${JSON.stringify(originalTheme)})`, true)
+  await waitForEvaluation(
+    client,
+    'document.body.dataset.theme',
+    (value) => value === originalTheme,
+    5_000
   )
 }
 

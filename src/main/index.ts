@@ -1,7 +1,12 @@
 import { BrowserWindow, app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
-import type { AssistantAskInput, AssistantLayoutTrace } from '../shared/assistant'
+import type {
+  AssistantAskInput,
+  AssistantLayoutTrace,
+  AssistantPermissionResolution
+} from '../shared/assistant'
 import { AssistantManager } from './assistant/assistantManager'
 import { logError, logInfo } from './logger'
+import { setAssistantTheme } from './theme'
 import {
   ensureUserPetsRoot,
   isAvailablePet,
@@ -184,6 +189,13 @@ function registerIpc(): void {
     return getPetWindowLayout(requirePetSender(event))
   })
 
+  ipcMain.handle('assistant:set-theme', (event, theme: unknown) => {
+    const window = requirePetSender(event)
+    const next = setAssistantTheme(window, theme)
+    rebuildTrayMenu(window)
+    return next
+  })
+
   ipcMain.handle('assistant:ask', (event, request: AssistantAskInput) => {
     requirePetSender(event)
     if (!request || typeof request !== 'object') {
@@ -195,6 +207,14 @@ function registerIpc(): void {
   ipcMain.handle('assistant:cancel', (event, taskId: string) => {
     requirePetSender(event)
     return assistantManager.cancel(taskId)
+  })
+
+  ipcMain.handle('assistant:resolve-permission', (event, input: AssistantPermissionResolution) => {
+    requirePetSender(event)
+    if (!input || typeof input !== 'object') {
+      throw new TypeError('Permission resolution is invalid.')
+    }
+    return assistantManager.resolvePermission(input)
   })
 
   ipcMain.handle('assistant:close', (event) => {

@@ -4,9 +4,11 @@ import type {
   AssistantAskResult,
   AssistantEvent,
   AssistantLayoutTrace,
+  AssistantPermissionResolution,
   AssistantRuntimeStatus,
   AssistantWindowLayout
 } from '../shared/assistant'
+import type { AssistantThemeId } from '../shared/theme'
 import type {
   AvailablePet,
   DragMoveResult,
@@ -49,10 +51,14 @@ const api = {
     ipcRenderer.invoke('assistant:get-status'),
   getAssistantLayout: (): Promise<AssistantWindowLayout> =>
     ipcRenderer.invoke('assistant:get-layout'),
+  setAssistantTheme: (theme: AssistantThemeId): Promise<AssistantThemeId> =>
+    ipcRenderer.invoke('assistant:set-theme', theme),
   askAssistant: (request: AssistantAskInput): Promise<AssistantAskResult> =>
     ipcRenderer.invoke('assistant:ask', request),
   cancelAssistant: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke('assistant:cancel', taskId),
+  resolveAssistantPermission: (input: AssistantPermissionResolution): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:resolve-permission', input),
   closeAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:close'),
   acknowledgeAssistantLayout: (revision: number): void =>
     ipcRenderer.send('assistant:layout-applied', revision),
@@ -94,6 +100,13 @@ const api = {
     }
     ipcRenderer.on('assistant:layout', listener)
     return () => ipcRenderer.removeListener('assistant:layout', listener)
+  },
+  onAssistantTheme: (callback: (theme: AssistantThemeId) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, theme: AssistantThemeId): void => {
+      callback(theme)
+    }
+    ipcRenderer.on('assistant:theme', listener)
+    return () => ipcRenderer.removeListener('assistant:theme', listener)
   }
 }
 

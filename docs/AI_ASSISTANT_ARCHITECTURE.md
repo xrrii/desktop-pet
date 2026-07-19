@@ -46,7 +46,7 @@ flowchart TB
 
 ```text
 UI Layer
-  单一透明窗口中的桌宠、助手输入框、对话展示和状态反馈
+  单一透明窗口中的桌宠、助手输入框、对话展示、状态反馈和主题层
 
 Electron Main Layer
   IPC、窗口管理、托盘、全局快捷键、权限确认、Python Runtime 生命周期
@@ -227,6 +227,8 @@ interface ToolCall {
 }
 ```
 
+阶段 2 已实现 `POST /v1/tool-result`。Runtime 发出 `tool_call` 后暂停当前任务，Electron Main 重新计算风险等级；安全工具直接执行，需要确认的工具通过助手确认卡片等待用户决策，执行结果再回传 Runtime 继续推理。Renderer 只能提交 `taskId`、`toolCallId` 和决策，不能覆盖 Main 保存的工具参数。
+
 ## 7. 权限与安全边界
 
 原则：**Python Agent 可以规划，但不能直接执行高风险系统操作。**
@@ -279,6 +281,15 @@ dangerous
 - 文件操作限制在用户授权目录。
 - 删除、覆盖、批量操作必须确认。
 - 每次工具执行写入审计日志。
+
+阶段 2 工具边界：
+
+- `open_url` 只允许 `http` 和 `https`，通过 `shell.openExternal` 执行。
+- `open_app` 只允许 `notepad`、`explorer`、`calculator`，且每次调用需要确认。
+- `open_file_or_folder` 只允许打开已经存在且可以解析真实路径的文件或目录，每次调用需要确认。
+- 未注册工具、shell、删除、写入和系统设置操作直接拒绝。
+- 确认请求 60 秒过期，助手关闭、任务取消或 Runtime 退出时失效。
+- 审计日志保存于用户数据目录下的 `logs/tools.log`。
 
 ## 8. 能力列表
 
@@ -621,6 +632,8 @@ PETDOCK_PYTHON=<optional development Python executable>
 - 桌宠与助手使用同一个透明窗口；展开时扩大组合窗口，收起时恢复桌宠尺寸。
 - 根据桌宠两侧可用空间决定停靠方向，输入框从桌宠一侧向外展开。
 - 展开状态拖动整个组合窗口，桌宠和输入框使用同一坐标系，不存在双窗口跟随延迟。
+- 助手可切换五套主题；主题只覆盖可见控件，不改变透明窗口背景和布局契约。
+- 当前主题写入用户设置，启动时恢复；新增主题只需扩展主题 ID、变量和菜单注册。
 - 双击桌宠改为唤起助手；跳跃动作继续保留在托盘和右键菜单。
 - Electron Main 启动 Python Runtime。
 - 支持普通 LangChain 对话。
@@ -633,6 +646,8 @@ PETDOCK_PYTHON=<optional development Python executable>
 - 关闭输入框不影响桌宠运行。
 
 ### 阶段 2：工具调用
+
+状态：已完成
 
 - 加工具注册表。
 - 支持 `open_url`。

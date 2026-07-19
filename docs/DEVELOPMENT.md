@@ -451,6 +451,67 @@ npm.cmd run build
 npm.cmd run check
 ```
 
+### Windows 打包操作（提交前）
+
+以下命令均在项目根目录的 PowerShell 中执行。Windows 下统一使用 `npm.cmd`，可以避免 PowerShell 的脚本执行策略拦截 `npm.ps1`。
+
+1. 安装 Node.js `22.12+`，然后安装前端依赖：
+
+```powershell
+npm.cmd install
+```
+
+2. 首次使用或 Python 依赖有变更时，创建并更新 Runtime 虚拟环境：
+
+```powershell
+python -m venv python-runtime\.venv
+python-runtime\.venv\Scripts\python.exe -m pip install -r python-runtime\requirements.lock
+```
+
+3. 生成 Windows 解包版（开发测试最常用）：
+
+```powershell
+npm.cmd run pack
+```
+
+`pack` 会依次执行前端构建、PyInstaller Runtime 构建和 `electron-builder --dir`。成功后运行：
+
+```powershell
+Start-Process .\release\win-unpacked\PetDock.exe
+```
+
+解包版产物目录为 `release\win-unpacked`，可直接用于本机验收或压缩分发。
+
+4. 打包安装程序和便携版（需要发布给其他用户时使用）：
+
+```powershell
+npm.cmd run dist
+```
+
+产物位于 `release` 目录，通常包括 `PetDock Setup <version>.exe` 和 `PetDock Portable <version>.exe`。仅修改代码后准备提交时不需要执行 `dist`，执行 `pack` 并通过解包版验证即可。
+
+5. 打包后运行助手冒烟测试：
+
+```powershell
+npm.cmd run test:e2e:assistant:packaged
+```
+
+测试通过会输出 `ASSISTANT_SMOKE_OK`，并在 `outputs` 目录生成截图。
+
+打包故障处理：
+
+- 执行前先关闭正在运行的 `PetDock.exe`，避免 Windows 锁定 `release\win-unpacked` 内的文件。
+- 如果 PyInstaller 报 `WinError 5`（常见于读取用户 Python site-packages），使用“以管理员身份运行”的 PowerShell 重试 `npm.cmd run pack`；不要修改代码或把用户目录依赖复制进仓库。
+- 如果 Electron 或 electron-builder 下载失败，仅在当前 PowerShell 会话设置镜像后重试：
+
+```powershell
+$env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
+npm.cmd run pack
+```
+
+- `dist`、`release`、`python-runtime\build`、`python-runtime\dist` 和 `outputs` 是构建产物，不应提交到 Git；提交前用 `git status --short` 检查待提交文件。
+
 提交功能代码前至少运行 `npm.cmd run check`，该命令依次执行严格类型检查、单元测试和生产构建。
 
 安全基线：
@@ -498,4 +559,16 @@ npm.cmd run test:e2e:assistant:langchain
 
 `npm.cmd run check` 会执行 TypeScript 类型检查、TypeScript 单元测试、Python Runtime 测试和 Electron 生产构建。
 
-助手与桌宠使用同一个透明无边框窗口。收起时窗口保持桌宠尺寸；展开时窗口根据可用空间向左或向右扩大，桌宠和输入框在同一坐标系内保持底部锚点。拖动展开状态的桌宠会移动整个组合窗口，松开后再重新判断停靠方向。对话区只绘制消息气泡，其余像素保持透明并允许鼠标穿透。`test:e2e:assistant:dev` 会直接通过 electron-vite 启动开发版本，检查 CSS、透明背景、两种展开方向、锚点和收起尺寸。
+阶段 2 工具调用测试可在离线 Mock Runtime 中使用以下明确指令：
+
+```text
+打开网页 https://example.com
+打开应用 notepad
+打开文件夹 C:\\Users\\<用户名>\\Documents
+```
+
+助手输入框支持 `~` 快捷命令菜单：输入 `~` 后可选择“打开网站”或“打开应用”，再输入目标即可发送。菜单支持鼠标、上下方向键、回车和 Esc；`$` 已预留给后续 Skill 菜单，当前不会弹出选项。
+
+应用和文件/文件夹会显示确认卡片。Renderer 只回传用户决策，工具参数由 Electron Main 保存并重新校验。`open_url` 只允许 `http` 和 `https`；未知应用、无效路径和未注册工具会被策略拒绝。工具审计日志位于 PetDock 用户数据目录下的 `logs/tools.log`。
+
+助手与桌宠使用同一个透明无边框窗口。收起时窗口保持桌宠尺寸；展开时窗口根据可用空间向左或向右扩大，桌宠和输入框在同一坐标系内保持底部锚点。拖动展开状态的桌宠会移动整个组合窗口，松开后再重新判断停靠方向。对话区只绘制消息气泡，其余像素保持透明并允许鼠标穿透。助手提供五套可切换主题，主题 ID 保存在 `settings.json` 的 `assistantTheme` 字段，主题 CSS 只能修改可见控件，不得给 `html`、`body` 或桌宠画布添加背景。`test:e2e:assistant:dev` 会检查 CSS、透明背景、两种展开方向、锚点、收起尺寸和主题切换。

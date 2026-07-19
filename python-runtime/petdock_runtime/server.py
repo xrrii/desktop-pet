@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from .backends import create_backend
 from .config import RuntimeConfig
-from .protocol import AssistantRequest
+from .protocol import AssistantRequest, ToolResultRequest
 from .service import AssistantService
 
 
@@ -74,6 +74,17 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     ) -> dict[str, bool]:
         authorize(authorization)
         return {"cancelled": service.cancel(task_id)}
+
+    @app.post("/v1/tool-result")
+    async def tool_result(
+        request: ToolResultRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        authorize(authorization)
+        accepted = service.submit_tool_result(request)
+        if not accepted:
+            raise HTTPException(status_code=404, detail="Pending tool call not found")
+        return {"accepted": True}
 
     @app.post("/v1/shutdown")
     async def shutdown(authorization: str | None = Header(default=None)) -> dict[str, bool]:

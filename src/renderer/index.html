@@ -9,11 +9,19 @@
     />
     <title>Desktop Pet</title>
   </head>
-  <body data-side="left" data-assistant-open="false">
+  <body data-side="left" data-assistant-open="false" data-theme="quiet">
     <section id="assistant-panel" class="assistant-shell" aria-label="AI 助手" hidden>
       <section id="conversation" class="conversation" aria-live="polite"></section>
 
       <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
+      <div
+        id="command-menu"
+        class="command-menu"
+        role="listbox"
+        aria-label="助手命令"
+        hidden
+      ></div>
 
       <form id="composer" class="composer">
         <span id="runtime-status" class="runtime-status" data-state="starting" title="正在启动">
@@ -25,6 +33,9 @@
           rows="1"
           maxlength="12000"
           aria-label="消息"
+          aria-autocomplete="list"
+          aria-controls="command-menu"
+          aria-expanded="false"
           placeholder="输入消息"
         ></textarea>
         <div class="composer-actions">

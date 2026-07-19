@@ -3,10 +3,16 @@ import type {
   AssistantEvent,
   AssistantLayoutTracePhase,
   AssistantRuntimeStatus,
-  AssistantWindowLayout
+  AssistantWindowLayout,
+  ToolCall
 } from '../../shared/assistant'
+import type { AssistantThemeId } from '../../shared/theme'
+import {
+  getCommandPaletteState,
+  type AssistantCommandOption
+} from './commandPalette'
 
-export function initializeAssistant(): void {
+export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): void {
   const panel = requireElement<HTMLElement>('#assistant-panel')
   const conversation = requireElement<HTMLElement>('#conversation')
   const composer = requireElement<HTMLFormElement>('#composer')
@@ -18,6 +24,7 @@ export function initializeAssistant(): void {
   const errorBanner = requireElement<HTMLElement>('#error-banner')
   const runtimeStatus = requireElement<HTMLElement>('#runtime-status')
   const runtimeStatusText = requireElement<HTMLElement>('#runtime-status-text')
+  const commandMenu = requireElement<HTMLElement>('#command-menu')
 
   let conversationId = crypto.randomUUID()
   let activeTaskId: string | null = null
@@ -28,10 +35,14 @@ export function initializeAssistant(): void {
   let closing = false
   let transparentAreaClickThrough = false
   let latestLayoutRevision = 0
+  let selectedCommandIndex = 0
+  const permissionCards = new Map<string, HTMLElement>()
 
   window.desktopPet.onAssistantEvent(handleEvent)
   window.desktopPet.onAssistantStatus(renderRuntimeStatus)
   window.desktopPet.onAssistantLayout(applyLayout)
+  window.desktopPet.onAssistantTheme(applyTheme)
+  applyTheme(initialTheme)
   void window.desktopPet.getAssistantLayout().then(applyLayout).catch(showError)
 
   composer.addEventListener('submit', (event) => {
@@ -40,6 +51,10 @@ export function initializeAssistant(): void {
   })
 
   input.addEventListener('keydown', (event) => {
+    if (handleCommandKeydown(event)) {
+      event.stopPropagation()
+      return
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       void sendMessage()
@@ -62,7 +77,17 @@ export function initializeAssistant(): void {
     setTransparentAreaClickThrough(!isInteractive)
   })
 
-  input.addEventListener('input', resizeInput)
+  input.addEventListener('input', () => {
+    resizeInput()
+    updateCommandMenu()
+  })
+
+  document.addEventListener('mousedown', (event) => {
+    const target = event.target instanceof Element ? event.target : null
+    if (!target?.closest('#composer, #command-menu')) {
+      hideCommandMenu()
+    }
+  })
 
   stopButton.addEventListener('click', () => {
     if (!activeTaskId) {
@@ -81,6 +106,8 @@ export function initializeAssistant(): void {
     activeAssistantMessage = null
     lastSequence = 0
     conversation.replaceChildren()
+    permissionCards.clear()
+    hideCommandMenu()
     clearError()
     input.focus()
   })
@@ -90,6 +117,10 @@ export function initializeAssistant(): void {
   void window.desktopPet.getAssistantStatus().then(renderRuntimeStatus).catch(showError)
 
   async function sendMessage(): Promise<void> {
+    if (!commandMenu.hidden) {
+      selectCommand(selectedCommandIndex)
+      return
+    }
     const message = input.value.trim()
     if (!message || busy) {
       return
@@ -130,9 +161,31 @@ export function initializeAssistant(): void {
 
     if (event.type === 'message_delta') {
       if (activeAssistantMessage) {
+        if (activeAssistantMessage.dataset.placeholder === 'true') {
+          activeAssistantMessage.textContent = ''
+          delete activeAssistantMessage.dataset.placeholder
+        }
         activeAssistantMessage.textContent += event.payload.delta
         scrollConversation()
       }
+      return
+    }
+
+    if (event.type === 'tool_call') {
+      showAssistantPlaceholder(`正在处理：${event.payload.preview}`)
+      return
+    }
+
+    if (event.type === 'permission_required') {
+      renderPermissionCard(event.taskId, event.payload)
+      return
+    }
+
+    if (event.type === 'tool_result') {
+      updatePermissionCard(event.payload.toolCallId, event.payload.ok, event.payload.error)
+      showAssistantPlaceholder(
+        event.payload.ok ? '操作已完成，正在整理回复…' : `操作未执行：${event.payload.error || '未知错误'}`
+      )
       return
     }
 
@@ -149,10 +202,118 @@ export function initializeAssistant(): void {
         }
         activeAssistantMessage.classList.remove('streaming')
       }
+      disablePendingPermissionCards()
       setBusy(false)
       activeTaskId = null
       input.focus()
     }
+  }
+
+  /** 展示 Main 生成的确认请求，按钮只提交决策，不回传工具参数。 */
+  function renderPermissionCard(taskId: string, call: ToolCall): void {
+    if (permissionCards.has(call.id)) {
+      return
+    }
+    const article = document.createElement('article')
+    article.className = 'message assistant permission-message'
+    article.dataset.toolCallId = call.id
+
+    const card = document.createElement('div')
+    card.className = 'permission-card'
+    const title = document.createElement('strong')
+    title.className = 'permission-title'
+    title.textContent = '需要你的确认'
+    const preview = document.createElement('p')
+    preview.className = 'permission-preview'
+    preview.textContent = call.preview
+    const status = document.createElement('span')
+    status.className = 'permission-status'
+    status.textContent = '等待确认'
+    const actions = document.createElement('div')
+    actions.className = 'permission-actions'
+    const denyButton = document.createElement('button')
+    denyButton.type = 'button'
+    denyButton.className = 'permission-button deny'
+    denyButton.textContent = '拒绝'
+    const approveButton = document.createElement('button')
+    approveButton.type = 'button'
+    approveButton.className = 'permission-button approve'
+    approveButton.textContent = '允许'
+    actions.append(denyButton, approveButton)
+    card.append(title, preview, status, actions)
+    article.append(card)
+
+    const activeArticle = activeAssistantMessage?.closest('article')
+    conversation.insertBefore(article, activeArticle || null)
+    permissionCards.set(call.id, article)
+    scrollConversation()
+
+    const resolve = async (decision: 'approved' | 'denied'): Promise<void> => {
+      denyButton.disabled = true
+      approveButton.disabled = true
+      status.textContent = decision === 'approved' ? '正在执行' : '正在拒绝'
+      try {
+        const accepted = await window.desktopPet.resolveAssistantPermission({
+          taskId,
+          toolCallId: call.id,
+          decision
+        })
+        if (!accepted) {
+          status.textContent = '请求已过期'
+          article.dataset.state = 'expired'
+          return
+        }
+        status.textContent = decision === 'approved' ? '已允许' : '已拒绝'
+        article.dataset.state = decision
+      } catch (error) {
+        status.textContent = '提交失败'
+        denyButton.disabled = false
+        approveButton.disabled = false
+        showError(error)
+      }
+    }
+
+    denyButton.addEventListener('click', () => void resolve('denied'))
+    approveButton.addEventListener('click', () => void resolve('approved'))
+  }
+
+  function updatePermissionCard(toolCallId: string, ok: boolean, error?: string): void {
+    const article = permissionCards.get(toolCallId)
+    if (!article) {
+      return
+    }
+    const status = article.querySelector<HTMLElement>('.permission-status')
+    if (status) {
+      status.textContent = ok ? '执行完成' : error || '未执行'
+    }
+    article.dataset.state = ok ? 'completed' : 'failed'
+    article.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+      button.disabled = true
+    })
+  }
+
+  function disablePendingPermissionCards(): void {
+    for (const article of permissionCards.values()) {
+      article.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+        button.disabled = true
+      })
+      if (!article.dataset.state) {
+        article.dataset.state = 'expired'
+        const status = article.querySelector<HTMLElement>('.permission-status')
+        if (status) {
+          status.textContent = '请求已结束'
+        }
+      }
+    }
+  }
+
+  function showAssistantPlaceholder(content: string): void {
+    if (!activeAssistantMessage) {
+      return
+    }
+    activeAssistantMessage.textContent = content
+    activeAssistantMessage.dataset.placeholder = 'true'
+    scrollConversation()
   }
 
   function addMessage(role: 'user' | 'assistant', content: string): HTMLElement {
@@ -174,6 +335,101 @@ export function initializeAssistant(): void {
     stopButton.hidden = !value
     stopButton.disabled = false
     newConversationButton.disabled = value
+  }
+
+  /** 根据输入框末尾的 `~` 触发符刷新命令列表，`$` 暂时保留给 Skill。 */
+  function updateCommandMenu(): void {
+    const state = getCommandPaletteState(input.value)
+    if (state.trigger !== '~' || state.options.length === 0 || busy) {
+      hideCommandMenu()
+      return
+    }
+
+    selectedCommandIndex = Math.min(selectedCommandIndex, state.options.length - 1)
+    commandMenu.replaceChildren()
+    state.options.forEach((option, index) => {
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = 'command-item'
+      item.setAttribute('role', 'option')
+      item.setAttribute('aria-selected', String(index === selectedCommandIndex))
+      item.dataset.commandIndex = String(index)
+
+      const label = document.createElement('span')
+      label.className = 'command-item-label'
+      label.textContent = option.label
+      const description = document.createElement('span')
+      description.className = 'command-item-description'
+      description.textContent = option.description
+      item.append(label, description)
+      item.addEventListener('mouseenter', () => {
+        selectedCommandIndex = index
+        updateCommandSelection()
+      })
+      item.addEventListener('click', () => selectCommand(index))
+      commandMenu.append(item)
+    })
+    commandMenu.hidden = false
+    input.setAttribute('aria-expanded', 'true')
+    updateCommandSelection()
+  }
+
+  function updateCommandSelection(): void {
+    commandMenu.querySelectorAll<HTMLElement>('.command-item').forEach((item, index) => {
+      item.classList.toggle('is-selected', index === selectedCommandIndex)
+      item.setAttribute('aria-selected', String(index === selectedCommandIndex))
+    })
+  }
+
+  function hideCommandMenu(): void {
+    commandMenu.hidden = true
+    commandMenu.replaceChildren()
+    input.setAttribute('aria-expanded', 'false')
+    selectedCommandIndex = 0
+  }
+
+  function selectCommand(index: number): void {
+    const state = getCommandPaletteState(input.value)
+    const option: AssistantCommandOption | undefined = state.options[index]
+    if (state.trigger !== '~' || !option || state.tokenStart < 0) {
+      hideCommandMenu()
+      return
+    }
+    input.value = `${input.value.slice(0, state.tokenStart)}${option.inputPrefix}`
+    input.focus()
+    input.setSelectionRange(input.value.length, input.value.length)
+    resizeInput()
+    hideCommandMenu()
+  }
+
+  function handleCommandKeydown(event: KeyboardEvent): boolean {
+    if (commandMenu.hidden) {
+      return false
+    }
+    const itemCount = commandMenu.querySelectorAll('.command-item').length
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      selectedCommandIndex = (selectedCommandIndex + 1) % itemCount
+      updateCommandSelection()
+      return true
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      selectedCommandIndex = (selectedCommandIndex - 1 + itemCount) % itemCount
+      updateCommandSelection()
+      return true
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      selectCommand(selectedCommandIndex)
+      return true
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      hideCommandMenu()
+      return true
+    }
+    return false
   }
 
   function renderRuntimeStatus(status: AssistantRuntimeStatus): void {
@@ -201,6 +457,10 @@ export function initializeAssistant(): void {
     runtimeStatus.title = label
     runtimeStatus.setAttribute('aria-label', label)
     runtimeStatusText.textContent = label
+  }
+
+  function applyTheme(theme: AssistantThemeId): void {
+    document.body.dataset.theme = theme
   }
 
   function applyLayout(layout: AssistantWindowLayout): void {
