@@ -44,12 +44,24 @@ tools/electron-probe/*.log
 Thumbs.db
 desktop.ini
 
-# Temporary asset backups
-assets/pets/*/spritesheet.before-*.webp
-
-# Local pet assets can be large and user-specific.
+# Local pet assets can be large and user-specific. Existing built-in pets remain versioned.
 assets/pets/**
 !assets/pets/.gitkeep
+!assets/pets/doubao/
+!assets/pets/doubao/pet.json
+!assets/pets/doubao/spritesheet.webp
+!assets/pets/hammer-dude/
+!assets/pets/hammer-dude/pet.json
+!assets/pets/hammer-dude/spritesheet.webp
+!assets/pets/jianjieshi/
+!assets/pets/jianjieshi/pet.json
+!assets/pets/jianjieshi/spritesheet.webp
+!assets/pets/little-ameath/
+!assets/pets/little-ameath/pet.json
+!assets/pets/little-ameath/spritesheet.webp
+
+# Temporary asset backups remain local even inside built-in pet folders.
+assets/pets/*/spritesheet.before-*.webp
 
 # Generated previews
 outputs/
