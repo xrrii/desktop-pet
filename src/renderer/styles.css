@@ -10,15 +10,19 @@ body {
 
 body {
   display: block;
+  position: relative;
 }
 
 #pet-root {
-  position: relative;
+  position: absolute;
+  left: var(--pet-x, 0);
+  top: var(--pet-y, 0);
   width: 192px;
   height: 208px;
   overflow: hidden;
   background: transparent;
   cursor: grab;
+  z-index: 2;
 }
 
 #pet-root.dragging {

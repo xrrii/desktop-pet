@@ -1,59 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
-
-type PetAction =
-  | 'idle'
-  | 'runningRight'
-  | 'runningLeft'
-  | 'waving'
-  | 'jumping'
-  | 'failed'
-  | 'waiting'
-  | 'running'
-  | 'review'
-
-interface PetSettings {
-  settingsVersion: number
-  petId: string
-  position: {
-    x: number
-    y: number
-  } | null
-  scale: number
-  alwaysOnTop: boolean
-  clickThrough: boolean
-  launchAtStartup: boolean
-}
-
-interface AvailablePet {
-  id: string
-  displayName: string
-  description: string
-}
-
-interface PetManifest {
-  id: string
-  displayName: string
-  description: string
-  spritesheetPath: string
-  atlas: {
-    columns: number
-    rows: number
-    cellWidth: number
-    cellHeight: number
-    width: number
-    height: number
-  }
-  states: Record<string, { row: number; frames: number; fps: number }>
-}
-
-interface DragMoveResult {
-  x: number
-  y: number
-  totalDx: number
-  totalDy: number
-  localX: number
-  localY: number
-}
+import type {
+  AssistantAskInput,
+  AssistantAskResult,
+  AssistantEvent,
+  AssistantLayoutTrace,
+  AssistantRuntimeStatus,
+  AssistantWindowLayout
+} from '../shared/assistant'
+import type {
+  AvailablePet,
+  DragMoveResult,
+  PetAction,
+  PetManifestInput,
+  PetSettings
+} from '../shared/pet'
 
 const api = {
   moveWindow: (x: number, y: number): Promise<{ x: number; y: number } | null> =>
@@ -73,7 +33,7 @@ const api = {
     ipcRenderer.invoke('pet:reset-position'),
   getSettings: (): Promise<PetSettings> => ipcRenderer.invoke('pet:get-settings'),
   listAvailablePets: (): Promise<AvailablePet[]> => ipcRenderer.invoke('pet:list-available'),
-  loadPetManifest: (petId: string): Promise<Partial<PetManifest> | null> =>
+  loadPetManifest: (petId: string): Promise<PetManifestInput | null> =>
     ipcRenderer.invoke('pet:load-manifest', petId),
   loadPetSpritesheet: (petId: string, spritesheetPath: string): Promise<string | null> =>
     ipcRenderer.invoke('pet:load-spritesheet', petId, spritesheetPath),
@@ -82,6 +42,22 @@ const api = {
     ipcRenderer.invoke('pet:set-always-on-top', value),
   setClickThrough: (value: boolean): Promise<boolean> =>
     ipcRenderer.invoke('pet:set-click-through', value),
+  setTransparentAreaClickThrough: (value: boolean): Promise<void> =>
+    ipcRenderer.invoke('pet:set-transparent-area-click-through', value),
+  openAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:open'),
+  getAssistantStatus: (): Promise<AssistantRuntimeStatus> =>
+    ipcRenderer.invoke('assistant:get-status'),
+  getAssistantLayout: (): Promise<AssistantWindowLayout> =>
+    ipcRenderer.invoke('assistant:get-layout'),
+  askAssistant: (request: AssistantAskInput): Promise<AssistantAskResult> =>
+    ipcRenderer.invoke('assistant:ask', request),
+  cancelAssistant: (taskId: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:cancel', taskId),
+  closeAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:close'),
+  acknowledgeAssistantLayout: (revision: number): void =>
+    ipcRenderer.send('assistant:layout-applied', revision),
+  traceAssistantLayout: (trace: AssistantLayoutTrace): void =>
+    ipcRenderer.send('assistant:layout-trace', trace),
   showContextMenu: (): Promise<void> => ipcRenderer.invoke('pet:show-context-menu'),
   quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
   onSetAction: (callback: (action: PetAction) => void): (() => void) => {
@@ -97,6 +73,27 @@ const api = {
     }
     ipcRenderer.on('pet:switch', listener)
     return () => ipcRenderer.removeListener('pet:switch', listener)
+  },
+  onAssistantEvent: (callback: (event: AssistantEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, assistantEvent: AssistantEvent): void => {
+      callback(assistantEvent)
+    }
+    ipcRenderer.on('assistant:event', listener)
+    return () => ipcRenderer.removeListener('assistant:event', listener)
+  },
+  onAssistantStatus: (callback: (status: AssistantRuntimeStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: AssistantRuntimeStatus): void => {
+      callback(status)
+    }
+    ipcRenderer.on('assistant:status', listener)
+    return () => ipcRenderer.removeListener('assistant:status', listener)
+  },
+  onAssistantLayout: (callback: (layout: AssistantWindowLayout) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, layout: AssistantWindowLayout): void => {
+      callback(layout)
+    }
+    ipcRenderer.on('assistant:layout', listener)
+    return () => ipcRenderer.removeListener('assistant:layout', listener)
   }
 }
 

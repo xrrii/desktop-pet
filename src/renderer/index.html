@@ -3,9 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
     <title>Desktop Pet</title>
   </head>
-  <body>
+  <body data-side="left" data-assistant-open="false">
+    <section id="assistant-panel" class="assistant-shell" aria-label="AI 助手" hidden>
+      <section id="conversation" class="conversation" aria-live="polite"></section>
+
+      <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
+      <form id="composer" class="composer">
+        <span id="runtime-status" class="runtime-status" data-state="starting" title="正在启动">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="runtime-status-text" class="visually-hidden">正在启动</span>
+        </span>
+        <textarea
+          id="message-input"
+          rows="1"
+          maxlength="12000"
+          aria-label="消息"
+          placeholder="输入消息"
+        ></textarea>
+        <div class="composer-actions">
+          <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">+</button>
+          <button id="stop-button" class="secondary-button" type="button" hidden>停止</button>
+          <button id="send-button" class="primary-button" type="submit">发送</button>
+          <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>
+        </div>
+      </form>
+    </section>
+
     <main id="pet-root" aria-label="Desktop pet">
       <canvas id="pet-canvas" width="192" height="208"></canvas>
       <div id="pet-error" role="status" hidden></div>

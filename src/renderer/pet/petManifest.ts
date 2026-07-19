@@ -1,35 +1,11 @@
-export type PetStateName =
-  | 'idle'
-  | 'runningRight'
-  | 'runningLeft'
-  | 'waving'
-  | 'jumping'
-  | 'failed'
-  | 'waiting'
-  | 'running'
-  | 'review'
+import type {
+  AnimationState,
+  PetManifest,
+  PetManifestInput,
+  PetStateName
+} from '../../shared/pet'
 
-export interface AnimationState {
-  row: number
-  frames: number
-  fps: number
-}
-
-export interface PetManifest {
-  id: string
-  displayName: string
-  description: string
-  spritesheetPath: string
-  atlas: {
-    columns: number
-    rows: number
-    cellWidth: number
-    cellHeight: number
-    width: number
-    height: number
-  }
-  states: Record<PetStateName, AnimationState>
-}
+export type { AnimationState, PetManifest, PetManifestInput, PetStateName } from '../../shared/pet'
 
 export async function loadPetManifest(petId = 'hammer-dude'): Promise<PetManifest> {
   const manifest = await window.desktopPet.loadPetManifest(petId)
@@ -50,7 +26,10 @@ export async function loadPetSpritesheetUrl(manifest: PetManifest): Promise<stri
   return spritesheetUrl
 }
 
-function normalizePetManifest(manifest: Partial<PetManifest>, fallbackId: string): PetManifest {
+export function normalizePetManifest(
+  manifest: PetManifestInput,
+  fallbackId: string
+): PetManifest {
   return {
     id: fallbackId,
     displayName: manifest.displayName ?? fallbackId,

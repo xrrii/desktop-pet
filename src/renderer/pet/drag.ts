@@ -45,8 +45,7 @@ export function attachDragController(options: DragControllerOptions): void {
     startingDrag = false
     movingDrag = false
     moved = false
-    const rect = options.target.getBoundingClientRect()
-    grabOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    grabOffset = { x: event.clientX, y: event.clientY }
     startMouse = { x: event.screenX, y: event.screenY }
     options.target.classList.add('dragging')
     options.target.setPointerCapture(event.pointerId)

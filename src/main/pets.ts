@@ -1,13 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { extname, join, normalize, resolve } from 'node:path'
 import { app } from 'electron'
+import type { AvailablePet } from '../shared/pet'
 import { getAssetPath } from './window'
-
-export interface AvailablePet {
-  id: string
-  displayName: string
-  description: string
-}
 
 interface PetManifestPreview {
   id?: string

@@ -1,16 +1,15 @@
 import './styles.css'
+import { initializeAssistant, traceAssistantLayout } from './assistant/main'
 import { PetAnimator, loadImage } from './pet/animation'
 import { attachDragController } from './pet/drag'
 import { loadPetManifest, loadPetSpritesheetUrl, type PetStateName } from './pet/petManifest'
 import { PetStateMachine } from './pet/stateMachine'
 
-const canvas = document.querySelector<HTMLCanvasElement>('#pet-canvas')
-const root = document.querySelector<HTMLElement>('#pet-root')
-const errorPanel = document.querySelector<HTMLElement>('#pet-error')
+const canvas = requireElement<HTMLCanvasElement>('#pet-canvas')
+const root = requireElement<HTMLElement>('#pet-root')
+const errorPanel = requireElement<HTMLElement>('#pet-error')
 
-if (!canvas || !root || !errorPanel) {
-  throw new Error('Renderer DOM is incomplete.')
-}
+initializeAssistant()
 
 void bootstrap()
 
@@ -53,7 +52,10 @@ async function bootstrap(): Promise<void> {
       onDragEnd: () => stateMachine.stopDragging(),
       onStateChange: (state) => animator?.setState(state),
       onClick: () => play('waving'),
-      onDoubleClick: () => play('jumping'),
+      onDoubleClick: () => {
+        traceAssistantLayout('double-click', null)
+        void window.desktopPet.openAssistant()
+      },
       onContextMenu: () => {
         void window.desktopPet.showContextMenu()
       }
@@ -77,4 +79,12 @@ function showError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error)
   errorPanel.hidden = false
   errorPanel.textContent = `Desktop pet failed to load: ${message}`
+}
+
+function requireElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector)
+  if (!element) {
+    throw new Error(`Renderer DOM is missing ${selector}.`)
+  }
+  return element
 }

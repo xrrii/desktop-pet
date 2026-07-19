@@ -1,19 +1,7 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-
-export interface PetSettings {
-  settingsVersion: number
-  petId: string
-  position: {
-    x: number
-    y: number
-  } | null
-  scale: number
-  alwaysOnTop: boolean
-  clickThrough: boolean
-  launchAtStartup: boolean
-}
+import type { PetSettings } from '../shared/pet'
 
 const currentSettingsVersion = 2
 

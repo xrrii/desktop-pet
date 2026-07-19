@@ -423,16 +423,79 @@ contextBridge.exposeInMainWorld('desktopPet', {
 
 素材本身每帧已居中在 `192 x 208` cell 内。播放时不要按透明 bbox 重新裁切，必须固定按 cell 裁切。
 
-## 14. 下一步建议
+## 14. 当前开发基线
 
-第一步先创建 Electron 项目骨架，并把 `hammer-dude` 资源复制到 `assets/pets/hammer-dude`。
+项目要求 Node.js `22.12+`。开发前安装依赖：
 
-推荐先实现最小可运行版本：
+```powershell
+npm.cmd install
+```
 
-1. `npm install`
-2. `npm run dev`
-3. 透明窗口显示 idle 动画
-4. 支持拖拽
-5. 托盘退出
+如果当前网络无法访问 Electron 的 GitHub release，可仅在当前 PowerShell 会话设置下载镜像：
 
-只要这条链路跑通，后续加动作菜单和打包都很顺。
+```powershell
+$env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
+npm.cmd install
+```
+
+Electron 安装脚本仍会使用 npm 包内的官方 checksum 校验下载内容。不要把镜像地址写入全局 npm 配置或提交任何代理凭据。
+
+常用命令：
+
+```powershell
+npm.cmd run dev
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
+npm.cmd run check
+```
+
+提交功能代码前至少运行 `npm.cmd run check`，该命令依次执行严格类型检查、单元测试和生产构建。
+
+安全基线：
+
+- Renderer 必须保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
+- 不允许重新添加全局 `no-sandbox`；如遇透明窗口兼容问题，应先定位具体原因。
+- 新窗口使用独立 preload，只暴露完成该窗口职责所需的 IPC API。
+- IPC handler 必须校验调用窗口身份并验证外部输入。
+- 密钥和用户隐私数据不得写入仓库、普通配置文件或日志。
+
+AI 助手的下一阶段开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准。
+
+## 15. AI Assistant Runtime
+
+首次开发需要创建 Python 虚拟环境并安装锁定依赖：
+
+```powershell
+python -m venv python-runtime\.venv
+python-runtime\.venv\Scripts\python.exe -m pip install -r python-runtime\requirements.lock
+```
+
+默认未配置模型密钥时使用离线 mock backend。接入 OpenAI-compatible 模型时，在启动 PetDock 的同一 PowerShell 会话中设置：
+
+```powershell
+$env:PETDOCK_ASSISTANT_BACKEND = 'auto'
+$env:PETDOCK_LLM_API_KEY = '<api-key>'
+$env:PETDOCK_LLM_BASE_URL = '<optional-base-url>'
+$env:PETDOCK_LLM_MODEL = '<model-name>'
+npm.cmd run dev
+```
+
+不要把 API key 写入仓库、`settings.json`、命令输出或截图。Renderer 只能看到 Runtime 状态和对话事件。
+
+Runtime 与阶段 1 验证命令：
+
+```powershell
+npm.cmd run test:runtime
+npm.cmd run build:runtime
+npm.cmd run test:e2e:assistant
+npm.cmd run test:e2e:assistant:dev
+npm.cmd run pack
+npm.cmd run test:e2e:assistant:packaged
+npm.cmd run test:e2e:assistant:langchain
+```
+
+`npm.cmd run check` 会执行 TypeScript 类型检查、TypeScript 单元测试、Python Runtime 测试和 Electron 生产构建。
+
+助手与桌宠使用同一个透明无边框窗口。收起时窗口保持桌宠尺寸；展开时窗口根据可用空间向左或向右扩大，桌宠和输入框在同一坐标系内保持底部锚点。拖动展开状态的桌宠会移动整个组合窗口，松开后再重新判断停靠方向。对话区只绘制消息气泡，其余像素保持透明并允许鼠标穿透。`test:e2e:assistant:dev` 会直接通过 electron-vite 启动开发版本，检查 CSS、透明背景、两种展开方向、锚点和收起尺寸。

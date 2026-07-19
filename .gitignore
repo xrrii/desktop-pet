@@ -1,5 +1,18 @@
 # Dependencies
 node_modules/
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+*.py[cod]
+*.egg-info/
+python-runtime/build/
+python-runtime/dist/
 
 # Build and packaged output
 dist/
@@ -7,6 +20,11 @@ release/
 
 # Logs
 *.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 tools/electron-probe/*.log
 
 # Local environment and machine-specific files
@@ -14,9 +32,26 @@ tools/electron-probe/*.log
 .env.*
 !.env.example
 *.local
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # Temporary asset backups
 assets/pets/*/spritesheet.before-*.webp
 
+# Local pet assets can be large and user-specific.
+assets/pets/**
+!assets/pets/.gitkeep
+
 # Generated previews
 outputs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+*.tsbuildinfo

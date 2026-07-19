@@ -1,21 +1,15 @@
 import { BrowserWindow, Menu, Tray, app, nativeImage, shell } from 'electron'
+import type { PetAction } from '../shared/pet'
 import { ensureUserPetsRoot, listAvailablePets } from './pets'
 import { getAssetPath, resetPetWindowPosition, setAlwaysOnTop, setClickThrough } from './window'
 import { loadSettings, updateSettings } from './store'
 
-type PetAction =
-  | 'idle'
-  | 'waving'
-  | 'jumping'
-  | 'waiting'
-  | 'running'
-  | 'review'
-  | 'failed'
-
 let tray: Tray | null = null
+let openAssistant: (() => void) | null = null
 
 const label = {
   title: 'PetDock',
+  assistant: '\u6253\u5f00\u52a9\u624b',
   pets: '\u684c\u5ba0',
   actions: '\u52a8\u4f5c',
   idle: '\u5f85\u673a',
@@ -36,7 +30,8 @@ const label = {
   quit: '\u9000\u51fa'
 }
 
-export function createTray(window: BrowserWindow): Tray {
+export function createTray(window: BrowserWindow, onOpenAssistant?: () => void): Tray {
+  openAssistant = onOpenAssistant ?? null
   tray?.destroy()
   tray = new Tray(createTrayIcon())
   tray.setToolTip(label.title)
@@ -61,6 +56,12 @@ export function rebuildTrayMenu(window: BrowserWindow): void {
     {
       label: label.title,
       enabled: false
+    },
+    { type: 'separator' },
+    {
+      label: label.assistant,
+      enabled: openAssistant !== null,
+      click: () => openAssistant?.()
     },
     { type: 'separator' },
     createPetsMenu(window),
@@ -147,6 +148,12 @@ export function rebuildTrayMenu(window: BrowserWindow): void {
 export function createPetContextMenu(window: BrowserWindow): Menu {
   const settings = loadSettings()
   return Menu.buildFromTemplate([
+    {
+      label: label.assistant,
+      enabled: openAssistant !== null,
+      click: () => openAssistant?.()
+    },
+    { type: 'separator' },
     createPetsMenu(window),
     { type: 'separator' },
     createActionItem(window, label.waving, 'waving'),

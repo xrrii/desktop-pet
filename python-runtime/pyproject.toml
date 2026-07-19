@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "petdock-assistant-runtime"
+version = "0.1.0"
+description = "Local assistant runtime for PetDock."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "langchain-openai>=0.3,<2",
+  "pydantic>=2.11,<3",
+  "tzdata>=2025.2,<2027",
+  "uvicorn>=0.35,<1"
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pyinstaller>=6.15,<7",
+  "pytest>=8,<10"
+]
+
+[tool.setuptools.packages.find]
+include = ["petdock_runtime*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -10,15 +10,24 @@
     "start": "electron-vite dev",
     "dev": "electron-vite dev",
     "debug": "cross-env DESKTOP_PET_DEVTOOLS=1 electron-vite dev",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:runtime": "python-runtime\\.venv\\Scripts\\python.exe -m pytest -q python-runtime\\tests",
+    "test:e2e:assistant": "npm run build && node tools/assistant_smoke.mjs",
+    "test:e2e:assistant:dev": "cross-env PETDOCK_SMOKE_DEV=1 PETDOCK_SMOKE_SCREENSHOT=outputs\\assistant-stage1-dev.png node tools/assistant_smoke.mjs",
+    "test:e2e:assistant:packaged": "cross-env PETDOCK_SMOKE_EXECUTABLE=release\\win-unpacked\\PetDock.exe PETDOCK_SMOKE_SCREENSHOT=outputs\\assistant-stage1-packaged.png node tools/assistant_smoke.mjs",
+    "test:e2e:assistant:langchain": "cross-env PETDOCK_SMOKE_EXECUTABLE=release\\win-unpacked\\PetDock.exe PETDOCK_SMOKE_SCREENSHOT=outputs\\assistant-stage1-langchain.png PETDOCK_SMOKE_BACKEND=langchain node tools/assistant_smoke.mjs",
     "build": "electron-vite build",
+    "build:runtime": "python-runtime\\.venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --onefile --name petdock-assistant --specpath python-runtime/build --distpath python-runtime/dist --workpath python-runtime/build --exclude-module pytest --exclude-module _pytest python-runtime/app.py",
+    "check": "npm run typecheck && npm test && npm run test:runtime && npm run build",
     "preview": "electron-vite preview",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "pack": "npm run build && npm run build:runtime && electron-builder --dir",
+    "dist": "npm run build && npm run build:runtime && electron-builder"
   },
   "build": {
     "appId": "com.local.petdock",
     "productName": "PetDock",
-    "asar": false,
+    "asar": true,
     "directories": {
       "output": "release"
     },
@@ -26,6 +35,12 @@
       "dist/**",
       "assets/**",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "python-runtime/dist/petdock-assistant.exe",
+        "to": "python-runtime/petdock-assistant.exe"
+      }
     ],
     "win": {
       "icon": "assets/app/icon.ico",
@@ -47,12 +62,14 @@
     }
   },
   "devDependencies": {
+    "@swc/core": "^1.15.43",
     "@types/node": "^22.10.2",
     "cross-env": "^7.0.3",
-    "electron": "28.3.3",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^2.3.0",
-    "typescript": "^5.7.2",
-    "vite": "^5.4.11"
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
   }
 }
