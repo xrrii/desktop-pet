@@ -5,6 +5,8 @@ import type {
   AssistantConversationMessage,
   AssistantEvent,
   AssistantLayoutTrace,
+  AssistantKnowledgeLibrary,
+  AssistantKnowledgeSnapshot,
   AssistantMemorySnapshot,
   AssistantPermissionResolution,
   AssistantRuntimeStatus,
@@ -75,6 +77,18 @@ const api = {
     candidateId: number,
     decision: 'confirmed' | 'rejected'
   ): Promise<boolean> => ipcRenderer.invoke('assistant:resolve-memory-candidate', candidateId, decision),
+  getAssistantKnowledge: (): Promise<AssistantKnowledgeSnapshot> =>
+    ipcRenderer.invoke('assistant:get-knowledge'),
+  addAssistantKnowledgeLibrary: (): Promise<AssistantKnowledgeLibrary | null> =>
+    ipcRenderer.invoke('assistant:add-knowledge-library'),
+  startAssistantKnowledgeIndex: (libraryId: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:start-knowledge-index', libraryId),
+  pauseAssistantKnowledgeIndex: (libraryId: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:pause-knowledge-index', libraryId),
+  deleteAssistantKnowledgeLibrary: (libraryId: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:delete-knowledge-library', libraryId),
+  setAssistantKnowledgeSelection: (libraryIds: string[]): Promise<string[]> =>
+    ipcRenderer.invoke('assistant:set-knowledge-selection', libraryIds),
   closeAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:close'),
   acknowledgeAssistantLayout: (revision: number): void =>
     ipcRenderer.send('assistant:layout-applied', revision),

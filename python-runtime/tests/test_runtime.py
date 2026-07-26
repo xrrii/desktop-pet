@@ -6,6 +6,9 @@ from httpx import ASGITransport, AsyncClient
 
 from petdock_runtime.backends import MockBackend
 from petdock_runtime.config import RuntimeConfig
+from petdock_runtime.embeddings import LocalHashEmbedding
+from petdock_runtime.knowledge import ChromaVectorStore, KnowledgeService
+from petdock_runtime.knowledge_store import KnowledgeStore
 from petdock_runtime.memory_store import MemoryStore
 from petdock_runtime.memory_extractor import _fallback_candidate
 from petdock_runtime.protocol import AssistantRequest
@@ -143,3 +146,98 @@ def test_memory_candidate_requires_confirmation(tmp_path) -> None:
     assert not store.resolve_candidate(candidate_id, "rejected")
     assert _fallback_candidate("请记住我喜欢简洁回答") == "简洁回答"
     store.close()
+
+
+def test_knowledge_library_indexes_searches_and_updates(tmp_path) -> None:
+    """验证 Chroma 持久化、敏感文件排除、增量更新和混合召回闭环。"""
+    async def scenario() -> tuple[dict[str, object], list[str], list[str], bool]:
+        source = tmp_path / "资料库"
+        source.mkdir()
+        document = source / "PetDock.md"
+        document.write_text(
+            "# 启动方式\n\nPetDock 使用 Electron Main 启动 Python Runtime，并通过 SSE 返回消息。",
+            encoding="utf-8",
+        )
+        (source / ".env").write_text("PETDOCK_LLM_API_KEY=secret", encoding="utf-8")
+        store = KnowledgeStore(str(tmp_path / "knowledge.db"))
+        vectors = ChromaVectorStore(str(tmp_path / "chroma"), LocalHashEmbedding())
+        service = KnowledgeService(store, vectors)
+        library = await service.create_library("项目资料", str(source))
+        for _ in range(100):
+            snapshot = store.get_library(str(library["id"]))
+            if snapshot["status"] != "indexing":
+                break
+            await asyncio.sleep(0.02)
+        first = await service.search("Runtime 如何返回消息", [str(library["id"])])
+        document.write_text("# 新配置\n\n阶段四使用 Chroma 保存向量索引。", encoding="utf-8")
+        await service.start_index(str(library["id"]))
+        for _ in range(100):
+            snapshot = store.get_library(str(library["id"]))
+            if snapshot["status"] != "indexing":
+                break
+            await asyncio.sleep(0.02)
+        second = await service.search("阶段四向量保存在哪里", [str(library["id"])])
+        summary = store.snapshot()["libraries"][0]
+        deleted = await service.delete_library(str(library["id"]))
+        await service.close()
+        return summary, [item.content for item in first], [item.content for item in second], deleted
+
+    summary, first, second, deleted = asyncio.run(scenario())
+    assert summary["status"] == "ready"
+    assert summary["documentCount"] == 1
+    assert "资料库" in str(summary["displayPath"])
+    assert "Runtime" in " ".join(first)
+    assert "Chroma" in " ".join(second)
+    assert "secret" not in " ".join(first + second)
+    assert deleted
+
+
+def test_knowledge_api_requires_token_and_emits_sources(tmp_path) -> None:
+    """验证知识库接口鉴权以及离线聊天返回结构化引用事件。"""
+    async def scenario() -> tuple[int, list[dict[str, object]], int]:
+        source = tmp_path / "notes"
+        source.mkdir()
+        (source / "answer.md").write_text("发布口令是蓝色月亮，仅用于知识库测试。", encoding="utf-8")
+        config = RuntimeConfig(
+            TOKEN,
+            "mock",
+            None,
+            None,
+            "unused",
+            str(tmp_path / "memory.db"),
+            str(tmp_path / "knowledge.db"),
+            str(tmp_path / "chroma"),
+        )
+        transport = ASGITransport(app=create_app(config))
+        headers = {"Authorization": f"Bearer {TOKEN}"}
+        async with AsyncClient(transport=transport, base_url="http://runtime.test") as client:
+            unauthorized = await client.get("/v1/knowledge")
+            created = await client.post(
+                "/v1/knowledge/library",
+                headers=headers,
+                json={"name": "测试资料", "path": str(source)},
+            )
+            library_id = created.json()["library"]["id"]
+            for _ in range(100):
+                snapshot = await client.get("/v1/knowledge", headers=headers)
+                if snapshot.json()["libraries"][0]["status"] != "indexing":
+                    break
+                await asyncio.sleep(0.02)
+            request = make_request("task-rag").model_copy(
+                update={"input": "发布口令是什么", "knowledgeLibraryIds": [library_id]}
+            )
+            await client.post("/v1/chat", headers=headers, json=request.model_dump())
+            event_response = await client.get("/v1/events/task-rag", headers=headers)
+            events = [
+                __import__("json").loads(line[6:])
+                for line in event_response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            deleted = await client.delete(f"/v1/knowledge/library/{library_id}", headers=headers)
+            return unauthorized.status_code, events, deleted.status_code
+
+    unauthorized, events, deleted = asyncio.run(scenario())
+    assert unauthorized == 401
+    assert any(event["type"] == "retrieval_sources" for event in events)
+    assert any("蓝色月亮" in event["payload"].get("delta", "") for event in events)
+    assert deleted == 200

@@ -18,15 +18,15 @@ Deferred     延后
 
 ## 1. 当前总览
 
-更新时间：2026-07-19
+更新时间：2026-07-26
 
 ```text
 AI 助手总体状态：In Progress
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
-Python LangChain Runtime：Done（阶段 3）
-RAG 文档管理：Placeholder
+Python LangChain Runtime：Done（阶段 4）
+RAG 文档管理：Done（阶段 4）
 Skill 系统：Placeholder
 ```
 
@@ -184,30 +184,58 @@ Skill 系统：Placeholder
 - AI 能记住常用应用和目录。
 - 用户可以清理记忆数据。
 
+### 阶段 4：RAG 本地知识库
+
+状态：Done
+
+- [x] 使用独立 `knowledge.db` 保存知识库、授权来源、文档、chunk 和索引任务状态。
+- [x] 引入 Chroma 1.5 持久化向量索引，业务数据不依赖 Chroma metadata。
+- [x] 增加本地确定性 embedding，未配置模型时也能离线索引和检索。
+- [x] 使用 SQLite FTS5 与 Chroma 向量召回，通过 RRF 做混合排序。
+- [x] 支持 Markdown、文本、配置、源码等 UTF-8 文本文件。
+- [x] 支持增量刷新、暂停、恢复、错误状态和 Runtime 重启后的状态恢复。
+- [x] 默认排除构建目录、隐藏目录、敏感文件、符号链接、超大文件和二进制文件。
+- [x] 目录只能通过 Electron Main 原生选择器授权，Renderer 不能提交任意路径。
+- [x] 增加助手内知识库管理、索引进度、对话范围选择和来源引用。
+- [x] 对话知识库范围由 Main 持久化，默认不选，用户主动勾选后才参与模型上下文。
+- [x] 检索资料按不可信内容处理，不能借文档内容绕过工具权限。
+- [x] 删除知识库只删除 SQLite/Chroma 索引，不修改来源文件。
+
+验收标准：
+
+- AI 能基于用户明确授权的目录回答问题并展示来源。
+- 用户可以暂停、恢复、刷新和删除索引。
+- 文件更新后可以增量重建，敏感文件不会进入索引。
+
+验证方式：
+
+- Runtime 测试覆盖 Chroma 持久化、增量更新、敏感文件排除、混合召回和引用事件。
+- TypeScript 类型检查和单元测试覆盖共享协议及既有桌宠行为。
+- `npm.cmd run check` 通过：10 个 TypeScript 测试、8 个 Python Runtime 测试和生产构建。
+- `npm.cmd run pack` 通过，解包版包含约 67.8 MB 的 Chroma Runtime。
+- `npm.cmd run test:runtime:packaged` 通过，验证独立 exe readiness、健康检查和优雅关闭。
+- `npm.cmd run test:e2e:assistant:packaged` 通过，覆盖知识库管理视图并生成视觉回归截图。
+
 ## 4. 中长期占位
 
-### RAG 文档管理
+### RAG 后续增强
 
-状态：Placeholder
+状态：Deferred
 
-- [ ] 知识库配置模型。
-- [ ] 文档源配置。
-- [ ] 允许索引目录管理。
-- [ ] 文档扫描。
-- [ ] 文档 chunk。
-- [ ] embedding。
-- [ ] 向量检索。
-- [ ] 索引状态查看。
-- [ ] 暂停/恢复索引。
-- [ ] 删除知识库和索引数据。
+- [x] 建立首版本地 ONNX 向量模型白名单，固定模型版本、推理规则、下载文件与 SHA-256。
+- [x] 固化 RAG 召回与检索质量优化方案、阶段门槛和完成定义。
+- [ ] OpenAI-compatible 和本地 ONNX embedding provider。
+- [ ] PDF、DOCX、PPTX 文档解析。
+- [ ] 文件系统 watcher 与自动增量更新。
+- [ ] query rewrite、父子分块和 reranker。
+- [ ] 固定评测集与 Recall@K、MRR 指标面板。
 
 待决策：
 
-- 向量库选型。
-- embedding 模型选型。
-- 是否支持 PDF/DOCX/PPTX。
-- 是否使用文件系统 watcher。
-- 文档内容是否允许发给云端模型。
+- embedding 模型和 provider 配置界面。
+- 二进制办公文档的解析依赖与隐私提示。
+- 是否默认启用文件系统 watcher。
+- 在线模型使用知识片段时的逐库授权策略。
 
 ### Skill 系统
 
@@ -272,3 +300,10 @@ Skill 系统：Placeholder
 - 增加会话恢复、路径脱敏和记忆数据 Runtime 测试。
 - 补齐 Python Runtime 全部类/方法的中文 docstring，并将注释约定写入开发文档。
 - 当前 Electron 开发模式冒烟测试受本机 GPU 进程和用户目录缓存权限影响，未能启动窗口；类型、单元、Runtime 测试和生产构建均通过。
+
+### 2026-07-26（阶段 4）
+
+- 引入 Chroma 持久化向量索引，并保留 SQLite 作为知识库业务主存储。
+- 增加本地 embedding、FTS5 + 向量混合召回和结构化来源引用。
+- 增加安全目录扫描、增量索引、暂停/恢复及知识库管理界面。
+- 目录授权收口到 Electron Main 原生选择器，删除操作不触碰原始文件。

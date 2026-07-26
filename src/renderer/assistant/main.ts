@@ -1,6 +1,8 @@
 import './styles.css'
 import type {
   AssistantEvent,
+  AssistantKnowledgeLibrary,
+  AssistantKnowledgeSnapshot,
   AssistantLayoutTracePhase,
   AssistantMemorySnapshot,
   AssistantRuntimeStatus,
@@ -19,6 +21,14 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const panel = requireElement<HTMLElement>('#assistant-panel')
   const conversation = requireElement<HTMLElement>('#conversation')
   const memoryView = requireElement<HTMLElement>('#memory-view')
+  const knowledgeView = requireElement<HTMLElement>('#knowledge-view')
+  const knowledgeContent = requireElement<HTMLElement>('#knowledge-content')
+  const knowledgeAdd = requireElement<HTMLButtonElement>('#knowledge-add')
+  const knowledgeBack = requireElement<HTMLButtonElement>('#knowledge-back')
+  const knowledgeDelete = requireElement<HTMLElement>('#knowledge-delete')
+  const knowledgeDeleteTitle = requireElement<HTMLElement>('#knowledge-delete-title')
+  const knowledgeDeleteCancel = requireElement<HTMLButtonElement>('#knowledge-delete-cancel')
+  const knowledgeDeleteConfirm = requireElement<HTMLButtonElement>('#knowledge-delete-confirm')
   const memoryClearOpen = requireElement<HTMLButtonElement>('#memory-clear-open')
   const memoryBackButton = requireElement<HTMLButtonElement>('#memory-back')
   const memoryContent = requireElement<HTMLElement>('#memory-content')
@@ -27,6 +37,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const memoryClearCancel = requireElement<HTMLButtonElement>('#memory-clear-cancel')
   const memoryClearConfirm = requireElement<HTMLButtonElement>('#memory-clear-confirm')
   const memoryButton = requireElement<HTMLButtonElement>('#memory-button')
+  const knowledgeButton = requireElement<HTMLButtonElement>('#knowledge-button')
   const composer = requireElement<HTMLFormElement>('#composer')
   const input = requireElement<HTMLTextAreaElement>('#message-input')
   const sendButton = requireElement<HTMLButtonElement>('#send-button')
@@ -48,6 +59,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let latestLayoutRevision = 0
   let selectedCommandIndex = 0
   let memoryMode = false
+  let knowledgeMode = false
+  let knowledgeSnapshot: AssistantKnowledgeSnapshot | null = null
+  let knowledgePoll: number | null = null
+  let pendingKnowledgeDelete: AssistantKnowledgeLibrary | null = null
+  const selectedKnowledgeIds = new Set<string>()
   let memoryTab: 'conversations' | 'memories' | 'toolLogs' = 'conversations'
   let memorySnapshot: AssistantMemorySnapshot | null = null
   let pendingClearScope: MemoryClearScope | null = null
@@ -63,6 +79,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (memoryMode) {
         closeMemoryView()
       } else {
+        if (knowledgeMode) {
+          closeKnowledgeView()
+        }
         void openMemoryView()
       }
     }
@@ -136,10 +155,29 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (memoryMode) {
         closeMemoryView()
       } else {
+        if (knowledgeMode) {
+          closeKnowledgeView()
+        }
         void openMemoryView()
       }
     }
   })
+  knowledgeButton.addEventListener('click', () => {
+    if (!busy) {
+      if (knowledgeMode) {
+        closeKnowledgeView()
+      } else {
+        if (memoryMode) {
+          closeMemoryView()
+        }
+        void openKnowledgeView()
+      }
+    }
+  })
+  knowledgeBack.addEventListener('click', closeKnowledgeView)
+  knowledgeAdd.addEventListener('click', () => void addKnowledgeLibrary())
+  knowledgeDeleteCancel.addEventListener('click', cancelKnowledgeDelete)
+  knowledgeDeleteConfirm.addEventListener('click', () => void confirmKnowledgeDelete())
   memoryBackButton.addEventListener('click', closeMemoryView)
   memoryClearOpen.addEventListener('click', beginMemoryClear)
   memoryClearCancel.addEventListener('click', cancelMemoryClear)
@@ -155,6 +193,16 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
 
   void window.desktopPet.getAssistantStatus().then(renderRuntimeStatus).catch(showError)
+  void Promise.all([
+    window.desktopPet.getAssistantKnowledge(),
+    window.desktopPet.getSettings()
+  ]).then(([snapshot, settings]) => {
+    knowledgeSnapshot = snapshot
+    const existing = new Set(snapshot.libraries.map((library) => library.id))
+    settings.assistantKnowledgeLibraryIds
+      .filter((id) => existing.has(id))
+      .forEach((id) => selectedKnowledgeIds.add(id))
+  }).catch(() => undefined)
 
   async function sendMessage(): Promise<void> {
     if (!commandMenu.hidden) {
@@ -188,7 +236,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     lastSequence = 0
 
     try {
-      const result = await window.desktopPet.askAssistant({ input: message, conversationId })
+      const result = await window.desktopPet.askAssistant({
+        input: message,
+        conversationId
+      })
       activeTaskId ??= result.taskId
     } catch (error) {
       if (activeAssistantMessage) {
@@ -234,6 +285,213 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     memoryButton.setAttribute('aria-pressed', 'false')
     document.body.dataset.assistantMode = 'chat'
     input.focus()
+  }
+
+  /** 打开知识库管理并自动选中可用于回答的就绪知识库。 */
+  async function openKnowledgeView(): Promise<void> {
+    clearError()
+    try {
+      knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
+      knowledgeMode = true
+      conversation.hidden = true
+      knowledgeView.hidden = false
+      input.disabled = true
+      sendButton.disabled = true
+      newConversationButton.disabled = true
+      knowledgeButton.setAttribute('aria-pressed', 'true')
+      document.body.dataset.assistantMode = 'knowledge'
+      renderKnowledgeView()
+      scheduleKnowledgePoll()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  function closeKnowledgeView(): void {
+    knowledgeMode = false
+    pendingKnowledgeDelete = null
+    knowledgeDelete.hidden = true
+    knowledgeView.hidden = true
+    conversation.hidden = false
+    input.disabled = busy
+    sendButton.disabled = false
+    newConversationButton.disabled = busy
+    knowledgeButton.setAttribute('aria-pressed', 'false')
+    document.body.dataset.assistantMode = 'chat'
+    if (knowledgePoll !== null) {
+      window.clearTimeout(knowledgePoll)
+      knowledgePoll = null
+    }
+    input.focus()
+  }
+
+  /** 渲染知识库进度、聊天范围复选框和索引控制。 */
+  function renderKnowledgeView(): void {
+    knowledgeContent.replaceChildren()
+    const libraries = knowledgeSnapshot?.libraries ?? []
+    if (libraries.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'memory-empty'
+      empty.textContent = '还没有知识库。'
+      knowledgeContent.append(empty)
+      return
+    }
+
+    libraries.forEach((library) => {
+      const row = document.createElement('article')
+      row.className = 'knowledge-row'
+      row.dataset.status = library.status
+
+      const selector = document.createElement('input')
+      selector.type = 'checkbox'
+      selector.className = 'knowledge-selector'
+      selector.title = '用于对话检索'
+      selector.setAttribute('aria-label', `在对话中使用${library.name}`)
+      selector.disabled = library.status !== 'ready'
+      selector.checked = selector.disabled ? false : selectedKnowledgeIds.has(library.id)
+      selector.addEventListener('change', () => {
+        if (selector.checked) {
+          selectedKnowledgeIds.add(library.id)
+        } else {
+          selectedKnowledgeIds.delete(library.id)
+        }
+        void persistKnowledgeSelection()
+      })
+
+      const main = document.createElement('div')
+      main.className = 'memory-row-main'
+      const title = document.createElement('strong')
+      title.textContent = library.name
+      const status = document.createElement('span')
+      status.textContent = knowledgeStatusText(library)
+      const path = document.createElement('small')
+      path.textContent = library.error || library.displayPath
+      main.append(title, status, path)
+
+      if (library.status === 'indexing') {
+        const progress = document.createElement('progress')
+        progress.max = Math.max(1, library.totalFiles)
+        progress.value = Math.min(library.processedFiles, progress.max)
+        progress.setAttribute('aria-label', `${library.name}索引进度`)
+        main.append(progress)
+      }
+
+      const actions = document.createElement('div')
+      actions.className = 'knowledge-actions'
+      const indexAction = document.createElement('button')
+      indexAction.type = 'button'
+      indexAction.className = 'icon-button'
+      const isIndexing = library.status === 'indexing'
+      indexAction.textContent = isIndexing ? 'Ⅱ' : '↻'
+      indexAction.title = isIndexing ? '暂停索引' : library.status === 'ready' ? '刷新索引' : '继续索引'
+      indexAction.setAttribute('aria-label', `${indexAction.title}${library.name}`)
+      indexAction.addEventListener('click', () => void toggleKnowledgeIndex(library))
+      const remove = document.createElement('button')
+      remove.type = 'button'
+      remove.className = 'icon-button'
+      remove.textContent = '×'
+      remove.title = '删除知识库索引'
+      remove.setAttribute('aria-label', `删除${library.name}`)
+      remove.addEventListener('click', () => beginKnowledgeDelete(library))
+      actions.append(indexAction, remove)
+      row.append(selector, main, actions)
+      knowledgeContent.append(row)
+    })
+  }
+
+  async function addKnowledgeLibrary(): Promise<void> {
+    knowledgeAdd.disabled = true
+    try {
+      const library = await window.desktopPet.addAssistantKnowledgeLibrary()
+      if (library) {
+        knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
+        renderKnowledgeView()
+        scheduleKnowledgePoll()
+      }
+    } catch (error) {
+      showError(error)
+    } finally {
+      knowledgeAdd.disabled = false
+    }
+  }
+
+  async function toggleKnowledgeIndex(library: AssistantKnowledgeLibrary): Promise<void> {
+    try {
+      if (library.status === 'indexing') {
+        await window.desktopPet.pauseAssistantKnowledgeIndex(library.id)
+      } else {
+        await window.desktopPet.startAssistantKnowledgeIndex(library.id)
+      }
+      knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
+      renderKnowledgeView()
+      scheduleKnowledgePoll()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  function beginKnowledgeDelete(library: AssistantKnowledgeLibrary): void {
+    pendingKnowledgeDelete = library
+    knowledgeDeleteTitle.textContent = `删除“${library.name}”的索引？原文件不会被删除。`
+    knowledgeDelete.hidden = false
+    knowledgeDeleteConfirm.focus()
+  }
+
+  function cancelKnowledgeDelete(): void {
+    pendingKnowledgeDelete = null
+    knowledgeDelete.hidden = true
+  }
+
+  async function confirmKnowledgeDelete(): Promise<void> {
+    const library = pendingKnowledgeDelete
+    if (!library) {
+      return
+    }
+    knowledgeDeleteConfirm.disabled = true
+    try {
+      await window.desktopPet.deleteAssistantKnowledgeLibrary(library.id)
+      selectedKnowledgeIds.delete(library.id)
+      await persistKnowledgeSelection()
+      cancelKnowledgeDelete()
+      knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
+      renderKnowledgeView()
+    } catch (error) {
+      showError(error)
+    } finally {
+      knowledgeDeleteConfirm.disabled = false
+    }
+  }
+
+  function scheduleKnowledgePoll(): void {
+    if (!knowledgeMode || !(knowledgeSnapshot?.libraries.some((item) => item.status === 'indexing'))) {
+      return
+    }
+    if (knowledgePoll !== null) {
+      window.clearTimeout(knowledgePoll)
+    }
+    knowledgePoll = window.setTimeout(async () => {
+      knowledgePoll = null
+      if (!knowledgeMode) {
+        return
+      }
+      try {
+        knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
+        renderKnowledgeView()
+      } catch (error) {
+        showError(error)
+      }
+      scheduleKnowledgePoll()
+    }, 750)
+  }
+
+  async function persistKnowledgeSelection(): Promise<void> {
+    try {
+      const selected = await window.desktopPet.setAssistantKnowledgeSelection([...selectedKnowledgeIds])
+      selectedKnowledgeIds.clear()
+      selected.forEach((id) => selectedKnowledgeIds.add(id))
+    } catch (error) {
+      showError(error)
+    }
   }
 
   function renderMemoryTab(): void {
@@ -521,6 +779,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       return
     }
 
+    if (event.type === 'retrieval_sources') {
+      renderRetrievalSources(event.payload.sources)
+      return
+    }
+
     if (event.type === 'tool_call') {
       showAssistantPlaceholder(`正在处理：${event.payload.preview}`)
       return
@@ -678,6 +941,34 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     return body
   }
 
+  /** 在当前助手消息下展示 Runtime 返回的可核查来源。 */
+  function renderRetrievalSources(sources: Extract<AssistantEvent, { type: 'retrieval_sources' }>['payload']['sources']): void {
+    const article = activeAssistantMessage?.closest('article')
+    if (!article || sources.length === 0) {
+      return
+    }
+    article.querySelector('.retrieval-sources')?.remove()
+    const details = document.createElement('details')
+    details.className = 'retrieval-sources'
+    const summary = document.createElement('summary')
+    summary.textContent = `参考资料 ${sources.length}`
+    details.append(summary)
+    sources.forEach((source, index) => {
+      const item = document.createElement('div')
+      item.className = 'retrieval-source'
+      const title = document.createElement('strong')
+      title.textContent = `[资料${index + 1}] ${source.title}`
+      const path = document.createElement('span')
+      path.textContent = `${source.libraryName} / ${source.relativePath}`
+      const excerpt = document.createElement('p')
+      excerpt.textContent = source.excerpt
+      item.append(title, path, excerpt)
+      details.append(item)
+    })
+    article.append(details)
+    scrollConversation()
+  }
+
   function setBusy(value: boolean): void {
     busy = value
     input.disabled = value
@@ -687,6 +978,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     sendButton.title = value ? '暂停生成' : '发送'
     sendButton.setAttribute('aria-label', value ? '暂停生成' : '发送')
     newConversationButton.disabled = value
+    knowledgeButton.disabled = value
+    memoryButton.disabled = value
   }
 
   /** 根据输入框末尾的 `~` 触发符刷新命令列表，`$` 暂时保留给 Skill。 */
@@ -832,6 +1125,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (memoryMode) {
         closeMemoryView()
       }
+      if (knowledgeMode) {
+        closeKnowledgeView()
+      }
       closing = false
       composer.classList.remove('is-open', 'is-closing')
       panel.hidden = true
@@ -938,4 +1234,19 @@ function toolLabel(name: string): string {
     open_file_or_folder: '打开文件或文件夹'
   }
   return labels[name] || name
+}
+
+function knowledgeStatusText(library: AssistantKnowledgeLibrary): string {
+  switch (library.status) {
+    case 'indexing':
+      return `正在索引 ${library.processedFiles}/${library.totalFiles}`
+    case 'paused':
+      return `已暂停 · ${library.documentCount} 个文档`
+    case 'ready':
+      return `${library.documentCount} 个文档 · ${library.chunkCount} 个片段`
+    case 'error':
+      return '索引失败'
+    default:
+      return '等待索引'
+  }
 }

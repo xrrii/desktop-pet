@@ -2,6 +2,8 @@ import type {
   AssistantMemorySnapshot,
   AssistantConversationMessage,
   AssistantEvent,
+  AssistantKnowledgeLibrary,
+  AssistantKnowledgeSnapshot,
   AssistantRequest,
   AssistantRuntimeReady,
   AssistantToolResultRequest,
@@ -122,6 +124,49 @@ export class AssistantRuntimeClient {
     return payload.accepted === true
   }
 
+  /** 获取知识库与后台索引状态。 */
+  async getKnowledgeSnapshot(): Promise<AssistantKnowledgeSnapshot> {
+    const response = await this.request('/v1/knowledge', { method: 'GET' })
+    return (await response.json()) as AssistantKnowledgeSnapshot
+  }
+
+  /** 把 Main 原生目录选择器授权的路径创建为知识库。 */
+  async addKnowledgeLibrary(name: string, path: string): Promise<AssistantKnowledgeLibrary> {
+    const response = await this.request('/v1/knowledge/library', {
+      method: 'POST',
+      body: JSON.stringify({ name, path })
+    })
+    const payload = (await response.json()) as { library: AssistantKnowledgeLibrary }
+    return payload.library
+  }
+
+  /** 启动、恢复或刷新知识库索引。 */
+  async startKnowledgeIndex(libraryId: string): Promise<boolean> {
+    const response = await this.request(`/v1/knowledge/library/${encodeURIComponent(libraryId)}/index`, {
+      method: 'POST'
+    })
+    const payload = (await response.json()) as { started?: unknown }
+    return payload.started === true
+  }
+
+  /** 请求在当前文件结束后暂停索引。 */
+  async pauseKnowledgeIndex(libraryId: string): Promise<boolean> {
+    const response = await this.request(`/v1/knowledge/library/${encodeURIComponent(libraryId)}/pause`, {
+      method: 'POST'
+    })
+    const payload = (await response.json()) as { paused?: unknown }
+    return payload.paused === true
+  }
+
+  /** 删除知识库索引；Runtime 不会修改来源目录。 */
+  async deleteKnowledgeLibrary(libraryId: string): Promise<boolean> {
+    const response = await this.request(`/v1/knowledge/library/${encodeURIComponent(libraryId)}`, {
+      method: 'DELETE'
+    })
+    const payload = (await response.json()) as { deleted?: unknown }
+    return payload.deleted === true
+  }
+
   async shutdown(): Promise<void> {
     await this.request('/v1/shutdown', { method: 'POST' })
   }
@@ -177,7 +222,7 @@ function isAssistantEvent(value: unknown): value is AssistantEvent {
     typeof event.taskId === 'string' &&
     Number.isInteger(event.sequence) &&
     typeof event.type === 'string' &&
-    ['message_delta', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
+    ['message_delta', 'retrieval_sources', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
       event.type
     ) &&
     !!event.payload &&

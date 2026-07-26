@@ -149,6 +149,35 @@ async function main() {
       5_000
     )
 
+    await evaluate(petClient, `document.querySelector('#knowledge-button').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#knowledge-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
+    const knowledgeState = await evaluate(
+      petClient,
+      `(() => ({
+        conversationHidden: document.querySelector('#conversation').hidden,
+        hasAddButton: !!document.querySelector('#knowledge-add'),
+        hasContent: !!document.querySelector('#knowledge-content')
+      }))()`
+    )
+    if (knowledgeState.conversationHidden !== true || !knowledgeState.hasAddButton || !knowledgeState.hasContent) {
+      throw new Error(`Knowledge management view did not load: ${JSON.stringify(knowledgeState)}`)
+    }
+    const knowledgeScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
+    const knowledgeScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-knowledge$1')
+    await writeFile(knowledgeScreenshotPath, Buffer.from(knowledgeScreenshot.data, 'base64'))
+    await evaluate(petClient, `document.querySelector('#knowledge-back').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#knowledge-view').hidden`,
+      (value) => value === true,
+      5_000
+    )
+
     if (backend === 'mock') {
       await evaluate(petClient, `document.querySelector('#new-conversation').click()`)
       await submitMessage(petClient, '请生成一段需要较长时间完成的取消测试内容')

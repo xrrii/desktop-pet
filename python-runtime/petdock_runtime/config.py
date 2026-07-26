@@ -18,6 +18,8 @@ class RuntimeConfig:
     base_url: str | None
     model: str
     memory_db_path: str = ":memory:"
+    knowledge_db_path: str = ":memory:"
+    chroma_path: str = ":memory:"
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -32,6 +34,12 @@ class RuntimeConfig:
         base_url = os.environ.get("PETDOCK_LLM_BASE_URL", "").strip() or None
         memory_db_path = os.environ.get("PETDOCK_MEMORY_DB_PATH", "").strip() or os.path.join(
             os.getcwd(), "assistant.db"
+        )
+        knowledge_db_path = os.environ.get("PETDOCK_KNOWLEDGE_DB_PATH", "").strip() or os.path.join(
+            os.getcwd(), "knowledge.db"
+        )
+        chroma_path = os.environ.get("PETDOCK_CHROMA_PATH", "").strip() or os.path.join(
+            os.getcwd(), "rag", "chroma"
         )
 
         if requested_backend == "auto":
@@ -53,4 +61,6 @@ class RuntimeConfig:
             base_url=base_url,
             model=model,
             memory_db_path=memory_db_path,
+            knowledge_db_path=knowledge_db_path,
+            chroma_path=chroma_path,
         )

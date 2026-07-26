@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026-07-26",
+  "downloadSources": [
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "baseUrl": "https://huggingface.co",
+      "official": true
+    },
+    {
+      "id": "hf-mirror",
+      "name": "Hugging Face Mirror",
+      "baseUrl": "https://hf-mirror.com",
+      "official": false
+    }
+  ],
+  "models": [
+    {
+      "id": "bge-small-zh-v1.5-int8",
+      "displayName": "BGE Small 中文 v1.5（INT8）",
+      "tier": "light",
+      "description": "中文轻量检索模型，下载体积约 24.5 MB，适合低配置设备和中小型中文知识库。",
+      "languages": ["zh", "en-basic"],
+      "recommendedFor": ["中文笔记", "Markdown 文档", "低配置设备"],
+      "license": {
+        "spdx": "MIT",
+        "url": "https://huggingface.co/BAAI/bge-small-zh-v1.5"
+      },
+      "source": {
+        "upstreamRepository": "BAAI/bge-small-zh-v1.5",
+        "upstreamRevision": "7999e1d3359715c523056ef9478215996d62a620",
+        "conversionRepository": "Xenova/bge-small-zh-v1.5",
+        "conversionRevision": "75c43b069aac4d136ba6bc1122f995fedcfd2781"
+      },
+      "downloadBytes": 24450683,
+      "files": [
+        {
+          "path": "onnx/model_quantized.onnx",
+          "target": "model.onnx",
+          "sizeBytes": 24010842,
+          "sha256": "15b717c382bcb518ba457b93ea6850ede7f4f1cd8937454aa06972366cd19bcc"
+        },
+        {
+          "path": "tokenizer.json",
+          "target": "tokenizer.json",
+          "sizeBytes": 439125,
+          "sha256": "48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26"
+        },
+        {
+          "path": "config.json",
+          "target": "config.json",
+          "sizeBytes": 716,
+          "sha256": "d4193ead3a810fd694fa8a31d7fc72fbaebc0668b603e398734bf2f6538ff42f"
+        }
+      ],
+      "runtime": {
+        "engine": "onnxruntime",
+        "precision": "int8",
+        "dimensions": 512,
+        "maxTokens": 512,
+        "pooling": "cls",
+        "normalize": true,
+        "queryPrefix": "为这个句子生成表示以用于检索相关文章：",
+        "documentPrefix": ""
+      },
+      "validation": "runtime-smoke-tested"
+    },
+    {
+      "id": "bge-base-zh-v1.5-int8",
+      "displayName": "BGE Base 中文 v1.5（INT8）",
+      "tier": "balanced",
+      "description": "中文均衡检索模型，下载体积约 103.3 MB，适合作为中文知识库的质量优先选项。",
+      "languages": ["zh", "en-basic"],
+      "recommendedFor": ["中文项目文档", "较大知识库", "质量优先"],
+      "license": {
+        "spdx": "MIT",
+        "url": "https://huggingface.co/BAAI/bge-base-zh-v1.5"
+      },
+      "source": {
+        "upstreamRepository": "BAAI/bge-base-zh-v1.5",
+        "upstreamRevision": "f03589ceff5aac7111bd60cfc7d497ca17ecac65",
+        "conversionRepository": "Xenova/bge-base-zh-v1.5",
+        "conversionRevision": "71e50dc531959f9e04ebf190ea25b00261a0a186"
+      },
+      "downloadBytes": 103308808,
+      "files": [
+        {
+          "path": "onnx/model_quantized.onnx",
+          "target": "model.onnx",
+          "sizeBytes": 102868746,
+          "sha256": "b665f3bba56c3119bc76ba131ebcc544d720a7408cb11581bdf354aaa0198d43"
+        },
+        {
+          "path": "tokenizer.json",
+          "target": "tokenizer.json",
+          "sizeBytes": 439124,
+          "sha256": "7dfbf1966ebf99d471c3796e9b457329d2b2182b817e144f1e904b957745c839"
+        },
+        {
+          "path": "config.json",
+          "target": "config.json",
+          "sizeBytes": 938,
+          "sha256": "855206771223efad2dfb8e212a716b20c4c71c8094309ca2da79d31bacb03276"
+        }
+      ],
+      "runtime": {
+        "engine": "onnxruntime",
+        "precision": "int8",
+        "dimensions": 768,
+        "maxTokens": 512,
+        "pooling": "cls",
+        "normalize": true,
+        "queryPrefix": "为这个句子生成表示以用于检索相关文章：",
+        "documentPrefix": ""
+      },
+      "validation": "metadata-verified"
+    },
+    {
+      "id": "multilingual-e5-small-int8",
+      "displayName": "Multilingual E5 Small（INT8）",
+      "tier": "balanced",
+      "description": "多语言均衡检索模型，下载体积约 135.4 MB，适合中英文混合资料和跨语言查询。",
+      "languages": ["multilingual", "zh", "en"],
+      "recommendedFor": ["中英文混合文档", "跨语言检索", "项目资料"],
+      "license": {
+        "spdx": "MIT",
+        "url": "https://huggingface.co/intfloat/multilingual-e5-small"
+      },
+      "source": {
+        "upstreamRepository": "intfloat/multilingual-e5-small",
+        "upstreamRevision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+        "conversionRepository": "Xenova/multilingual-e5-small",
+        "conversionRevision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78"
+      },
+      "downloadBytes": 135391573,
+      "files": [
+        {
+          "path": "onnx/model_quantized.onnx",
+          "target": "model.onnx",
+          "sizeBytes": 118308185,
+          "sha256": "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193"
+        },
+        {
+          "path": "tokenizer.json",
+          "target": "tokenizer.json",
+          "sizeBytes": 17082730,
+          "sha256": "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"
+        },
+        {
+          "path": "config.json",
+          "target": "config.json",
+          "sizeBytes": 658,
+          "sha256": "cb99455288675345e1a4f411438d5d0adbba5fbd3a67ea4fb03c015433b996c1"
+        }
+      ],
+      "runtime": {
+        "engine": "onnxruntime",
+        "precision": "int8",
+        "dimensions": 384,
+        "maxTokens": 512,
+        "pooling": "mean",
+        "normalize": true,
+        "queryPrefix": "query: ",
+        "documentPrefix": "passage: "
+      },
+      "validation": "runtime-smoke-tested"
+    },
+    {
+      "id": "bge-large-zh-v1.5-int8",
+      "displayName": "BGE Large 中文 v1.5（INT8）",
+      "tier": "quality",
+      "description": "中文高质量检索模型，下载体积约 327.8 MB，适合资源充足设备和复杂中文知识库。",
+      "languages": ["zh", "en-basic"],
+      "recommendedFor": ["大型中文知识库", "复杂语义检索", "高质量模式"],
+      "license": {
+        "spdx": "MIT",
+        "url": "https://huggingface.co/BAAI/bge-large-zh-v1.5"
+      },
+      "source": {
+        "upstreamRepository": "BAAI/bge-large-zh-v1.5",
+        "upstreamRevision": "79e7739b6ab944e86d6171e44d24c997fc1e0116",
+        "conversionRepository": "Xenova/bge-large-zh-v1.5",
+        "conversionRevision": "a48549b3259a6165364f226599cd91f39923d5d5"
+      },
+      "downloadBytes": 327803771,
+      "files": [
+        {
+          "path": "onnx/model_quantized.onnx",
+          "target": "model.onnx",
+          "sizeBytes": 327363707,
+          "sha256": "49277b15e898b5cd50f87f13f677609a9cdde71d24fa8817477ca50076bf13ef"
+        },
+        {
+          "path": "tokenizer.json",
+          "target": "tokenizer.json",
+          "sizeBytes": 439124,
+          "sha256": "7dfbf1966ebf99d471c3796e9b457329d2b2182b817e144f1e904b957745c839"
+        },
+        {
+          "path": "config.json",
+          "target": "config.json",
+          "sizeBytes": 940,
+          "sha256": "b8a4dce1dfa153b714eb25c75b18238ef2b12e4755f998457f60cd872483be66"
+        }
+      ],
+      "runtime": {
+        "engine": "onnxruntime",
+        "precision": "int8",
+        "dimensions": 1024,
+        "maxTokens": 512,
+        "pooling": "cls",
+        "normalize": true,
+        "queryPrefix": "为这个句子生成表示以用于检索相关文章：",
+        "documentPrefix": ""
+      },
+      "validation": "metadata-verified"
+    }
+  ]
+}

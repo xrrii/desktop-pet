@@ -9,6 +9,9 @@ from fastapi.responses import StreamingResponse
 
 from .backends import create_backend
 from .config import RuntimeConfig
+from .embeddings import LocalHashEmbedding
+from .knowledge import ChromaVectorStore, KnowledgeService
+from .knowledge_store import KnowledgeStore
 from .memory_store import MemoryStore
 from .memory_extractor import create_memory_extractor
 from .protocol import (
@@ -16,6 +19,7 @@ from .protocol import (
     MemoryClearRequest,
     MemoryCandidateResolutionRequest,
     MemoryItemRequest,
+    KnowledgeLibraryCreateRequest,
     ToolLogRequest,
     ToolResultRequest,
 )
@@ -28,7 +32,15 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     """创建带本地 SQLite、聊天、工具和记忆接口的 FastAPI 应用。"""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     store = MemoryStore(config.memory_db_path)
-    service = AssistantService(create_backend(config, store), create_memory_extractor(config, store))
+    knowledge_store = KnowledgeStore(config.knowledge_db_path)
+    knowledge = KnowledgeService(
+        knowledge_store,
+        ChromaVectorStore(config.chroma_path, LocalHashEmbedding()),
+    )
+    service = AssistantService(
+        create_backend(config, store, knowledge),
+        create_memory_extractor(config, store),
+    )
 
     def authorize(authorization: str | None) -> None:
         """校验除健康检查外所有接口使用的 Runtime 启动令牌。"""
@@ -162,13 +174,67 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         store.clear(request.scope)
         return {"cleared": True}
 
+    @app.get("/v1/knowledge")
+    async def knowledge_snapshot(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回知识库、索引进度和可用于聊天的状态。"""
+        authorize(authorization)
+        return knowledge_store.snapshot()
+
+    @app.post("/v1/knowledge/library")
+    async def knowledge_create(
+        request: KnowledgeLibraryCreateRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """创建经过 Electron Main 目录选择器授权的知识库。"""
+        authorize(authorization)
+        try:
+            return {"library": await knowledge.create_library(request.name, request.path)}
+        except (OSError, ValueError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.post("/v1/knowledge/library/{library_id}/index")
+    async def knowledge_index(
+        library_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """启动、恢复或手动刷新知识库索引。"""
+        authorize(authorization)
+        try:
+            return {"started": await knowledge.start_index(library_id)}
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Knowledge library not found") from error
+
+    @app.post("/v1/knowledge/library/{library_id}/pause")
+    async def knowledge_pause(
+        library_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """在当前文件完成后暂停索引。"""
+        authorize(authorization)
+        try:
+            return {"paused": await knowledge.pause_index(library_id)}
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Knowledge library not found") from error
+
+    @app.delete("/v1/knowledge/library/{library_id}")
+    async def knowledge_delete(
+        library_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """删除索引数据，不删除用户来源目录中的文件。"""
+        authorize(authorization)
+        return {"deleted": await knowledge.delete_library(library_id)}
+
     @app.post("/v1/shutdown")
     async def shutdown(authorization: str | None = Header(default=None)) -> dict[str, bool]:
         """关闭 Runtime 服务并释放 SQLite 连接。"""
         authorize(authorization)
+        await knowledge.close()
+        store.close()
         if request_shutdown:
             request_shutdown()
-        store.close()
         return {"accepted": True}
 
     return app

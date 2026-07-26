@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-from .backends import AssistantBackend, ToolCallRequest
+from .backends import AssistantBackend, RetrievalContext, ToolCallRequest
 from .memory_extractor import MemoryExtractor
 from .protocol import AssistantRequest, ToolResultRequest
 
@@ -104,6 +104,13 @@ class AssistantService:
                     if isinstance(output, str):
                         assistant_text_parts.append(output)
                         await emit("message_delta", {"delta": output})
+                        continue
+
+                    if isinstance(output, RetrievalContext):
+                        await emit(
+                            "retrieval_sources",
+                            {"sources": [source.public() for source in output.sources]},
+                        )
                         continue
 
                     if not isinstance(output, ToolCallRequest):

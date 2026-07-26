@@ -14,7 +14,8 @@ const defaultSettings: PetSettings = {
   alwaysOnTop: true,
   clickThrough: false,
   launchAtStartup: false,
-  assistantTheme: 'quiet'
+  assistantTheme: 'quiet',
+  assistantKnowledgeLibraryIds: []
 }
 
 let cachedSettings: PetSettings | null = null
@@ -62,7 +63,12 @@ function normalizeSettings(value: Partial<PetSettings>): PetSettings {
         : defaultSettings.launchAtStartup,
     assistantTheme: isAssistantThemeId(value.assistantTheme)
       ? value.assistantTheme
-      : defaultSettings.assistantTheme
+      : defaultSettings.assistantTheme,
+    assistantKnowledgeLibraryIds: Array.isArray(value.assistantKnowledgeLibraryIds)
+      ? [...new Set(value.assistantKnowledgeLibraryIds)].filter(
+          (id): id is string => typeof id === 'string' && /^[a-f0-9]{32}$/.test(id)
+        ).slice(0, 20)
+      : []
   }
 }
 

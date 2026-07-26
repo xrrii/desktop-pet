@@ -36,6 +36,24 @@
         </div>
       </section>
 
+      <section id="knowledge-view" class="knowledge-view" aria-label="知识库管理" hidden>
+        <header class="memory-header">
+          <h2>知识库</h2>
+          <div class="memory-header-actions">
+            <button id="knowledge-add" class="icon-button" type="button" title="添加目录" aria-label="添加知识库目录">+</button>
+            <button id="knowledge-back" class="icon-button" type="button" title="返回聊天" aria-label="返回聊天">←</button>
+          </div>
+        </header>
+        <div id="knowledge-content" class="knowledge-content"></div>
+        <div id="knowledge-delete" class="memory-clear" hidden>
+          <p id="knowledge-delete-title">确认删除知识库索引？</p>
+          <div class="memory-clear-actions">
+            <button id="knowledge-delete-cancel" class="secondary-button" type="button">取消</button>
+            <button id="knowledge-delete-confirm" class="primary-button" type="button">删除索引</button>
+          </div>
+        </div>
+      </section>
+
       <div id="error-banner" class="error-banner" role="alert" hidden></div>
 
       <div
@@ -63,6 +81,7 @@
         ></textarea>
         <div class="composer-actions">
           <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">+</button>
+          <button id="knowledge-button" class="icon-button knowledge-button" type="button" title="知识库" aria-label="知识库" aria-pressed="false">▤</button>
           <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">◈</button>
           <button id="send-button" class="primary-button icon-action-button" type="submit" title="发送" aria-label="发送">↑</button>
           <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>

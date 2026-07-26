@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Local assistant runtime for PetDock."
 requires-python = ">=3.11"
 dependencies = [
+  "chromadb>=1.5,<2",
   "fastapi>=0.116,<1",
   "langchain-openai>=0.3,<2",
   "pydantic>=2.11,<3",

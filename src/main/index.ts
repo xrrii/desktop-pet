@@ -1,4 +1,5 @@
-import { BrowserWindow, app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { basename } from 'node:path'
 import type {
   AssistantAskInput,
   AssistantLayoutTrace,
@@ -257,6 +258,60 @@ function registerIpc(): void {
     }
   )
 
+  ipcMain.handle('assistant:get-knowledge', (event) => {
+    requirePetSender(event)
+    return assistantManager.getKnowledgeSnapshot()
+  })
+
+  ipcMain.handle('assistant:add-knowledge-library', async (event) => {
+    const window = requirePetSender(event)
+    const selection = await dialog.showOpenDialog(window, {
+      title: '选择允许 PetDock 索引的目录',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    const [selectedPath] = selection.filePaths
+    if (selection.canceled || !selectedPath) {
+      return null
+    }
+    // 路径只能来自 Main 的原生选择器，Renderer 没有提交任意文件系统路径的能力。
+    return assistantManager.addKnowledgeLibrary(basename(selectedPath), selectedPath)
+  })
+
+  ipcMain.handle('assistant:start-knowledge-index', (event, libraryId: string) => {
+    requirePetSender(event)
+    requireKnowledgeLibraryId(libraryId)
+    return assistantManager.startKnowledgeIndex(libraryId)
+  })
+
+  ipcMain.handle('assistant:pause-knowledge-index', (event, libraryId: string) => {
+    requirePetSender(event)
+    requireKnowledgeLibraryId(libraryId)
+    return assistantManager.pauseKnowledgeIndex(libraryId)
+  })
+
+  ipcMain.handle('assistant:delete-knowledge-library', (event, libraryId: string) => {
+    requirePetSender(event)
+    requireKnowledgeLibraryId(libraryId)
+    return assistantManager.deleteKnowledgeLibrary(libraryId).then((deleted) => {
+      if (deleted) {
+        const selected = loadSettings().assistantKnowledgeLibraryIds.filter((id) => id !== libraryId)
+        updateSettings({ assistantKnowledgeLibraryIds: selected })
+      }
+      return deleted
+    })
+  })
+
+  ipcMain.handle('assistant:set-knowledge-selection', (event, libraryIds: unknown) => {
+    requirePetSender(event)
+    if (!Array.isArray(libraryIds) || libraryIds.length > 20) {
+      throw new TypeError('Knowledge library selection is invalid.')
+    }
+    libraryIds.forEach(requireKnowledgeLibraryId)
+    const selected = [...new Set(libraryIds)]
+    updateSettings({ assistantKnowledgeLibraryIds: selected })
+    return selected
+  })
+
   ipcMain.handle('assistant:close', (event) => {
     const window = requirePetSender(event)
     if (!isAssistantExpanded(window)) {
@@ -346,6 +401,12 @@ function requireMemoryScope(value: unknown): asserts value is MemoryClearScope {
 function requireMemoryId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0 || value.length > 512) {
     throw new TypeError('Memory item id is invalid.')
+  }
+}
+
+function requireKnowledgeLibraryId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) {
+    throw new TypeError('Knowledge library id is invalid.')
   }
 }
 

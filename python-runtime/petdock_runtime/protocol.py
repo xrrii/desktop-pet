@@ -29,6 +29,16 @@ class AssistantRequest(BaseModel):
     input: str = Field(min_length=1, max_length=12_000)
     source: Literal["pet", "assistant-window", "shortcut"]
     context: AssistantContext
+    knowledgeLibraryIds: list[str] = Field(default_factory=list, max_length=20)
+
+
+class KnowledgeLibraryCreateRequest(BaseModel):
+    """创建一个由 Electron 原生目录选择器明确授权的知识库。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    path: str = Field(min_length=1, max_length=2_048)
 
 
 class ToolResultRequest(BaseModel):

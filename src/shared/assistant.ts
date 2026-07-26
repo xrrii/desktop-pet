@@ -50,6 +50,37 @@ export interface AssistantAskResult {
   taskId: string
 }
 
+export type KnowledgeLibraryStatus = 'pending' | 'indexing' | 'paused' | 'ready' | 'error'
+
+export interface AssistantKnowledgeSnapshot {
+  libraries: AssistantKnowledgeLibrary[]
+}
+
+export interface AssistantKnowledgeLibrary {
+  id: string
+  name: string
+  displayPath: string
+  status: KnowledgeLibraryStatus
+  documentCount: number
+  chunkCount: number
+  processedFiles: number
+  totalFiles: number
+  error: string | null
+  createdAt: string
+  updatedAt: string
+  lastIndexedAt: string | null
+}
+
+export interface AssistantRetrievalSource {
+  id: string
+  libraryId: string
+  libraryName: string
+  title: string
+  relativePath: string
+  excerpt: string
+  score: number
+}
+
 export type MemoryClearScope = 'all' | 'conversations' | 'memories' | 'tool_logs'
 export type MemoryItemKind = 'conversation' | 'memory' | 'app' | 'directory'
 
@@ -146,6 +177,7 @@ export interface AssistantRequest {
     locale: string
     timezone: string
   }
+  knowledgeLibraryIds: string[]
 }
 
 export interface ToolCall {
@@ -167,6 +199,7 @@ export interface AssistantToolResultRequest {
 
 export type AssistantEvent =
   | AssistantMessageDeltaEvent
+  | AssistantRetrievalSourcesEvent
   | AssistantToolCallEvent
   | AssistantPermissionRequiredEvent
   | AssistantToolResultEvent
@@ -183,6 +216,13 @@ export interface AssistantMessageDeltaEvent extends AssistantEventBase {
   type: 'message_delta'
   payload: {
     delta: string
+  }
+}
+
+export interface AssistantRetrievalSourcesEvent extends AssistantEventBase {
+  type: 'retrieval_sources'
+  payload: {
+    sources: AssistantRetrievalSource[]
   }
 }
 

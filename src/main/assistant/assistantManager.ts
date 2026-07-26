@@ -5,6 +5,8 @@ import type {
   AssistantAskResult,
   AssistantConversationMessage,
   AssistantEvent,
+  AssistantKnowledgeLibrary,
+  AssistantKnowledgeSnapshot,
   AssistantMemorySnapshot,
   AssistantPermissionResolution,
   AssistantRequest,
@@ -63,6 +65,7 @@ export class AssistantManager {
   async ask(input: AssistantAskInput): Promise<AssistantAskResult> {
     const message = validateMessage(input.input)
     const conversationId = validateConversationId(input.conversationId)
+    const knowledgeLibraryIds = validateKnowledgeLibraryIds(loadSettings().assistantKnowledgeLibraryIds)
     const taskId = randomUUID()
     const request: AssistantRequest = {
       protocolVersion: ASSISTANT_PROTOCOL_VERSION,
@@ -74,7 +77,8 @@ export class AssistantManager {
         activePetId: loadSettings().petId,
         locale: app.getLocale() || 'zh-CN',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-      }
+      },
+      knowledgeLibraryIds
     }
     const client = await this.runtime.start()
     const state: ActiveTask = {
@@ -226,6 +230,36 @@ export class AssistantManager {
     }
     const client = await this.runtime.start()
     return client.resolveMemoryCandidate(candidateId, decision)
+  }
+
+  /** 获取知识库管理界面需要的索引状态。 */
+  async getKnowledgeSnapshot(): Promise<AssistantKnowledgeSnapshot> {
+    const client = await this.runtime.start()
+    return client.getKnowledgeSnapshot()
+  }
+
+  /** 接收 Main 已经通过原生选择器授权的目录，Renderer 无法传入路径。 */
+  async addKnowledgeLibrary(name: string, path: string): Promise<AssistantKnowledgeLibrary> {
+    const client = await this.runtime.start()
+    return client.addKnowledgeLibrary(name, path)
+  }
+
+  async startKnowledgeIndex(libraryId: string): Promise<boolean> {
+    validateKnowledgeLibraryId(libraryId)
+    const client = await this.runtime.start()
+    return client.startKnowledgeIndex(libraryId)
+  }
+
+  async pauseKnowledgeIndex(libraryId: string): Promise<boolean> {
+    validateKnowledgeLibraryId(libraryId)
+    const client = await this.runtime.start()
+    return client.pauseKnowledgeIndex(libraryId)
+  }
+
+  async deleteKnowledgeLibrary(libraryId: string): Promise<boolean> {
+    validateKnowledgeLibraryId(libraryId)
+    const client = await this.runtime.start()
+    return client.deleteKnowledgeLibrary(libraryId)
   }
 
   private handleRuntimeEvent(event: AssistantEvent): void {
@@ -428,6 +462,21 @@ function validateMessage(value: unknown): string {
     throw new TypeError('Message must contain between 1 and 12000 characters.')
   }
   return message
+}
+
+function validateKnowledgeLibraryIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 20) {
+    throw new TypeError('Knowledge library ids are invalid.')
+  }
+  const ids = [...new Set(value)]
+  ids.forEach(validateKnowledgeLibraryId)
+  return ids
+}
+
+function validateKnowledgeLibraryId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) {
+    throw new TypeError('Knowledge library id is invalid.')
+  }
 }
 
 function validateConversationId(value: unknown): string {

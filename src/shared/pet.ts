@@ -48,6 +48,7 @@ export interface PetSettings {
   clickThrough: boolean
   launchAtStartup: boolean
   assistantTheme: AssistantThemeId
+  assistantKnowledgeLibraryIds: string[]
 }
 
 export interface AvailablePet {

@@ -417,9 +417,9 @@ skill manifest 占位：
 - 启用/禁用状态存储。
 - 将安全 skill 注册为 Agent tool。
 
-## 10. RAG 文档管理占位设计
+## 10. RAG 文档管理设计
 
-RAG 文档管理用于让 PetDock 理解用户指定的文档、项目、笔记和本地知识库。当前阶段先做占位设计，避免后续把文件索引逻辑散落在 Agent 代码里。
+RAG 文档管理用于让 PetDock 理解用户指定的文档、项目、笔记和本地知识库。阶段 4 已实现首个完整闭环，文件索引逻辑保持在独立知识库模块中。后续检索路由、Embedding、召回、精排和评测以 `docs/RAG_RETRIEVAL_OPTIMIZATION.md` 为实现基线。
 
 初步目标：
 
@@ -450,31 +450,27 @@ Embedding
   Chunk 对应的向量表示
 ```
 
-建议数据库表占位：
+阶段 4 数据模型：
 
 ```text
 knowledge_libraries
   id
   name
-  description
+  source_path
+  display_path
+  status / progress / error
   created_at
   updated_at
-
-document_sources
-  id
-  library_id
-  type
-  path_or_uri
-  enabled
   last_indexed_at
 
 documents
   id
-  source_id
-  path
+  library_id
+  relative_path
   title
   content_hash
-  modified_at
+  modified_ns
+  embedding_state
   indexed_at
 
 document_chunks
@@ -483,19 +479,32 @@ document_chunks
   chunk_index
   content
   token_count
-  embedding_id
+
+document_chunks_fts
+  chunk_id
+  library_id
+  content
+
+Chroma collection: petdock_knowledge_v1
+  chunk id
+  embedding
+  libraryId / documentId metadata
 ```
 
-待决策问题：
+阶段 4 已决策：
 
-- 第一版向量库使用什么实现。
-- embedding 模型用本地模型还是 API。
-- 是否索引二进制文档，如 PDF、DOCX、PPTX。
-- 文件变更是主动扫描还是文件系统 watcher。
-- 大文件如何限制。
-- 敏感目录如何排除。
-- 用户如何删除某个文档的索引和记忆。
-- 文档内容是否允许发给云端模型。
+- 向量库使用 Chroma 1.5，本地 embedding 使用 384 维确定性 hash 基线。
+- 第一版仅索引允许扩展名内、UTF-8 编码且不超过 2 MB 的文本文件。
+- 使用手动增量刷新，不启用文件系统 watcher。
+- 默认排除隐藏目录、构建目录、依赖目录、符号链接和敏感文件名。
+- 删除知识库同时删除 SQLite/FTS5/Chroma 数据，不删除来源文件。
+- 知识库默认不参与对话；用户主动勾选后，命中片段才进入当前模型上下文。
+
+后续待决策：
+
+- 语义 embedding provider、模型和维度。
+- PDF、DOCX、PPTX 解析策略。
+- watcher、父子分块、query rewrite 和 reranker。
 
 安全原则：
 
@@ -506,13 +515,14 @@ document_chunks
 - 云端 embedding 或云端模型使用文档内容前必须有明确配置。
 - 不索引 `.env`、密钥、浏览器配置、系统凭据等敏感文件。
 
-第一阶段只建议实现：
+阶段 4 已实现：
 
-- 知识库配置模型。
-- 允许目录列表。
-- 文档元数据扫描。
-- 纯文本/Markdown 索引占位。
-- 检索接口占位。
+- `knowledge.db` 业务主存储与 Chroma 可重建向量索引。
+- Electron Main 原生目录授权和脱敏来源展示。
+- UTF-8 文本、Markdown、配置文件和常见源码扫描。
+- 本地 embedding、SQLite FTS5 与 Chroma 混合召回。
+- 增量刷新、暂停、恢复、错误状态和结构化引用。
+- 敏感文件、链接、构建目录、超大文件和非文本内容排除。
 
 ## 11. 存储设计
 
@@ -679,11 +689,11 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 ### 阶段 4：RAG
 
-- 文件索引器。
-- 文档 chunk。
-- embedding。
-- 向量检索。
-- 项目知识库。
+- 独立 SQLite 知识库主存储与 Chroma 持久化向量索引。
+- 安全文件扫描、文档 chunk 和本地 embedding。
+- FTS5 + Chroma 混合检索与 RRF 排序。
+- 项目知识库、后台增量索引和来源引用。
+- 索引暂停、恢复、刷新和删除。
 
 验收：
 
