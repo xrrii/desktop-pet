@@ -7,6 +7,7 @@ from typing import Literal
 """Runtime 启动配置及环境变量解析。"""
 
 BackendName = Literal["mock", "langchain"]
+EmbeddingProviderName = Literal["hash", "local", "online"]
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,13 @@ class RuntimeConfig:
     memory_db_path: str = ":memory:"
     knowledge_db_path: str = ":memory:"
     chroma_path: str = ":memory:"
+    embedding_provider: EmbeddingProviderName = "hash"
+    embedding_model_dir: str | None = None
+    embedding_descriptor_json: str | None = None
+    embedding_api_key: str | None = None
+    embedding_base_url: str | None = None
+    embedding_model: str | None = None
+    embedding_dimensions: int | None = None
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -41,6 +49,27 @@ class RuntimeConfig:
         chroma_path = os.environ.get("PETDOCK_CHROMA_PATH", "").strip() or os.path.join(
             os.getcwd(), "rag", "chroma"
         )
+        embedding_provider = os.environ.get("PETDOCK_EMBEDDING_PROVIDER", "hash").strip().lower()
+        if embedding_provider not in {"hash", "local", "online"}:
+            raise ValueError("PETDOCK_EMBEDDING_PROVIDER must be hash, local, or online.")
+        embedding_model_dir = os.environ.get("PETDOCK_EMBEDDING_MODEL_DIR", "").strip() or None
+        embedding_descriptor_json = (
+            os.environ.get("PETDOCK_EMBEDDING_DESCRIPTOR_JSON", "").strip() or None
+        )
+        embedding_api_key = os.environ.get("PETDOCK_EMBEDDING_API_KEY", "").strip() or None
+        embedding_base_url = os.environ.get("PETDOCK_EMBEDDING_BASE_URL", "").strip() or None
+        embedding_model = os.environ.get("PETDOCK_EMBEDDING_MODEL", "").strip() or None
+        raw_dimensions = os.environ.get("PETDOCK_EMBEDDING_DIMENSIONS", "").strip()
+        embedding_dimensions = int(raw_dimensions) if raw_dimensions else None
+
+        if embedding_provider == "local" and not (
+            embedding_model_dir and embedding_descriptor_json
+        ):
+            raise ValueError("本地 Embedding 需要模型目录和 descriptor JSON。")
+        if embedding_provider == "online" and not all(
+            (embedding_api_key, embedding_base_url, embedding_model, embedding_dimensions)
+        ):
+            raise ValueError("在线 Embedding 配置不完整。")
 
         if requested_backend == "auto":
             backend: BackendName = "langchain" if api_key else "mock"
@@ -63,4 +92,11 @@ class RuntimeConfig:
             memory_db_path=memory_db_path,
             knowledge_db_path=knowledge_db_path,
             chroma_path=chroma_path,
+            embedding_provider=embedding_provider,  # type: ignore[arg-type]
+            embedding_model_dir=embedding_model_dir,
+            embedding_descriptor_json=embedding_descriptor_json,
+            embedding_api_key=embedding_api_key,
+            embedding_base_url=embedding_base_url,
+            embedding_model=embedding_model,
+            embedding_dimensions=embedding_dimensions,
         )

@@ -167,6 +167,43 @@ async function main() {
     if (knowledgeState.conversationHidden !== true || !knowledgeState.hasAddButton || !knowledgeState.hasContent) {
       throw new Error(`Knowledge management view did not load: ${JSON.stringify(knowledgeState)}`)
     }
+    const embeddingSelectionState = await evaluate(
+      petClient,
+      `(async () => {
+        const snapshot = await window.desktopPet.getAssistantEmbeddingModels()
+        const target = snapshot.models.find((model) => model.status !== 'installed' && model.status !== 'downloading')
+        if (!target) return { skipped: true }
+        const select = document.querySelector('#embedding-select')
+        select.value = 'local:' + target.id
+        select.dispatchEvent(new Event('change', { bubbles: true }))
+        return {
+          skipped: false,
+          dialogOpen: document.querySelector('#embedding-confirm').open,
+          actionTitle: document.querySelector('#embedding-action').title
+        }
+      })()`,
+      true
+    )
+    if (!embeddingSelectionState.skipped) {
+      if (embeddingSelectionState.dialogOpen || !embeddingSelectionState.actionTitle.includes('下载')) {
+        throw new Error(`Embedding selection triggered an action: ${JSON.stringify(embeddingSelectionState)}`)
+      }
+      await evaluate(petClient, `document.querySelector('#embedding-action').click()`)
+      await waitForEvaluation(
+        petClient,
+        `document.querySelector('#embedding-confirm').open`,
+        (value) => value === true,
+        5_000
+      )
+      const confirmationText = await evaluate(
+        petClient,
+        `document.querySelector('#embedding-confirm-title').textContent`
+      )
+      if (!confirmationText.includes('确定下载')) {
+        throw new Error(`Embedding download confirmation is invalid: ${confirmationText}`)
+      }
+      await evaluate(petClient, `document.querySelector('#embedding-confirm-cancel').click()`)
+    }
     const knowledgeScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
     const knowledgeScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-knowledge$1')
     await writeFile(knowledgeScreenshotPath, Buffer.from(knowledgeScreenshot.data, 'base64'))

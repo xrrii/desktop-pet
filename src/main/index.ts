@@ -2,6 +2,7 @@ import { BrowserWindow, app, dialog, ipcMain, type IpcMainEvent, type IpcMainInv
 import { basename } from 'node:path'
 import type {
   AssistantAskInput,
+  AssistantEmbeddingOnlineInput,
   AssistantLayoutTrace,
   MemoryClearScope,
   MemoryItemKind,
@@ -312,6 +313,45 @@ function registerIpc(): void {
     return selected
   })
 
+  ipcMain.handle('assistant:get-embedding-models', (event) => {
+    requirePetSender(event)
+    return assistantManager.getEmbeddingSnapshot()
+  })
+
+  ipcMain.handle('assistant:download-embedding-model', (event, modelId: string) => {
+    requirePetSender(event)
+    requireEmbeddingModelId(modelId)
+    return assistantManager.downloadEmbeddingModel(modelId)
+  })
+
+  ipcMain.handle('assistant:pause-embedding-download', (event, modelId: string) => {
+    requirePetSender(event)
+    requireEmbeddingModelId(modelId)
+    return assistantManager.pauseEmbeddingModelDownload(modelId)
+  })
+
+  ipcMain.handle('assistant:select-embedding-model', (event, modelId: string | null) => {
+    requirePetSender(event)
+    if (modelId !== null) {
+      requireEmbeddingModelId(modelId)
+    }
+    return assistantManager.selectEmbeddingModel(modelId)
+  })
+
+  ipcMain.handle(
+    'assistant:configure-online-embedding',
+    (event, input: AssistantEmbeddingOnlineInput) => {
+      requirePetSender(event)
+      return assistantManager.configureOnlineEmbedding(input)
+    }
+  )
+
+  ipcMain.handle('assistant:delete-embedding-model', (event, modelId: string) => {
+    requirePetSender(event)
+    requireEmbeddingModelId(modelId)
+    return assistantManager.deleteEmbeddingModel(modelId)
+  })
+
   ipcMain.handle('assistant:close', (event) => {
     const window = requirePetSender(event)
     if (!isAssistantExpanded(window)) {
@@ -407,6 +447,12 @@ function requireMemoryId(value: unknown): asserts value is string {
 function requireKnowledgeLibraryId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) {
     throw new TypeError('Knowledge library id is invalid.')
+  }
+}
+
+function requireEmbeddingModelId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !/^[a-z0-9.-]{1,128}$/.test(value)) {
+    throw new TypeError('Embedding model id is invalid.')
   }
 }
 

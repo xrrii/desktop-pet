@@ -1,0 +1,32 @@
+{"id":"tool-url-001","query":"打开网站 https://example.com","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","url"]}
+{"id":"tool-url-002","query":"请访问 https://openai.com/docs","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","url"]}
+{"id":"tool-app-001","query":"打开应用 记事本","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","app"]}
+{"id":"tool-app-002","query":"启动计算器","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","app"]}
+{"id":"tool-path-001","query":"打开文件 C:\\Temp\\report.txt","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","path"]}
+{"id":"tool-path-002","query":"打开文件夹 D:\\work\\demo","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","path"]}
+{"id":"clarify-001","query":"打开网站","expectedRoute":"CLARIFY","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","clarify"]}
+{"id":"clarify-002","query":"启动应用","expectedRoute":"CLARIFY","relevantDocumentPaths":[],"noAnswer":true,"tags":["tool","clarify"]}
+{"id":"chat-001","query":"你好","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["chat"]}
+{"id":"chat-002","query":"谢谢","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["chat"]}
+{"id":"chat-003","query":"好的，收到","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["chat"]}
+{"id":"generate-001","query":"写一首关于夏天的诗","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["generation"]}
+{"id":"generate-002","query":"翻译 hello world","expectedRoute":"SKIP","relevantDocumentPaths":[],"noAnswer":true,"tags":["generation"]}
+{"id":"retrieve-release-001","query":"发布口令是什么","expectedRoute":"RETRIEVE","relevantDocumentPaths":["release.md"],"noAnswer":false,"tags":["zh","fact"]}
+{"id":"retrieve-release-002","query":"发布前需要运行什么命令？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["release.md"],"noAnswer":false,"tags":["zh","command"]}
+{"id":"retrieve-release-003","query":"打包产物保存在哪里？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["release.md"],"noAnswer":false,"tags":["zh","path"]}
+{"id":"retrieve-arch-001","query":"Runtime 如何把消息返回给界面？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["architecture.md"],"noAnswer":false,"tags":["zh","architecture"]}
+{"id":"retrieve-arch-002","query":"知识库原文保存在哪里？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["architecture.md"],"noAnswer":false,"tags":["zh","storage"]}
+{"id":"retrieve-arch-003","query":"Chroma 在项目中保存什么？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["architecture.md"],"noAnswer":false,"tags":["zh","storage"]}
+{"id":"retrieve-config-001","query":"PETDOCK_CHROMA_PATH 有什么作用？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["configuration.md"],"noAnswer":false,"tags":["code","config"]}
+{"id":"retrieve-config-002","query":"谁负责读取 Runtime 环境变量？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["configuration.md"],"noAnswer":false,"tags":["code","identifier"]}
+{"id":"retrieve-config-003","query":"Hash Embedding 的兜底类叫什么？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["configuration.md"],"noAnswer":false,"tags":["code","fallback"]}
+{"id":"retrieve-deploy-001","query":"staging 控制台地址是什么？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["deployment.md"],"noAnswer":false,"tags":["url","fact"]}
+{"id":"retrieve-deploy-002","query":"部署顺序是什么？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["deployment.md"],"noAnswer":false,"tags":["process"]}
+{"id":"retrieve-cleaning-001","query":"数据清洗任务如何配置？","expectedRoute":"RETRIEVE","relevantDocumentPaths":["data-cleaning.md"],"noAnswer":false,"tags":["zh","domain-positive"]}
+{"id":"both-001","query":"打开项目文档里提到的 staging 控制台网址","expectedRoute":"BOTH","relevantDocumentPaths":["deployment.md"],"noAnswer":false,"tags":["tool","both"]}
+{"id":"both-002","query":"找到部署资料中的控制台地址并打开","expectedRoute":"BOTH","relevantDocumentPaths":["deployment.md"],"noAnswer":false,"tags":["tool","both"]}
+{"id":"negative-001","query":"量子发动机维护周期是多少？","expectedRoute":"RETRIEVE","relevantDocumentPaths":[],"noAnswer":true,"tags":["negative"]}
+{"id":"negative-002","query":"财务报销审批人是谁？","expectedRoute":"RETRIEVE","relevantDocumentPaths":[],"noAnswer":true,"tags":["negative"]}
+{"id":"negative-003","query":"办公楼停车费每月多少钱？","expectedRoute":"RETRIEVE","relevantDocumentPaths":[],"noAnswer":true,"tags":["negative"]}
+{"id":"negative-004","query":"Android 最低支持版本是多少？","expectedRoute":"RETRIEVE","relevantDocumentPaths":[],"noAnswer":true,"tags":["negative"]}
+{"id":"negative-domain-001","query":"洗衣机应该怎么清洗？","expectedRoute":"RETRIEVE","relevantDocumentPaths":[],"noAnswer":true,"tags":["negative","domain-collision"]}

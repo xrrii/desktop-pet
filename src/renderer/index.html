@@ -44,6 +44,25 @@
             <button id="knowledge-back" class="icon-button" type="button" title="返回聊天" aria-label="返回聊天">←</button>
           </div>
         </header>
+        <section class="embedding-panel" aria-label="向量模型">
+          <div class="embedding-controls">
+            <select id="embedding-select" aria-label="选择向量模型"></select>
+            <button id="embedding-action" class="icon-button" type="button" title="应用向量模型" aria-label="应用向量模型">✓</button>
+            <button id="embedding-delete" class="icon-button" type="button" title="删除本地模型" aria-label="删除本地向量模型">⌫</button>
+          </div>
+          <small id="embedding-status"></small>
+          <progress id="embedding-progress" max="1" value="0" aria-label="模型下载进度" hidden></progress>
+          <form id="embedding-online-form" class="embedding-online-form" hidden>
+            <input id="embedding-online-url" type="url" maxlength="500" placeholder="API Base URL" aria-label="在线向量 API Base URL" required />
+            <input id="embedding-online-model" type="text" maxlength="200" placeholder="模型名称" aria-label="在线向量模型名称" required />
+            <input id="embedding-online-dimensions" type="number" min="64" max="65536" step="1" placeholder="维度" aria-label="向量维度" required />
+            <input id="embedding-online-key" type="password" maxlength="1000" placeholder="API Key" aria-label="在线向量 API Key" autocomplete="off" required />
+            <div class="embedding-online-actions">
+              <button id="embedding-online-cancel" class="secondary-button" type="button">取消</button>
+              <button class="primary-button" type="submit">保存并使用</button>
+            </div>
+          </form>
+        </section>
         <div id="knowledge-content" class="knowledge-content"></div>
         <div id="knowledge-delete" class="memory-clear" hidden>
           <p id="knowledge-delete-title">确认删除知识库索引？</p>
@@ -52,6 +71,13 @@
             <button id="knowledge-delete-confirm" class="primary-button" type="button">删除索引</button>
           </div>
         </div>
+        <dialog id="embedding-confirm" class="embedding-confirm">
+          <p id="embedding-confirm-title"></p>
+          <div class="embedding-confirm-actions">
+            <button id="embedding-confirm-cancel" class="secondary-button" type="button">取消</button>
+            <button id="embedding-confirm-submit" class="primary-button" type="button">确定</button>
+          </div>
+        </dialog>
       </section>
 
       <div id="error-banner" class="error-banner" role="alert" hidden></div>

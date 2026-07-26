@@ -1,5 +1,8 @@
 import './styles.css'
 import type {
+  AssistantEmbeddingOnlineInput,
+  AssistantEmbeddingModelSnapshot,
+  AssistantEmbeddingSnapshot,
   AssistantEvent,
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
@@ -17,6 +20,11 @@ import {
   type AssistantCommandOption
 } from './commandPalette'
 
+type PendingEmbeddingAction =
+  | { kind: 'download'; modelId: string }
+  | { kind: 'switch'; modelId: string | null }
+  | { kind: 'configure-online'; input: AssistantEmbeddingOnlineInput }
+
 export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): void {
   const panel = requireElement<HTMLElement>('#assistant-panel')
   const conversation = requireElement<HTMLElement>('#conversation')
@@ -29,6 +37,21 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const knowledgeDeleteTitle = requireElement<HTMLElement>('#knowledge-delete-title')
   const knowledgeDeleteCancel = requireElement<HTMLButtonElement>('#knowledge-delete-cancel')
   const knowledgeDeleteConfirm = requireElement<HTMLButtonElement>('#knowledge-delete-confirm')
+  const embeddingSelect = requireElement<HTMLSelectElement>('#embedding-select')
+  const embeddingAction = requireElement<HTMLButtonElement>('#embedding-action')
+  const embeddingDelete = requireElement<HTMLButtonElement>('#embedding-delete')
+  const embeddingStatus = requireElement<HTMLElement>('#embedding-status')
+  const embeddingProgress = requireElement<HTMLProgressElement>('#embedding-progress')
+  const embeddingOnlineForm = requireElement<HTMLFormElement>('#embedding-online-form')
+  const embeddingOnlineUrl = requireElement<HTMLInputElement>('#embedding-online-url')
+  const embeddingOnlineModel = requireElement<HTMLInputElement>('#embedding-online-model')
+  const embeddingOnlineDimensions = requireElement<HTMLInputElement>('#embedding-online-dimensions')
+  const embeddingOnlineKey = requireElement<HTMLInputElement>('#embedding-online-key')
+  const embeddingOnlineCancel = requireElement<HTMLButtonElement>('#embedding-online-cancel')
+  const embeddingConfirm = requireElement<HTMLDialogElement>('#embedding-confirm')
+  const embeddingConfirmTitle = requireElement<HTMLElement>('#embedding-confirm-title')
+  const embeddingConfirmCancel = requireElement<HTMLButtonElement>('#embedding-confirm-cancel')
+  const embeddingConfirmSubmit = requireElement<HTMLButtonElement>('#embedding-confirm-submit')
   const memoryClearOpen = requireElement<HTMLButtonElement>('#memory-clear-open')
   const memoryBackButton = requireElement<HTMLButtonElement>('#memory-back')
   const memoryContent = requireElement<HTMLElement>('#memory-content')
@@ -61,6 +84,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let memoryMode = false
   let knowledgeMode = false
   let knowledgeSnapshot: AssistantKnowledgeSnapshot | null = null
+  let embeddingSnapshot: AssistantEmbeddingSnapshot | null = null
+  let embeddingBusy = false
+  let pendingEmbeddingAction: PendingEmbeddingAction | null = null
   let knowledgePoll: number | null = null
   let pendingKnowledgeDelete: AssistantKnowledgeLibrary | null = null
   const selectedKnowledgeIds = new Set<string>()
@@ -178,6 +204,26 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   knowledgeAdd.addEventListener('click', () => void addKnowledgeLibrary())
   knowledgeDeleteCancel.addEventListener('click', cancelKnowledgeDelete)
   knowledgeDeleteConfirm.addEventListener('click', () => void confirmKnowledgeDelete())
+  embeddingSelect.addEventListener('change', () => {
+    embeddingOnlineForm.hidden = true
+    renderEmbeddingPanel()
+  })
+  embeddingAction.addEventListener('click', () => void requestEmbeddingAction())
+  embeddingDelete.addEventListener('click', () => void deleteSelectedEmbeddingModel())
+  embeddingConfirmCancel.addEventListener('click', cancelEmbeddingConfirmation)
+  embeddingConfirmSubmit.addEventListener('click', () => void confirmEmbeddingAction())
+  embeddingConfirm.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    cancelEmbeddingConfirmation()
+  })
+  embeddingOnlineCancel.addEventListener('click', () => {
+    embeddingOnlineForm.hidden = true
+    renderEmbeddingPanel()
+  })
+  embeddingOnlineForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    void saveOnlineEmbedding()
+  })
   memoryBackButton.addEventListener('click', closeMemoryView)
   memoryClearOpen.addEventListener('click', beginMemoryClear)
   memoryClearCancel.addEventListener('click', cancelMemoryClear)
@@ -195,9 +241,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   void window.desktopPet.getAssistantStatus().then(renderRuntimeStatus).catch(showError)
   void Promise.all([
     window.desktopPet.getAssistantKnowledge(),
+    window.desktopPet.getAssistantEmbeddingModels(),
     window.desktopPet.getSettings()
-  ]).then(([snapshot, settings]) => {
+  ]).then(([snapshot, models, settings]) => {
     knowledgeSnapshot = snapshot
+    embeddingSnapshot = models
     const existing = new Set(snapshot.libraries.map((library) => library.id))
     settings.assistantKnowledgeLibraryIds
       .filter((id) => existing.has(id))
@@ -291,7 +339,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   async function openKnowledgeView(): Promise<void> {
     clearError()
     try {
-      knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
+      ;[knowledgeSnapshot, embeddingSnapshot] = await Promise.all([
+        window.desktopPet.getAssistantKnowledge(),
+        window.desktopPet.getAssistantEmbeddingModels()
+      ])
       knowledgeMode = true
       conversation.hidden = true
       knowledgeView.hidden = false
@@ -300,6 +351,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       newConversationButton.disabled = true
       knowledgeButton.setAttribute('aria-pressed', 'true')
       document.body.dataset.assistantMode = 'knowledge'
+      renderEmbeddingPanel()
       renderKnowledgeView()
       scheduleKnowledgePoll()
     } catch (error) {
@@ -310,6 +362,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   function closeKnowledgeView(): void {
     knowledgeMode = false
     pendingKnowledgeDelete = null
+    pendingEmbeddingAction = null
+    embeddingConfirm.close()
+    embeddingOnlineForm.hidden = true
     knowledgeDelete.hidden = true
     knowledgeView.hidden = true
     conversation.hidden = false
@@ -399,6 +454,238 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     })
   }
 
+  /** 渲染当前 Provider、本地模型安装进度和安全的在线配置入口。 */
+  function renderEmbeddingPanel(): void {
+    if (!embeddingSnapshot) {
+      return
+    }
+    const previous = embeddingSelect.value
+    const activeValue = embeddingSnapshot.provider === 'local'
+      ? `local:${embeddingSnapshot.activeModelId || ''}`
+      : embeddingSnapshot.provider
+    embeddingSelect.replaceChildren()
+    embeddingSelect.append(new Option('Hash Embedding（兼容）', 'hash'))
+    embeddingSnapshot.models.forEach((model) => {
+      embeddingSelect.append(new Option(model.displayName, `local:${model.id}`))
+    })
+    embeddingSelect.append(new Option('在线 Embedding API', 'online'))
+    const availableValues = new Set([...embeddingSelect.options].map((option) => option.value))
+    embeddingSelect.value = availableValues.has(previous) ? previous : activeValue
+
+    const selected = selectedEmbeddingModel()
+    embeddingSelect.disabled = embeddingBusy
+    embeddingAction.disabled = embeddingBusy
+    embeddingDelete.disabled = true
+    embeddingProgress.hidden = true
+    embeddingStatus.textContent = ''
+
+    if (embeddingSelect.value === 'hash') {
+      const active = embeddingSnapshot.provider === 'hash'
+      embeddingStatus.textContent = active ? '当前使用 · 零下载兼容模式' : '零下载离线兼容模式'
+      setEmbeddingAction(active ? '已使用' : '切换到 Hash', active ? '✓' : '⇄', active)
+      return
+    }
+    if (embeddingSelect.value === 'online') {
+      const active = embeddingSnapshot.provider === 'online'
+      embeddingStatus.textContent = active && embeddingSnapshot.online
+        ? `当前使用 · ${embeddingSnapshot.online.model}`
+        : '在线模型会上传问题和知识库片段'
+      setEmbeddingAction(active ? '修改在线配置' : '配置在线模型', '⚙', false)
+      return
+    }
+    if (!selected) {
+      return
+    }
+    const active = embeddingSnapshot.provider === 'local' && embeddingSnapshot.activeModelId === selected.id
+    const progress = selected.downloadBytes > 0 ? selected.downloadedBytes / selected.downloadBytes : 0
+    embeddingStatus.textContent = `${embeddingModelStatus(selected)} · ${formatBytes(selected.downloadBytes)}`
+    embeddingDelete.disabled = embeddingBusy || active || selected.status === 'downloading' || selected.status === 'not-installed'
+    if (selected.status === 'downloading') {
+      embeddingProgress.hidden = false
+      embeddingProgress.value = Math.min(1, progress)
+      setEmbeddingAction('暂停下载', 'Ⅱ', false)
+    } else if (selected.status === 'installed') {
+      setEmbeddingAction(active ? '已使用' : '切换模型', active ? '✓' : '⇄', active)
+    } else {
+      setEmbeddingAction(selected.status === 'paused' ? '继续下载' : '下载模型', '↓', false)
+    }
+  }
+
+  function setEmbeddingAction(title: string, symbol: string, disabled: boolean): void {
+    embeddingAction.title = title
+    embeddingAction.setAttribute('aria-label', title)
+    embeddingAction.textContent = symbol
+    embeddingAction.disabled = embeddingBusy || disabled
+  }
+
+  function selectedEmbeddingModel(): AssistantEmbeddingModelSnapshot | null {
+    if (!embeddingSelect.value.startsWith('local:')) {
+      return null
+    }
+    const id = embeddingSelect.value.slice('local:'.length)
+    return embeddingSnapshot?.models.find((model) => model.id === id) ?? null
+  }
+
+  /** 根据当前选择准备下载、暂停、切换或在线配置，但不因下拉选择直接执行。 */
+  async function requestEmbeddingAction(): Promise<void> {
+    if (embeddingBusy || !embeddingSnapshot) {
+      return
+    }
+    if (embeddingSelect.value === 'online') {
+      const online = embeddingSnapshot.online
+      embeddingOnlineUrl.value = online?.baseUrl ?? ''
+      embeddingOnlineModel.value = online?.model ?? ''
+      embeddingOnlineDimensions.value = online ? String(online.dimensions) : ''
+      embeddingOnlineKey.value = ''
+      embeddingOnlineForm.hidden = false
+      embeddingOnlineKey.focus()
+      return
+    }
+
+    const selected = selectedEmbeddingModel()
+    if (selected?.status === 'downloading') {
+      await window.desktopPet.pauseAssistantEmbeddingDownload(selected.id)
+      await refreshEmbeddingSnapshot()
+      return
+    }
+    if (selected && selected.status !== 'installed') {
+      showEmbeddingConfirmation(
+        { kind: 'download', modelId: selected.id },
+        `确定下载“${selected.displayName}”（${formatBytes(selected.downloadBytes)}）？`,
+        '确定下载'
+      )
+      return
+    }
+    const displayName = selected?.displayName ?? 'Hash Embedding'
+    showEmbeddingConfirmation(
+      { kind: 'switch', modelId: selected?.id ?? null },
+      `切换模型将重新加载知识库，确定切换为“${displayName}”吗？`,
+      '确定切换'
+    )
+  }
+
+  /** 在线配置填写完成后先确认重载影响，API Key 仍只发送给 Main。 */
+  function saveOnlineEmbedding(): void {
+    if (embeddingBusy) {
+      return
+    }
+    const input: AssistantEmbeddingOnlineInput = {
+      baseUrl: embeddingOnlineUrl.value,
+      model: embeddingOnlineModel.value,
+      dimensions: Number(embeddingOnlineDimensions.value),
+      apiKey: embeddingOnlineKey.value
+    }
+    showEmbeddingConfirmation(
+      { kind: 'configure-online', input },
+      '切换模型将重新加载知识库，确定保存并使用该在线模型吗？',
+      '确定切换'
+    )
+  }
+
+  /** 打开模型操作确认框，只有确认按钮会触发 Main IPC。 */
+  function showEmbeddingConfirmation(
+    action: PendingEmbeddingAction,
+    message: string,
+    confirmLabel: string
+  ): void {
+    pendingEmbeddingAction = action
+    embeddingConfirmTitle.textContent = message
+    embeddingConfirmSubmit.textContent = confirmLabel
+    embeddingConfirm.showModal()
+    embeddingConfirmSubmit.focus()
+  }
+
+  function cancelEmbeddingConfirmation(): void {
+    pendingEmbeddingAction = null
+    embeddingConfirm.close()
+  }
+
+  /** 执行用户已确认的下载或切换，下载完成后不会自动激活模型。 */
+  async function confirmEmbeddingAction(): Promise<void> {
+    const action = pendingEmbeddingAction
+    if (!action || embeddingBusy) {
+      return
+    }
+    pendingEmbeddingAction = null
+    embeddingConfirm.close()
+    embeddingBusy = true
+    renderEmbeddingPanel()
+    try {
+      if (action.kind === 'download') {
+        const download = window.desktopPet.downloadAssistantEmbeddingModel(action.modelId)
+        markEmbeddingDownloadStarted(action.modelId)
+        embeddingBusy = false
+        renderEmbeddingPanel()
+        scheduleKnowledgePoll()
+        await download
+        await refreshEmbeddingSnapshot()
+        return
+      }
+      if (action.kind === 'switch') {
+        await window.desktopPet.selectAssistantEmbeddingModel(action.modelId)
+      } else {
+        await window.desktopPet.configureAssistantOnlineEmbedding(action.input)
+        embeddingOnlineKey.value = ''
+        embeddingOnlineForm.hidden = true
+      }
+      await refreshKnowledgeAndEmbedding()
+      scheduleKnowledgePoll()
+    } catch (error) {
+      await refreshEmbeddingSnapshot().catch(() => undefined)
+      if (selectedEmbeddingModel()?.status !== 'paused') {
+        showError(error)
+      }
+    } finally {
+      embeddingBusy = false
+      renderEmbeddingPanel()
+    }
+  }
+
+  /** 乐观更新下载状态，随后轮询结果仍以 Main 的真实进度为准。 */
+  function markEmbeddingDownloadStarted(modelId: string): void {
+    if (!embeddingSnapshot) {
+      return
+    }
+    embeddingSnapshot = {
+      ...embeddingSnapshot,
+      models: embeddingSnapshot.models.map((model) =>
+        model.id === modelId ? { ...model, status: 'downloading', error: null } : model
+      )
+    }
+  }
+
+  async function deleteSelectedEmbeddingModel(): Promise<void> {
+    const selected = selectedEmbeddingModel()
+    if (!selected || embeddingBusy) {
+      return
+    }
+    embeddingBusy = true
+    renderEmbeddingPanel()
+    try {
+      await window.desktopPet.deleteAssistantEmbeddingModel(selected.id)
+      await refreshEmbeddingSnapshot()
+    } catch (error) {
+      showError(error)
+    } finally {
+      embeddingBusy = false
+      renderEmbeddingPanel()
+    }
+  }
+
+  async function refreshEmbeddingSnapshot(): Promise<void> {
+    embeddingSnapshot = await window.desktopPet.getAssistantEmbeddingModels()
+    renderEmbeddingPanel()
+  }
+
+  async function refreshKnowledgeAndEmbedding(): Promise<void> {
+    ;[knowledgeSnapshot, embeddingSnapshot] = await Promise.all([
+      window.desktopPet.getAssistantKnowledge(),
+      window.desktopPet.getAssistantEmbeddingModels()
+    ])
+    renderEmbeddingPanel()
+    renderKnowledgeView()
+  }
+
   async function addKnowledgeLibrary(): Promise<void> {
     knowledgeAdd.disabled = true
     try {
@@ -463,7 +750,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   function scheduleKnowledgePoll(): void {
-    if (!knowledgeMode || !(knowledgeSnapshot?.libraries.some((item) => item.status === 'indexing'))) {
+    const indexing = knowledgeSnapshot?.libraries.some((item) => item.status === 'indexing')
+    const downloading = embeddingSnapshot?.models.some((item) => item.status === 'downloading')
+    if (!knowledgeMode || (!indexing && !downloading)) {
       return
     }
     if (knowledgePoll !== null) {
@@ -475,8 +764,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         return
       }
       try {
-        knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
-        renderKnowledgeView()
+        await refreshKnowledgeAndEmbedding()
       } catch (error) {
         showError(error)
       }
@@ -1249,4 +1537,26 @@ function knowledgeStatusText(library: AssistantKnowledgeLibrary): string {
     default:
       return '等待索引'
   }
+}
+
+function embeddingModelStatus(model: AssistantEmbeddingModelSnapshot): string {
+  switch (model.status) {
+    case 'downloading':
+      return `正在下载 ${Math.round((model.downloadedBytes / Math.max(1, model.downloadBytes)) * 100)}%`
+    case 'paused':
+      return '下载已暂停'
+    case 'installed':
+      return '已安装'
+    case 'error':
+      return model.error || '下载失败'
+    default:
+      return '未安装'
+  }
+}
+
+function formatBytes(value: number): string {
+  if (value >= 1024 * 1024) {
+    return `${(value / 1024 / 1024).toFixed(1)} MB`
+  }
+  return `${Math.ceil(value / 1024)} KB`
 }

@@ -21,7 +21,10 @@ export class AssistantRuntimeProcess {
   private stopping = false
   private status: AssistantRuntimeStatus = { state: 'stopped', backend: null, error: null }
 
-  constructor(private readonly onStatus: (status: AssistantRuntimeStatus) => void) {}
+  constructor(
+    private readonly onStatus: (status: AssistantRuntimeStatus) => void,
+    private readonly getRuntimeEnvironment: () => Record<string, string> = () => ({})
+  ) {}
 
   getStatus(): AssistantRuntimeStatus {
     return { ...this.status }
@@ -66,14 +69,29 @@ export class AssistantRuntimeProcess {
     this.setStatus({ state: 'stopped', backend: null, error: null })
   }
 
+  /** 释放旧 Provider 后按最新模型配置启动新的 Runtime。 */
+  async restart(): Promise<AssistantRuntimeClient> {
+    await this.stop()
+    return this.start()
+  }
+
   private async startInternal(): Promise<AssistantRuntimeClient> {
     this.setStatus({ state: 'starting', backend: null, error: null })
     const token = randomBytes(32).toString('base64url')
     const invocation = resolveRuntimeInvocation()
+    let runtimeEnvironment: Record<string, string>
+    try {
+      runtimeEnvironment = this.getRuntimeEnvironment()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.setStatus({ state: 'failed', backend: null, error: message })
+      throw error
+    }
     const child = spawn(invocation.command, invocation.args, {
       cwd: invocation.cwd,
       env: {
         ...process.env,
+        ...runtimeEnvironment,
         PETDOCK_RUNTIME_TOKEN: token,
         PETDOCK_MEMORY_DB_PATH: join(app.getPath('userData'), 'assistant.db'),
         PETDOCK_KNOWLEDGE_DB_PATH: join(app.getPath('userData'), 'knowledge.db'),

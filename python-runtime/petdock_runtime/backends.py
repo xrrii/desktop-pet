@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -15,8 +16,11 @@ from .config import RuntimeConfig
 from .knowledge import KnowledgeService, RetrievalSource
 from .memory_store import MemoryStore
 from .protocol import AssistantRequest, ToolResultRequest
+from .retrieval import plan_retrieval
 
 """LangChain/Mock 后端实现及 Runtime 内部记忆工具。"""
+
+LOGGER = logging.getLogger("petdock.backends")
 
 
 @dataclass(frozen=True)
@@ -87,11 +91,7 @@ class MockBackend(AssistantBackend):
                 await asyncio.sleep(0.02)
                 yield tool_call
                 return
-            sources = (
-                await self._knowledge.search(request.input, request.knowledgeLibraryIds)
-                if self._knowledge and request.knowledgeLibraryIds
-                else []
-            )
+            sources = await _retrieve_sources(self._knowledge, request, tool_result)
             if sources:
                 yield RetrievalContext(sources)
                 excerpts = "\n\n".join(
@@ -156,11 +156,9 @@ class LangChainBackend(AssistantBackend):
             history.append(HumanMessage(content=request.input))
             self._store.append_message(request.conversationId, "user", request.input)
 
-        sources: list[RetrievalSource] = []
-        if tool_result is None and request.knowledgeLibraryIds:
-            sources = await self._knowledge.search(request.input, request.knowledgeLibraryIds)
-            if sources:
-                yield RetrievalContext(sources)
+        sources = await _retrieve_sources(self._knowledge, request, tool_result)
+        if sources:
+            yield RetrievalContext(sources)
 
         memory_snapshot = self._store.snapshot()
         memories = memory_snapshot["memories"][:20]
@@ -379,6 +377,30 @@ def create_backend(
     if config.resolved_backend == "langchain":
         return LangChainBackend(config, store, knowledge)
     return MockBackend(store, knowledge)
+
+
+async def _retrieve_sources(
+    knowledge: KnowledgeService | None,
+    request: AssistantRequest,
+    tool_result: ToolResultRequest | None,
+) -> list[RetrievalSource]:
+    """统一执行检索路由，只把最终准入来源交给聊天后端。"""
+    plan = plan_retrieval(
+        request.input,
+        request.knowledgeLibraryIds,
+        has_tool_result=tool_result is not None,
+    )
+    LOGGER.info(
+        "RAG 路由 route=%s reason=%s confidence=%.2f libraries=%s",
+        plan.route,
+        plan.reason,
+        plan.confidence,
+        len(plan.library_ids),
+    )
+    if knowledge is None or plan.route not in {"RETRIEVE", "BOTH"}:
+        return []
+    result = await knowledge.search_with_trace(plan.retrieval_query, list(plan.library_ids))
+    return result.sources
 
 
 def _load_history(store: MemoryStore, conversation_id: str) -> list[BaseMessage]:

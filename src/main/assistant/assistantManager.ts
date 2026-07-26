@@ -5,6 +5,8 @@ import type {
   AssistantAskResult,
   AssistantConversationMessage,
   AssistantEvent,
+  AssistantEmbeddingOnlineInput,
+  AssistantEmbeddingSnapshot,
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
   AssistantMemorySnapshot,
@@ -19,6 +21,7 @@ import { loadSettings } from '../store'
 import { logError } from '../logger'
 import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess } from './runtimeProcess'
+import { EmbeddingModelManager } from './embeddingModelManager'
 import { AssistantToolHost } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
 
@@ -41,6 +44,7 @@ interface PendingPermission extends PendingToolContext {
 }
 
 export class AssistantManager {
+  private readonly embeddingModels = new EmbeddingModelManager()
   private readonly runtime: AssistantRuntimeProcess
   private readonly toolHost = new AssistantToolHost()
   private readonly activeTasks = new Map<string, ActiveTask>()
@@ -50,7 +54,10 @@ export class AssistantManager {
     onStatus: (status: AssistantRuntimeStatus) => void,
     private readonly onEvent: (event: AssistantEvent) => void
   ) {
-    this.runtime = new AssistantRuntimeProcess(onStatus)
+    this.runtime = new AssistantRuntimeProcess(
+      onStatus,
+      () => this.embeddingModels.runtimeEnvironment()
+    )
   }
 
   getStatus(): AssistantRuntimeStatus {
@@ -260,6 +267,64 @@ export class AssistantManager {
     validateKnowledgeLibraryId(libraryId)
     const client = await this.runtime.start()
     return client.deleteKnowledgeLibrary(libraryId)
+  }
+
+  /** 返回本地白名单模型、下载进度和当前活动 Provider。 */
+  async getEmbeddingSnapshot(): Promise<AssistantEmbeddingSnapshot> {
+    return this.embeddingModels.snapshot()
+  }
+
+  async downloadEmbeddingModel(modelId: string): Promise<void> {
+    validateEmbeddingModelId(modelId)
+    await this.embeddingModels.download(modelId)
+  }
+
+  pauseEmbeddingModelDownload(modelId: string): boolean {
+    validateEmbeddingModelId(modelId)
+    return this.embeddingModels.pause(modelId)
+  }
+
+  async selectEmbeddingModel(modelId: string | null): Promise<number> {
+    if (modelId !== null) {
+      validateEmbeddingModelId(modelId)
+    }
+    await this.cancelAll()
+    const backup = this.embeddingModels.captureConfiguration()
+    try {
+      await this.embeddingModels.selectLocal(modelId)
+      const client = await this.runtime.restart()
+      return await client.reindexAllKnowledge()
+    } catch (error) {
+      await this.embeddingModels.restoreConfiguration(backup)
+      await this.runtime.restart().catch((rollbackError: unknown) => {
+        logError('embedding provider rollback failed', rollbackError)
+      })
+      throw error
+    }
+  }
+
+  async configureOnlineEmbedding(input: AssistantEmbeddingOnlineInput): Promise<number> {
+    if (!input || typeof input !== 'object') {
+      throw new TypeError('在线向量模型配置无效。')
+    }
+    await this.cancelAll()
+    const backup = this.embeddingModels.captureConfiguration()
+    try {
+      await this.embeddingModels.configureOnline(input)
+      const client = await this.runtime.restart()
+      return await client.reindexAllKnowledge()
+    } catch (error) {
+      await this.embeddingModels.restoreConfiguration(backup)
+      await this.runtime.restart().catch((rollbackError: unknown) => {
+        logError('online embedding provider rollback failed', rollbackError)
+      })
+      throw error
+    }
+  }
+
+  async deleteEmbeddingModel(modelId: string): Promise<void> {
+    validateEmbeddingModelId(modelId)
+    await this.embeddingModels.delete(modelId)
   }
 
   private handleRuntimeEvent(event: AssistantEvent): void {
@@ -476,6 +541,12 @@ function validateKnowledgeLibraryIds(value: unknown): string[] {
 function validateKnowledgeLibraryId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) {
     throw new TypeError('Knowledge library id is invalid.')
+  }
+}
+
+function validateEmbeddingModelId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !/^[a-z0-9.-]{1,128}$/.test(value)) {
+    throw new TypeError('Embedding model id is invalid.')
   }
 }
 

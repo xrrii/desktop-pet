@@ -4,6 +4,8 @@ import type {
   AssistantAskResult,
   AssistantConversationMessage,
   AssistantEvent,
+  AssistantEmbeddingOnlineInput,
+  AssistantEmbeddingSnapshot,
   AssistantLayoutTrace,
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
@@ -89,6 +91,18 @@ const api = {
     ipcRenderer.invoke('assistant:delete-knowledge-library', libraryId),
   setAssistantKnowledgeSelection: (libraryIds: string[]): Promise<string[]> =>
     ipcRenderer.invoke('assistant:set-knowledge-selection', libraryIds),
+  getAssistantEmbeddingModels: (): Promise<AssistantEmbeddingSnapshot> =>
+    ipcRenderer.invoke('assistant:get-embedding-models'),
+  downloadAssistantEmbeddingModel: (modelId: string): Promise<void> =>
+    ipcRenderer.invoke('assistant:download-embedding-model', modelId),
+  pauseAssistantEmbeddingDownload: (modelId: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:pause-embedding-download', modelId),
+  selectAssistantEmbeddingModel: (modelId: string | null): Promise<number> =>
+    ipcRenderer.invoke('assistant:select-embedding-model', modelId),
+  configureAssistantOnlineEmbedding: (input: AssistantEmbeddingOnlineInput): Promise<number> =>
+    ipcRenderer.invoke('assistant:configure-online-embedding', input),
+  deleteAssistantEmbeddingModel: (modelId: string): Promise<void> =>
+    ipcRenderer.invoke('assistant:delete-embedding-model', modelId),
   closeAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:close'),
   acknowledgeAssistantLayout: (revision: number): void =>
     ipcRenderer.send('assistant:layout-applied', revision),

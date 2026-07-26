@@ -167,6 +167,13 @@ export class AssistantRuntimeClient {
     return payload.deleted === true
   }
 
+  /** 为当前活动 Embedding 签名启动全部知识库重建。 */
+  async reindexAllKnowledge(): Promise<number> {
+    const response = await this.request('/v1/knowledge/reindex-all', { method: 'POST' })
+    const payload = (await response.json()) as { started?: unknown }
+    return Number.isInteger(payload.started) ? Number(payload.started) : 0
+  }
+
   async shutdown(): Promise<void> {
     await this.request('/v1/shutdown', { method: 'POST' })
   }

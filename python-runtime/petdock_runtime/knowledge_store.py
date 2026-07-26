@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import sqlite3
 import threading
@@ -9,10 +10,14 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .retrieval import retrieval_query_terms, retrieval_terms
+
 """知识库 SQLite 主存储。
 
 SQLite 保存授权目录、文档原文分块和索引任务状态；Chroma 仅保存可重建的向量索引。
 """
+
+LOGGER = logging.getLogger("petdock.knowledge_store")
 
 
 def _now() -> str:
@@ -78,6 +83,8 @@ class KnowledgeStore:
                     modified_ns INTEGER NOT NULL,
                     size_bytes INTEGER NOT NULL,
                     embedding_state TEXT NOT NULL CHECK (embedding_state IN ('pending','ready')),
+                    embedding_signature TEXT,
+                    chunk_strategy_version TEXT NOT NULL DEFAULT 'v1',
                     indexed_at TEXT NOT NULL,
                     UNIQUE(library_id, relative_path)
                 );
@@ -95,13 +102,79 @@ class KnowledgeStore:
                 CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks_fts USING fts5(
                     chunk_id UNINDEXED,
                     library_id UNINDEXED,
+                    title,
+                    relative_path,
                     content,
+                    search_tokens,
                     tokenize='unicode61'
                 );
-                INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1')
-                    ON CONFLICT(key) DO NOTHING;
+                INSERT INTO schema_meta(key, value) VALUES ('schema_version', '2')
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value;
                 """
             )
+            self._ensure_document_columns()
+            self._ensure_fts_v2()
+
+    def _ensure_document_columns(self) -> None:
+        """为已有阶段 4 数据库补充向量签名和 Chunk 策略版本。"""
+        columns = {
+            str(row["name"])
+            for row in self._connection.execute("PRAGMA table_info(documents)").fetchall()
+        }
+        if "embedding_signature" not in columns:
+            self._connection.execute("ALTER TABLE documents ADD COLUMN embedding_signature TEXT")
+        if "chunk_strategy_version" not in columns:
+            self._connection.execute(
+                "ALTER TABLE documents ADD COLUMN chunk_strategy_version TEXT NOT NULL DEFAULT 'v1'"
+            )
+
+    def _ensure_fts_v2(self) -> None:
+        """升级阶段 4 的正文 FTS 表，并从 SQLite 原文安全重建。"""
+        columns = [
+            str(row["name"])
+            for row in self._connection.execute("PRAGMA table_info(document_chunks_fts)").fetchall()
+        ]
+        expected = ["chunk_id", "library_id", "title", "relative_path", "content", "search_tokens"]
+        if columns == expected:
+            return
+        self._connection.execute("DROP TABLE IF EXISTS document_chunks_fts")
+        self._connection.execute(
+            """
+            CREATE VIRTUAL TABLE document_chunks_fts USING fts5(
+                chunk_id UNINDEXED,
+                library_id UNINDEXED,
+                title,
+                relative_path,
+                content,
+                search_tokens,
+                tokenize='unicode61'
+            )
+            """
+        )
+        rows = self._connection.execute(
+            """
+            SELECT c.id, c.library_id, c.content, d.title, d.relative_path
+            FROM document_chunks c JOIN documents d ON d.id=c.document_id
+            """
+        ).fetchall()
+        self._connection.executemany(
+            """
+            INSERT INTO document_chunks_fts(
+                chunk_id, library_id, title, relative_path, content, search_tokens
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row["id"],
+                    row["library_id"],
+                    row["title"],
+                    row["relative_path"],
+                    row["content"],
+                    " ".join(retrieval_terms(str(row["content"]), max_terms=256)),
+                )
+                for row in rows
+            ],
+        )
 
     def create_library(self, name: str, source_path: str) -> dict[str, Any]:
         """保存用户明确授权的目录，并返回管理界面摘要。"""
@@ -181,7 +254,8 @@ class KnowledgeStore:
         with self._lock:
             row = self._connection.execute(
                 """
-                SELECT id, content_hash, modified_ns, size_bytes, embedding_state
+                SELECT id, content_hash, modified_ns, size_bytes, embedding_state,
+                       embedding_signature, chunk_strategy_version
                 FROM documents WHERE library_id=? AND relative_path=?
                 """,
                 (library_id, relative_path),
@@ -195,7 +269,8 @@ class KnowledgeStore:
         modified_ns: int,
         size_bytes: int,
         content_hash: str,
-        chunks: list[str],
+        chunks: list[tuple[str, int]],
+        chunk_strategy_version: str,
     ) -> tuple[list[str], list[dict[str, Any]], str]:
         """原子替换文档分块，并把 embedding 状态标记为待写入 Chroma。"""
         document_id = _stable_id(library_id, relative_path)
@@ -215,13 +290,16 @@ class KnowledgeStore:
                 """
                 INSERT INTO documents(
                     id, library_id, relative_path, title, content_hash, modified_ns,
-                    size_bytes, embedding_state, indexed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                    size_bytes, embedding_state, embedding_signature,
+                    chunk_strategy_version, indexed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     content_hash=excluded.content_hash,
                     modified_ns=excluded.modified_ns,
                     size_bytes=excluded.size_bytes,
                     embedding_state='pending',
+                    embedding_signature=NULL,
+                    chunk_strategy_version=excluded.chunk_strategy_version,
                     indexed_at=excluded.indexed_at
                 """,
                 (
@@ -232,13 +310,13 @@ class KnowledgeStore:
                     content_hash,
                     modified_ns,
                     size_bytes,
+                    chunk_strategy_version,
                     now,
                 ),
             )
             records: list[dict[str, Any]] = []
-            for index, content in enumerate(chunks):
+            for index, (content, token_count) in enumerate(chunks):
                 chunk_id = _stable_id(document_id, str(index), content_hash)
-                token_count = max(1, len(content) // 3)
                 self._connection.execute(
                     """
                     INSERT INTO document_chunks(id, document_id, library_id, chunk_index, content, token_count)
@@ -246,9 +324,21 @@ class KnowledgeStore:
                     """,
                     (chunk_id, document_id, library_id, index, content, token_count),
                 )
+                title = Path(relative_path).stem[:200]
                 self._connection.execute(
-                    "INSERT INTO document_chunks_fts(chunk_id, library_id, content) VALUES (?, ?, ?)",
-                    (chunk_id, library_id, content),
+                    """
+                    INSERT INTO document_chunks_fts(
+                        chunk_id, library_id, title, relative_path, content, search_tokens
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        chunk_id,
+                        library_id,
+                        title,
+                        relative_path,
+                        content,
+                        " ".join(retrieval_terms(content, max_terms=256)),
+                    ),
                 )
                 records.append(
                     {
@@ -285,11 +375,14 @@ class KnowledgeStore:
             for row in rows
         ]
 
-    def mark_document_ready(self, document_id: str) -> None:
-        """仅在 Chroma 写入成功后标记向量状态完成。"""
+    def mark_document_ready(self, document_id: str, embedding_signature: str) -> None:
+        """仅在当前签名 Chroma 写入成功后标记向量状态完成。"""
         with self._lock, self._connection:
             self._connection.execute(
-                "UPDATE documents SET embedding_state='ready' WHERE id=?", (document_id,)
+                """
+                UPDATE documents SET embedding_state='ready', embedding_signature=? WHERE id=?
+                """,
+                (embedding_signature, document_id),
             )
 
     def remove_missing_documents(self, library_id: str, existing_paths: set[str]) -> list[str]:
@@ -351,7 +444,8 @@ class KnowledgeStore:
         with self._lock:
             rows = self._connection.execute(
                 f"""
-                SELECT c.id, c.library_id, c.content, d.relative_path, d.title, l.name AS library_name
+                SELECT c.id, c.library_id, c.document_id, c.chunk_index, c.token_count,
+                       c.content, d.relative_path, d.title, l.name AS library_name
                 FROM document_chunks c
                 JOIN documents d ON d.id=c.document_id
                 JOIN knowledge_libraries l ON l.id=c.library_id
@@ -363,6 +457,9 @@ class KnowledgeStore:
             str(row["id"]): {
                 "id": row["id"],
                 "libraryId": row["library_id"],
+                "documentId": row["document_id"],
+                "chunkIndex": row["chunk_index"],
+                "tokenCount": row["token_count"],
                 "libraryName": row["library_name"],
                 "title": row["title"],
                 "relativePath": row["relative_path"],
@@ -371,27 +468,46 @@ class KnowledgeStore:
             for row in rows
         }
 
-    def lexical_search(self, query: str, library_ids: list[str], limit: int = 12) -> list[str]:
-        """使用 FTS5 返回关键词候选；无合法词元时安全返回空结果。"""
-        terms = re.findall(r"[\w-]{2,}", query.casefold(), re.UNICODE)[:12]
+    def lexical_search(
+        self,
+        query: str,
+        library_ids: list[str],
+        limit: int = 40,
+    ) -> list[tuple[str, float]]:
+        """使用带中文二元组、标题和路径权重的 FTS5 返回关键词候选。"""
+        terms = retrieval_query_terms(query, max_terms=20)
         if not terms or not library_ids:
             return []
         cleaned_terms = [term.replace('"', "") for term in terms]
-        match = " OR ".join(f'"{term}"' for term in cleaned_terms)
+        match = " OR ".join(
+            f'(title:"{term}" OR relative_path:"{term}" OR content:"{term}" OR search_tokens:"{term}")'
+            for term in cleaned_terms
+        )
         placeholders = ",".join("?" for _ in library_ids)
         try:
             with self._lock:
                 rows = self._connection.execute(
                     f"""
-                    SELECT chunk_id FROM document_chunks_fts
+                    SELECT chunk_id,
+                           bm25(document_chunks_fts, 0.0, 0.0, 4.0, 3.0, 1.0, 1.5) AS score
+                    FROM document_chunks_fts
                     WHERE document_chunks_fts MATCH ? AND library_id IN ({placeholders})
-                    ORDER BY bm25(document_chunks_fts) LIMIT ?
+                    ORDER BY score LIMIT ?
                     """,
                     [match, *library_ids, max(1, min(limit, 50))],
                 ).fetchall()
         except sqlite3.OperationalError:
+            LOGGER.exception("FTS5 关键词检索失败 libraries=%s", len(library_ids))
             return []
-        return [str(row["chunk_id"]) for row in rows]
+        return [(str(row["chunk_id"]), float(row["score"])) for row in rows]
+
+    def ready_library_ids(self) -> list[str]:
+        """返回可以参与索引刷新或检索的知识库 ID。"""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT id FROM knowledge_libraries WHERE status IN ('ready','paused','error')"
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
 
 
 def _stable_id(*parts: str) -> str:

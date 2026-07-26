@@ -71,6 +71,39 @@ export interface AssistantKnowledgeLibrary {
   lastIndexedAt: string | null
 }
 
+export type AssistantEmbeddingProvider = 'hash' | 'local' | 'online'
+export type AssistantEmbeddingModelStatus = 'not-installed' | 'downloading' | 'paused' | 'installed' | 'error'
+
+export interface AssistantEmbeddingModelSnapshot {
+  id: string
+  displayName: string
+  tier: 'light' | 'balanced' | 'quality'
+  description: string
+  downloadBytes: number
+  downloadedBytes: number
+  status: AssistantEmbeddingModelStatus
+  error: string | null
+}
+
+export interface AssistantEmbeddingSnapshot {
+  provider: AssistantEmbeddingProvider
+  activeModelId: string | null
+  online: {
+    configured: boolean
+    baseUrl: string
+    model: string
+    dimensions: number
+  } | null
+  models: AssistantEmbeddingModelSnapshot[]
+}
+
+export interface AssistantEmbeddingOnlineInput {
+  baseUrl: string
+  model: string
+  dimensions: number
+  apiKey: string
+}
+
 export interface AssistantRetrievalSource {
   id: string
   libraryId: string

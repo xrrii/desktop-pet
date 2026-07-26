@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from .backends import create_backend
 from .config import RuntimeConfig
-from .embeddings import LocalHashEmbedding
+from .embeddings import LocalHashEmbedding, create_embedding_provider
 from .knowledge import ChromaVectorStore, KnowledgeService
 from .knowledge_store import KnowledgeStore
 from .memory_store import MemoryStore
@@ -33,9 +33,16 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     store = MemoryStore(config.memory_db_path)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
+    embedding = create_embedding_provider(config)
+    fallback_vectors = (
+        ChromaVectorStore(config.chroma_path, LocalHashEmbedding())
+        if embedding.descriptor.id != LocalHashEmbedding.name
+        else None
+    )
     knowledge = KnowledgeService(
         knowledge_store,
-        ChromaVectorStore(config.chroma_path, LocalHashEmbedding()),
+        ChromaVectorStore(config.chroma_path, embedding),
+        fallback_vectors,
     )
     service = AssistantService(
         create_backend(config, store, knowledge),
@@ -55,6 +62,9 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
             "status": "ok",
             "protocolVersion": 1,
             "backend": config.resolved_backend,
+            "embeddingProvider": config.embedding_provider,
+            "embeddingProfileId": embedding.descriptor.id,
+            "indexSignature": embedding.descriptor.signature,
         }
 
     @app.post("/v1/chat")
@@ -181,6 +191,14 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         """返回知识库、索引进度和可用于聊天的状态。"""
         authorize(authorization)
         return knowledge_store.snapshot()
+
+    @app.post("/v1/knowledge/reindex-all")
+    async def knowledge_reindex_all(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, int]:
+        """模型切换后为全部已有知识库启动新签名索引。"""
+        authorize(authorization)
+        return {"started": await knowledge.start_all_indexes()}
 
     @app.post("/v1/knowledge/library")
     async def knowledge_create(
