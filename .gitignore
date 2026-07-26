@@ -19,10 +19,16 @@ python-runtime/assistant.db*
 # Local RAG databases, vector indexes, and downloaded models
 knowledge.db*
 python-runtime/knowledge.db*
+/chroma/
+/python-runtime/chroma/
 /rag/chroma/
 /rag/models/
+/rag/embedding-profile.json
+/rag/embedding-api-key.bin
 /python-runtime/rag/chroma/
 /python-runtime/rag/models/
+/python-runtime/rag/embedding-profile.json
+/python-runtime/rag/embedding-api-key.bin
 
 # Downloaded model weights
 *.onnx
