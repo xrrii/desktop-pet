@@ -13,12 +13,22 @@ htmlcov/
 *.egg-info/
 python-runtime/build/
 python-runtime/dist/
-assistant.db
-assistant.db-wal
-assistant.db-shm
-python-runtime/assistant.db
-python-runtime/assistant.db-wal
-python-runtime/assistant.db-shm
+assistant.db*
+python-runtime/assistant.db*
+
+# Local RAG databases, vector indexes, and downloaded models
+knowledge.db*
+python-runtime/knowledge.db*
+/rag/chroma/
+/rag/models/
+/python-runtime/rag/chroma/
+/python-runtime/rag/models/
+
+# Downloaded model weights
+*.onnx
+*.safetensors
+*.pt
+*.pth
 
 # Build and packaged output
 dist/
