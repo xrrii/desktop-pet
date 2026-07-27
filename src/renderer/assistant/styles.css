@@ -887,7 +887,142 @@ body[data-side="right"] .message.user {
 }
 
 .message.assistant .message-body {
+  --markdown-accent: #2e6f62;
+  --markdown-border: #d7dee4;
+  --markdown-code-bg: #eef3f5;
+  --markdown-muted: #5f6a73;
   border-color: #5c9d8e;
+  white-space: normal;
+}
+
+.message.assistant .message-body > :first-child {
+  margin-top: 0;
+}
+
+.message.assistant .message-body > :last-child {
+  margin-bottom: 0;
+}
+
+.message.assistant .message-body p,
+.message.assistant .message-body ul,
+.message.assistant .message-body ol,
+.message.assistant .message-body blockquote,
+.message.assistant .message-body pre,
+.message.assistant .message-body .markdown-table-scroll {
+  margin: 0 0 0.72em;
+}
+
+.message.assistant .message-body h1,
+.message.assistant .message-body h2,
+.message.assistant .message-body h3,
+.message.assistant .message-body h4,
+.message.assistant .message-body h5,
+.message.assistant .message-body h6 {
+  margin: 0.9em 0 0.45em;
+  color: inherit;
+  font-size: 1em;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.message.assistant .message-body h1 {
+  font-size: 1.16em;
+}
+
+.message.assistant .message-body h2 {
+  font-size: 1.08em;
+}
+
+.message.assistant .message-body ul,
+.message.assistant .message-body ol {
+  padding-left: 1.45em;
+}
+
+.message.assistant .message-body li + li {
+  margin-top: 0.24em;
+}
+
+.message.assistant .message-body blockquote {
+  padding-left: 0.8em;
+  border-left: 3px solid var(--markdown-accent);
+  color: var(--markdown-muted);
+}
+
+.message.assistant .message-body a {
+  color: var(--markdown-accent);
+  font-weight: 650;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.message.assistant .message-body code {
+  padding: 0.12em 0.34em;
+  border: 1px solid var(--markdown-border);
+  border-radius: 4px;
+  background: var(--markdown-code-bg);
+  font-family: "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.message.assistant .message-body pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 10px;
+  border: 1px solid var(--markdown-border);
+  border-radius: 6px;
+  background: var(--markdown-code-bg);
+  overscroll-behavior-x: contain;
+}
+
+.message.assistant .message-body pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.message.assistant .message-body .markdown-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.message.assistant .message-body table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.message.assistant .message-body th,
+.message.assistant .message-body td {
+  padding: 5px 7px;
+  border: 1px solid var(--markdown-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.message.assistant .message-body th {
+  background: var(--markdown-code-bg);
+  font-weight: 700;
+}
+
+.message.assistant .message-body hr {
+  margin: 0.8em 0;
+  border: 0;
+  border-top: 1px solid var(--markdown-border);
+}
+
+.message.assistant .message-body .markdown-image-placeholder {
+  color: var(--markdown-muted);
+  font-size: 0.9em;
 }
 
 .message-body::after {
@@ -921,14 +1056,18 @@ body[data-side="right"] .message.user .message-body::after {
 }
 
 .message-body.streaming::before {
-  display: inline-block;
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
   width: 5px;
   height: 13px;
-  margin-right: 4px;
   background: #3b8b78;
   content: "";
-  vertical-align: -2px;
   animation: blink 0.8s steps(2, start) infinite;
+}
+
+.message-body.streaming {
+  padding-right: 24px;
 }
 
 .permission-message {
@@ -1386,6 +1525,10 @@ body[data-theme="note"] .message.user .message-body {
 }
 
 body[data-theme="note"] .message.assistant .message-body {
+  --markdown-accent: #006c5d;
+  --markdown-border: #151719;
+  --markdown-code-bg: rgb(255 255 255 / 0.72);
+  --markdown-muted: #3f5551;
   border-color: #151719;
   background: #d9f4ef;
 }
@@ -1503,6 +1646,10 @@ body[data-theme="glass"] .message.user .message-body {
 }
 
 body[data-theme="glass"] .message.assistant .message-body {
+  --markdown-accent: #75e0c0;
+  --markdown-border: rgb(255 255 255 / 0.2);
+  --markdown-code-bg: rgb(13 17 19 / 0.58);
+  --markdown-muted: #c4c9cc;
   border-color: rgb(117 224 192 / 0.55);
 }
 
@@ -1613,6 +1760,10 @@ body[data-theme="pixel"] .message.user .message-body {
 }
 
 body[data-theme="pixel"] .message.assistant .message-body {
+  --markdown-accent: #26308c;
+  --markdown-border: #151922;
+  --markdown-code-bg: rgb(255 255 255 / 0.72);
+  --markdown-muted: #41485a;
   border-color: #151922;
   background: #c7f2df;
 }
@@ -1730,6 +1881,10 @@ body[data-theme="apple"] .message.user .message-body {
 }
 
 body[data-theme="apple"] .message.assistant .message-body {
+  --markdown-accent: #1f68d6;
+  --markdown-border: rgb(70 91 120 / 0.2);
+  --markdown-code-bg: rgb(255 255 255 / 0.38);
+  --markdown-muted: #5d6b7d;
   border-color: rgb(255 255 255 / 0.9);
 }
 

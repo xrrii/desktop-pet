@@ -22,6 +22,7 @@ import {
   getCommandPaletteState,
   type AssistantCommandOption
 } from './commandPalette'
+import { renderAssistantMarkdownInto } from './markdown'
 
 type PendingEmbeddingAction =
   | { kind: 'download'; modelId: string }
@@ -91,6 +92,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let conversationId: string = crypto.randomUUID()
   let activeTaskId: string | null = null
   let activeAssistantMessage: HTMLElement | null = null
+  let activeAssistantMarkdown = ''
+  let markdownRenderTimer: number | null = null
   let lastSequence = 0
   let busy = false
   let expanded = false
@@ -184,6 +187,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
   })
 
+  conversation.addEventListener('click', handleConversationClick)
+  conversation.addEventListener('auxclick', handleConversationClick)
+
   newConversationButton.addEventListener('click', () => {
     if (busy) {
       return
@@ -191,6 +197,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     conversationId = crypto.randomUUID()
     activeTaskId = null
     activeAssistantMessage = null
+    resetAssistantMarkdownRendering()
     lastSequence = 0
     conversation.replaceChildren()
     permissionCards.clear()
@@ -334,6 +341,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     clearError()
     const skillId = selectedSkillId
     addMessage('user', message)
+    resetAssistantMarkdownRendering()
     activeAssistantMessage = addMessage('assistant', '')
     activeAssistantMessage.classList.add('streaming')
     input.value = ''
@@ -352,6 +360,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       clearSelectedSkill()
     } catch (error) {
       if (activeAssistantMessage) {
+        resetAssistantMarkdownRendering()
         activeAssistantMessage.textContent = '暂时无法回复。'
         activeAssistantMessage.classList.remove('streaming')
       }
@@ -1291,6 +1300,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     conversation.replaceChildren()
     activeTaskId = null
     activeAssistantMessage = null
+    resetAssistantMarkdownRendering()
     lastSequence = 0
     try {
       const messages = await window.desktopPet.getAssistantConversationMessages(id)
@@ -1379,8 +1389,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
           activeAssistantMessage.textContent = ''
           delete activeAssistantMessage.dataset.placeholder
         }
-        activeAssistantMessage.textContent += event.payload.delta
-        scrollConversation()
+        activeAssistantMarkdown += event.payload.delta
+        scheduleAssistantMarkdownRender()
       }
       return
     }
@@ -1432,7 +1442,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
     if (event.type === 'done') {
       if (activeAssistantMessage) {
-        if (!activeAssistantMessage.textContent) {
+        flushAssistantMarkdownRender()
+        if (!activeAssistantMarkdown.trim() && !activeAssistantMessage.textContent) {
           activeAssistantMessage.textContent =
             event.payload.finishReason === 'cancelled' ? '已停止。' : '暂时无法回复。'
         }
@@ -1544,9 +1555,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   function showAssistantPlaceholder(content: string): void {
-    if (!activeAssistantMessage) {
+    if (!activeAssistantMessage || activeAssistantMarkdown) {
       return
     }
+    clearMarkdownRenderTimer()
     activeAssistantMessage.textContent = content
     activeAssistantMessage.dataset.placeholder = 'true'
     scrollConversation()
@@ -1557,11 +1569,68 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     article.className = `message ${role}`
     const body = document.createElement('div')
     body.className = 'message-body'
-    body.textContent = content
+    if (role === 'assistant') {
+      renderAssistantMarkdownInto(body, content)
+    } else {
+      body.textContent = content
+    }
     article.append(body)
     conversation.append(article)
     scrollConversation()
     return body
+  }
+
+  /** 节流渲染正在生成的 Markdown，避免每个字符都触发布局和解析。 */
+  function scheduleAssistantMarkdownRender(): void {
+    if (markdownRenderTimer !== null) {
+      return
+    }
+    markdownRenderTimer = window.setTimeout(() => {
+      markdownRenderTimer = null
+      renderActiveAssistantMarkdown()
+    }, 48)
+  }
+
+  /** 立即提交最后一批流式内容，确保任务结束时 DOM 与原文一致。 */
+  function flushAssistantMarkdownRender(): void {
+    clearMarkdownRenderTimer()
+    renderActiveAssistantMarkdown()
+  }
+
+  /** 渲染当前助手原文，并在内容增长后保持对话区跟随。 */
+  function renderActiveAssistantMarkdown(): void {
+    if (!activeAssistantMessage || !activeAssistantMarkdown) {
+      return
+    }
+    renderAssistantMarkdownInto(activeAssistantMessage, activeAssistantMarkdown)
+    scrollConversation()
+  }
+
+  /** 清理上一条助手消息的流式渲染状态。 */
+  function resetAssistantMarkdownRendering(): void {
+    clearMarkdownRenderTimer()
+    activeAssistantMarkdown = ''
+  }
+
+  /** 取消尚未执行的 Markdown 渲染定时器。 */
+  function clearMarkdownRenderTimer(): void {
+    if (markdownRenderTimer === null) {
+      return
+    }
+    window.clearTimeout(markdownRenderTimer)
+    markdownRenderTimer = null
+  }
+
+  /** 通过受控 IPC 打开助手回复中的 HTTP(S) 链接。 */
+  function handleConversationClick(event: MouseEvent): void {
+    const target = event.target instanceof Element ? event.target : null
+    const anchor = target?.closest<HTMLAnchorElement>('.message.assistant .message-body a[href]')
+    const url = anchor?.getAttribute('href')
+    if (!anchor || !url) {
+      return
+    }
+    event.preventDefault()
+    void window.desktopPet.openAssistantExternalUrl(url).catch(showError)
   }
 
   /** 在当前助手消息下展示 Runtime 返回的可核查来源。 */

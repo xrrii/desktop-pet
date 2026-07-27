@@ -65,13 +65,19 @@
   },
   "devDependencies": {
     "@swc/core": "^1.15.43",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.10.2",
     "cross-env": "^7.0.3",
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.12",
+    "markdown-it": "^14.3.0"
   }
 }

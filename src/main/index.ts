@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { basename } from 'node:path'
 import type {
   AssistantAskInput,
@@ -182,6 +182,18 @@ function registerIpc(): void {
   ipcMain.handle('assistant:open', (event) => {
     const window = requirePetSender(event)
     openAssistantForPet(window)
+  })
+
+  ipcMain.handle('assistant:open-external-url', async (event, value: unknown) => {
+    requirePetSender(event)
+    const url = requireExternalHttpUrl(value)
+    try {
+      await shell.openExternal(url)
+      return true
+    } catch (error) {
+      logError('assistant failed to open external URL', error)
+      throw error
+    }
   })
 
   ipcMain.handle('assistant:get-status', (event) => {
@@ -478,6 +490,23 @@ function requireString(value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new TypeError('IPC value must be a non-empty string.')
   }
+}
+
+/** 校验助手消息外链，禁止 Renderer 打开本地文件或自定义协议。 */
+function requireExternalHttpUrl(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 4_096) {
+    throw new TypeError('External URL is invalid.')
+  }
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new TypeError('External URL is invalid.')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new TypeError('External URL protocol is not allowed.')
+  }
+  return url.toString()
 }
 
 function requireMemoryKind(value: unknown): asserts value is MemoryItemKind {

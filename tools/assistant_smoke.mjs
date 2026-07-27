@@ -124,6 +124,10 @@ async function main() {
       throw new Error('Assistant UI did not reach the expected completed state.')
     }
 
+    if (backend === 'mock') {
+      await assertMarkdownMessage(petClient, screenshotPath)
+    }
+
     await evaluate(petClient, `document.querySelector('#memory-button').click()`)
     await waitForEvaluation(
       petClient,
@@ -330,6 +334,48 @@ async function main() {
     }
     await fakeModel?.close()
   }
+}
+
+/** 提交会被离线后端原样回显的 Markdown，并验证安全富文本节点。 */
+async function assertMarkdownMessage(client, baseScreenshotPath) {
+  await evaluate(client, `document.querySelector('#new-conversation').click()`)
+  await submitMessage(
+    client,
+    [
+      '请核对以下内容',
+      '',
+      '## 配置说明',
+      '',
+      '**两项重点**',
+      '',
+      '```yaml',
+      'enabled: true',
+      '```',
+      '',
+      '| 名称 | 状态 |',
+      '| --- | --- |',
+      '| 服务 | 正常 |'
+    ].join('\n')
+  )
+  await waitForEvaluation(
+    client,
+    `(() => {
+      const body = document.querySelector('.message.assistant:last-of-type .message-body')
+      return !!body?.querySelector('h2') && !!body.querySelector('strong') &&
+        !!body.querySelector('pre code.language-yaml') && !!body.querySelector('table')
+    })()`,
+    (value) => value === true,
+    15_000
+  )
+  await waitForEvaluation(
+    client,
+    `document.querySelector('#send-button').getAttribute('aria-label')`,
+    (value) => value === '发送',
+    5_000
+  )
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const markdownScreenshotPath = baseScreenshotPath.replace(/(\.[^.]+)$/, '-markdown$1')
+  await writeFile(markdownScreenshotPath, Buffer.from(screenshot.data, 'base64'))
 }
 
 /** 已安装 Skill 存在时，验证 `$` 选择反馈在输入框内部可见且可以取消。 */

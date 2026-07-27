@@ -57,6 +57,8 @@ const api = {
   setTransparentAreaClickThrough: (value: boolean): Promise<void> =>
     ipcRenderer.invoke('pet:set-transparent-area-click-through', value),
   openAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:open'),
+  openAssistantExternalUrl: (url: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:open-external-url', url),
   getAssistantStatus: (): Promise<AssistantRuntimeStatus> =>
     ipcRenderer.invoke('assistant:get-status'),
   getAssistantLayout: (): Promise<AssistantWindowLayout> =>
