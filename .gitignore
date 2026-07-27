@@ -30,6 +30,10 @@ python-runtime/knowledge.db*
 /python-runtime/rag/embedding-profile.json
 /python-runtime/rag/embedding-api-key.bin
 
+# 本地 Skill 数据库与已安装包
+skills.db*
+/skills/
+
 # Downloaded model weights
 *.onnx
 *.safetensors
