@@ -21,6 +21,8 @@ class RuntimeConfig:
     memory_db_path: str = ":memory:"
     knowledge_db_path: str = ":memory:"
     chroma_path: str = ":memory:"
+    skills_db_path: str = ":memory:"
+    skills_root: str = "skills"
     embedding_provider: EmbeddingProviderName = "hash"
     embedding_model_dir: str | None = None
     embedding_descriptor_json: str | None = None
@@ -48,6 +50,12 @@ class RuntimeConfig:
         )
         chroma_path = os.environ.get("PETDOCK_CHROMA_PATH", "").strip() or os.path.join(
             os.getcwd(), "rag", "chroma"
+        )
+        skills_db_path = os.environ.get("PETDOCK_SKILLS_DB_PATH", "").strip() or os.path.join(
+            os.getcwd(), "skills.db"
+        )
+        skills_root = os.environ.get("PETDOCK_SKILLS_ROOT", "").strip() or os.path.join(
+            os.getcwd(), "skills", "packages"
         )
         embedding_provider = os.environ.get("PETDOCK_EMBEDDING_PROVIDER", "hash").strip().lower()
         if embedding_provider not in {"hash", "local", "online"}:
@@ -92,6 +100,8 @@ class RuntimeConfig:
             memory_db_path=memory_db_path,
             knowledge_db_path=knowledge_db_path,
             chroma_path=chroma_path,
+            skills_db_path=skills_db_path,
+            skills_root=skills_root,
             embedding_provider=embedding_provider,  # type: ignore[arg-type]
             embedding_model_dir=embedding_model_dir,
             embedding_descriptor_json=embedding_descriptor_json,

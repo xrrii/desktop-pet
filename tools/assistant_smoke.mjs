@@ -103,6 +103,7 @@ async function main() {
     await waitForExpandedWindow(petClient)
     await assertAssistantLayout(petClient, 'left')
     await assertAssistantThemes(petClient, originalSettings.assistantTheme)
+    await assertSkillSelectionFeedback(petClient)
     await submitMessage(petClient, '阶段一冒烟测试')
     const conversationText = await waitForEvaluation(
       petClient,
@@ -215,6 +216,41 @@ async function main() {
       5_000
     )
 
+    await evaluate(petClient, `document.querySelector('#skill-button').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#skill-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
+    const skillState = await evaluate(
+      petClient,
+      `(() => ({
+        conversationHidden: document.querySelector('#conversation').hidden,
+        hasLocalInstall: !!document.querySelector('#skill-add-local'),
+        hasGithubInstall: !!document.querySelector('#skill-github-form'),
+        hasContent: !!document.querySelector('#skill-content')
+      }))()`
+    )
+    if (
+      skillState.conversationHidden !== true ||
+      !skillState.hasLocalInstall ||
+      !skillState.hasGithubInstall ||
+      !skillState.hasContent
+    ) {
+      throw new Error(`Skill management view did not load: ${JSON.stringify(skillState)}`)
+    }
+    const skillScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
+    const skillScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-skills$1')
+    await writeFile(skillScreenshotPath, Buffer.from(skillScreenshot.data, 'base64'))
+    await evaluate(petClient, `document.querySelector('#skill-back').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#skill-view').hidden`,
+      (value) => value === true,
+      5_000
+    )
+
     if (backend === 'mock') {
       await evaluate(petClient, `document.querySelector('#new-conversation').click()`)
       await submitMessage(petClient, '请生成一段需要较长时间完成的取消测试内容')
@@ -294,6 +330,53 @@ async function main() {
     }
     await fakeModel?.close()
   }
+}
+
+/** 已安装 Skill 存在时，验证 `$` 选择反馈在输入框内部可见且可以取消。 */
+async function assertSkillSelectionFeedback(client) {
+  const state = await evaluate(
+    client,
+    `(async () => {
+      const snapshot = await window.desktopPet.getAssistantSkills()
+      const skill = snapshot.skills.find((item) => item.enabled && item.compatibility !== 'invalid')
+      if (!skill) return { skipped: true }
+      const input = document.querySelector('#message-input')
+      input.value = '$'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+      document.querySelector('#command-menu .command-item')?.click()
+      const chip = document.querySelector('#active-skill-chip')
+      const composer = document.querySelector('#composer')
+      const chipRect = chip.getBoundingClientRect()
+      const composerRect = composer.getBoundingClientRect()
+      return {
+        skipped: false,
+        hidden: chip.hidden,
+        text: chip.textContent,
+        inputValue: input.value,
+        hasClass: composer.classList.contains('has-active-skill'),
+        insideComposer: chipRect.top >= composerRect.top && chipRect.bottom <= composerRect.bottom
+      }
+    })()`,
+    true
+  )
+  if (state.skipped) {
+    return
+  }
+  if (
+    state.hidden ||
+    !state.text.startsWith('$ ') ||
+    state.inputValue !== '' ||
+    !state.hasClass ||
+    !state.insideComposer
+  ) {
+    throw new Error(`Skill selection feedback is invalid: ${JSON.stringify(state)}`)
+  }
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const selectionScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-skill-selected$1')
+  await mkdir(dirname(selectionScreenshotPath), { recursive: true })
+  await writeFile(selectionScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  await evaluate(client, `document.querySelector('#active-skill-chip').click()`)
 }
 
 async function assertConversationWheelScroll(client) {
@@ -477,28 +560,65 @@ class CdpClient {
         pending.resolve(payload.result)
       }
     })
-  }
-
-  static connect(url) {
-    return new Promise((resolve, reject) => {
-      const socket = new WebSocket(url)
-      socket.addEventListener('open', () => resolve(new CdpClient(socket)), { once: true })
-      socket.addEventListener('error', () => reject(new Error('Unable to connect to Electron CDP.')), {
-        once: true
-      })
+    socket.addEventListener('close', () => {
+      this.rejectPending(new Error('Electron CDP connection was closed.'))
+    })
+    socket.addEventListener('error', () => {
+      this.rejectPending(new Error('Electron CDP connection failed.'))
     })
   }
 
+  /** 建立带超时保护的 CDP 连接，避免测试进程停在未决 Promise。 */
+  static connect(url) {
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(url)
+      const timeout = setTimeout(() => {
+        socket.close()
+        reject(new Error('Timed out connecting to Electron CDP.'))
+      }, 5_000)
+      socket.addEventListener(
+        'open',
+        () => {
+          clearTimeout(timeout)
+          resolve(new CdpClient(socket))
+        },
+        { once: true }
+      )
+      socket.addEventListener(
+        'error',
+        () => {
+          clearTimeout(timeout)
+          reject(new Error('Unable to connect to Electron CDP.'))
+        },
+        { once: true }
+      )
+    })
+  }
+
+  /** 向 Electron 发送 CDP 命令，并在连接已关闭时立即失败。 */
   send(method, params = {}) {
     const id = this.nextId++
     return new Promise((resolve, reject) => {
+      if (this.socket.readyState !== WebSocket.OPEN) {
+        reject(new Error(`Electron CDP is not connected (method=${method}).`))
+        return
+      }
       this.pending.set(id, { resolve, reject })
       this.socket.send(JSON.stringify({ id, method, params }))
     })
   }
 
+  /** 关闭 CDP 连接。 */
   close() {
     this.socket.close()
+  }
+
+  /** 拒绝连接关闭时仍在等待的全部 CDP 请求。 */
+  rejectPending(error) {
+    for (const pending of this.pending.values()) {
+      pending.reject(error)
+    }
+    this.pending.clear()
   }
 }
 

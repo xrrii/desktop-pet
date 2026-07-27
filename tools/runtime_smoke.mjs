@@ -25,7 +25,9 @@ async function runSmoke() {
     PETDOCK_ASSISTANT_BACKEND: 'mock',
     PETDOCK_MEMORY_DB_PATH: join(dataRoot, 'assistant.db'),
     PETDOCK_KNOWLEDGE_DB_PATH: join(dataRoot, 'knowledge.db'),
-    PETDOCK_CHROMA_PATH: join(dataRoot, 'chroma')
+    PETDOCK_CHROMA_PATH: join(dataRoot, 'chroma'),
+    PETDOCK_SKILLS_DB_PATH: join(dataRoot, 'skills.db'),
+    PETDOCK_SKILLS_ROOT: join(dataRoot, 'skills', 'packages')
   }
   // Windows 环境变量名不区分大小写，同时保留 Path/PATH 会让部分启动器拒绝环境字典。
   if (environment.Path) {

@@ -6,6 +6,8 @@ import type {
   AssistantKnowledgeSnapshot,
   AssistantRequest,
   AssistantRuntimeReady,
+  AssistantSkillInstallPreview,
+  AssistantSkillSnapshot,
   AssistantToolResultRequest,
   MemoryClearScope,
   MemoryItemKind
@@ -174,6 +176,59 @@ export class AssistantRuntimeClient {
     return Number.isInteger(payload.started) ? Number(payload.started) : 0
   }
 
+  /** 获取当前 Skill 元数据快照，不包含完整指令和真实路径。 */
+  async getSkillSnapshot(): Promise<AssistantSkillSnapshot> {
+    const response = await this.request('/v1/skills', { method: 'GET' })
+    return (await response.json()) as AssistantSkillSnapshot
+  }
+
+  async refreshSkills(): Promise<AssistantSkillSnapshot> {
+    await this.request('/v1/skills/refresh', { method: 'POST' })
+    return this.getSkillSnapshot()
+  }
+
+  async previewLocalSkills(path: string): Promise<AssistantSkillInstallPreview> {
+    const response = await this.request('/v1/skills/install/local/preview', {
+      method: 'POST',
+      body: JSON.stringify({ path })
+    })
+    return (await response.json()) as AssistantSkillInstallPreview
+  }
+
+  async previewGithubSkills(url: string): Promise<AssistantSkillInstallPreview> {
+    const response = await this.request('/v1/skills/install/github/preview', {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    })
+    return (await response.json()) as AssistantSkillInstallPreview
+  }
+
+  async installSkills(previewToken: string, skillIds: string[]): Promise<AssistantSkillSnapshot> {
+    const response = await this.request('/v1/skills/install', {
+      method: 'POST',
+      body: JSON.stringify({ previewToken, skillIds })
+    })
+    const payload = (await response.json()) as { snapshot: AssistantSkillSnapshot }
+    return payload.snapshot
+  }
+
+  async setSkillEnabled(skillId: string, enabled: boolean): Promise<boolean> {
+    const response = await this.request(
+      `/v1/skills/${encodeURIComponent(skillId)}/${enabled ? 'enable' : 'disable'}`,
+      { method: 'POST' }
+    )
+    const payload = (await response.json()) as { updated?: unknown }
+    return payload.updated === true
+  }
+
+  async uninstallSkill(skillId: string): Promise<boolean> {
+    const response = await this.request(`/v1/skills/${encodeURIComponent(skillId)}`, {
+      method: 'DELETE'
+    })
+    const payload = (await response.json()) as { deleted?: unknown }
+    return payload.deleted === true
+  }
+
   async shutdown(): Promise<void> {
     await this.request('/v1/shutdown', { method: 'POST' })
   }
@@ -229,7 +284,7 @@ function isAssistantEvent(value: unknown): value is AssistantEvent {
     typeof event.taskId === 'string' &&
     Number.isInteger(event.sequence) &&
     typeof event.type === 'string' &&
-    ['message_delta', 'retrieval_sources', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
+    ['message_delta', 'retrieval_sources', 'skill_started', 'skill_completed', 'skill_error', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
       event.type
     ) &&
     !!event.payload &&

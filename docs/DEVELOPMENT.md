@@ -492,6 +492,8 @@ Start-Process .\release\win-unpacked\PetDock.exe
 
 解包版产物目录为 `release\win-unpacked`，可直接用于本机验收或压缩分发。
 
+`build:runtime` 统一通过 `tools/build_runtime.mjs` 调用 PyInstaller。该脚本会在 Windows 构建环境中把 System32 放到 `Path` 首位，防止 JDK 等工具目录中的旧版 `MSVCP140.dll`、`VCRUNTIME140.dll` 被误打入 Runtime；不要把脚本改回未经环境整理的裸 PyInstaller 命令。
+
 4. 打包安装程序和便携版（需要发布给其他用户时使用）：
 
 ```powershell
@@ -532,7 +534,7 @@ npm.cmd run pack
 - IPC handler 必须校验调用窗口身份并验证外部输入。
 - 密钥和用户隐私数据不得写入仓库、普通配置文件或日志。
 
-AI 助手的下一阶段开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
+AI 助手的下一阶段开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
 ## 15. AI Assistant Runtime
 
@@ -577,7 +579,7 @@ npm.cmd run test:e2e:assistant:langchain
 打开文件夹 C:\\Users\\<用户名>\\Documents
 ```
 
-助手输入框支持 `~` 快捷命令菜单：输入 `~` 后可选择“打开网站”或“打开应用”，再输入目标即可发送。菜单支持鼠标、上下方向键、回车和 Esc；`$` 已预留给后续 Skill 菜单，当前不会弹出选项。
+助手输入框支持 `~` 快捷命令菜单：输入 `~` 后可选择“打开网站”或“打开应用”，再输入目标即可发送。菜单支持鼠标、上下方向键、回车和 Esc。输入 `$` 会检索本地已启用 Skill；选择后显示 Skill 标识，发送时提交结构化 `skillId`，不会把 Skill 正文拼接到用户输入。
 
 应用和文件/文件夹会显示确认卡片。Renderer 只回传用户决策，工具参数由 Electron Main 保存并重新校验。`open_url` 只允许 `http` 和 `https`；未知应用、无效路径和未注册工具会被策略拒绝。工具审计日志位于 PetDock 用户数据目录下的 `logs/tools.log`。
 
@@ -592,3 +594,22 @@ npm.cmd run test:e2e:assistant:langchain
 当前索引支持 UTF-8 文本、Markdown、JSON/YAML/TOML、常见源码和脚本文件。默认跳过隐藏目录、构建产物、依赖目录、符号链接、敏感凭据文件、超过 2 MB 的文件和非 UTF-8 内容。检索使用 SQLite FTS5 与 Chroma 向量结果的 RRF 融合；本地 hash embedding 是零下载离线基线，后续可通过统一接口替换为语义 embedding 模型。
 
 知识库前的复选框决定该库是否参与对话检索，默认不选；选择结果由 Electron Main 持久化到 `settings.json`，用户主动勾选后命中片段才可能进入当前模型上下文。Runtime 会通过独立 `retrieval_sources` 事件返回来源，Renderer 展示知识库、相对路径和片段。检索到的文档始终按不可信资料处理，其中的指令不能授权系统工具。
+
+### 阶段 5 Skill 系统
+
+Skill 状态保存在 PetDock 用户数据目录的 `skills.db`，安装包位于 `skills/packages`。Runtime 启动或刷新时只解析各 Skill 的 `name` 和 `description`；只有用户通过 `$` 明确选择或 Agent 调用 `activate_skill` 后才读取目标 `SKILL.md` 正文，`references/` 和 `assets/` 资源继续通过 `read_skill_resource` 按需读取。
+
+本地 Skill 必须经 Electron Main 原生目录选择器授权。GitHub 安装只接受无凭据的 `https://github.com/{owner}/{repo}` 或 `/tree/{ref}/{subdirectory}` 公共仓库 URL；Runtime 会把来源固定到 commit，限制下载和解压大小，并拒绝路径穿越、符号链接、Windows 保留名及大小写重名。Renderer 只接收脱敏候选和短期预览令牌，不接触真实安装路径。
+
+首版兼容纯指令、引用资料和静态资源型 Agent Skills。存在 `scripts/`、外部命令或额外依赖的包会显示为 `instruction-only`，可以使用其指令和安全资源，但不会执行第三方脚本、安装依赖或绕过 Electron Main 工具权限。`skill.json` 中的权限声明只会缩小可用能力，不会自动授权系统操作。
+
+阶段 5 重点验证命令：
+
+```powershell
+python-runtime\.venv\Scripts\python.exe -m pytest -q python-runtime\tests\test_skills.py
+npm.cmd run check
+npm.cmd run build:runtime
+npm.cmd run test:runtime:packaged
+npm.cmd run pack
+npm.cmd run test:e2e:assistant:packaged
+```

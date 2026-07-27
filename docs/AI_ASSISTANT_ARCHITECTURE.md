@@ -703,6 +703,8 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 ### 阶段 5：Skill 系统
 
+详细实现基线见 `docs/SKILL_SYSTEM_DEVELOPMENT.md`。
+
 - skills 目录。
 - skill manifest。
 - 参数 schema。

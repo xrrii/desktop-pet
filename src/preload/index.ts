@@ -12,6 +12,8 @@ import type {
   AssistantMemorySnapshot,
   AssistantPermissionResolution,
   AssistantRuntimeStatus,
+  AssistantSkillInstallPreview,
+  AssistantSkillSnapshot,
   AssistantWindowLayout,
   MemoryClearScope,
   MemoryItemKind
@@ -103,6 +105,20 @@ const api = {
     ipcRenderer.invoke('assistant:configure-online-embedding', input),
   deleteAssistantEmbeddingModel: (modelId: string): Promise<void> =>
     ipcRenderer.invoke('assistant:delete-embedding-model', modelId),
+  getAssistantSkills: (): Promise<AssistantSkillSnapshot> =>
+    ipcRenderer.invoke('assistant:get-skills'),
+  refreshAssistantSkills: (): Promise<AssistantSkillSnapshot> =>
+    ipcRenderer.invoke('assistant:refresh-skills'),
+  previewLocalAssistantSkills: (): Promise<AssistantSkillInstallPreview | null> =>
+    ipcRenderer.invoke('assistant:preview-local-skills'),
+  previewGithubAssistantSkills: (url: string): Promise<AssistantSkillInstallPreview> =>
+    ipcRenderer.invoke('assistant:preview-github-skills', url),
+  installAssistantSkills: (previewToken: string, skillIds: string[]): Promise<AssistantSkillSnapshot> =>
+    ipcRenderer.invoke('assistant:install-skills', previewToken, skillIds),
+  setAssistantSkillEnabled: (skillId: string, enabled: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:set-skill-enabled', skillId, enabled),
+  uninstallAssistantSkill: (skillId: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:uninstall-skill', skillId),
   closeAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:close'),
   acknowledgeAssistantLayout: (revision: number): void =>
     ipcRenderer.send('assistant:layout-applied', revision),

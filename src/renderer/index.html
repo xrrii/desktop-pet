@@ -80,6 +80,30 @@
         </dialog>
       </section>
 
+      <section id="skill-view" class="skill-view" aria-label="技能管理" hidden>
+        <header class="memory-header">
+          <h2>技能</h2>
+          <div class="memory-header-actions">
+            <button id="skill-add-local" class="icon-button" type="button" title="安装本地技能" aria-label="安装本地技能">+</button>
+            <button id="skill-refresh" class="icon-button" type="button" title="刷新技能" aria-label="刷新技能">↻</button>
+            <button id="skill-back" class="icon-button" type="button" title="返回聊天" aria-label="返回聊天">←</button>
+          </div>
+        </header>
+        <form id="skill-github-form" class="skill-github-form">
+          <input id="skill-github-url" type="url" maxlength="2048" placeholder="GitHub 公开仓库 URL" aria-label="GitHub 公开仓库 URL" required />
+          <button class="secondary-button" type="submit">预览</button>
+        </form>
+        <div id="skill-content" class="skill-content"></div>
+        <section id="skill-install-panel" class="skill-install-panel" hidden>
+          <p id="skill-install-title"></p>
+          <div id="skill-install-candidates" class="skill-install-candidates"></div>
+          <div class="skill-install-actions">
+            <button id="skill-install-cancel" class="secondary-button" type="button">取消</button>
+            <button id="skill-install-confirm" class="primary-button" type="button">安装</button>
+          </div>
+        </section>
+      </section>
+
       <div id="error-banner" class="error-banner" role="alert" hidden></div>
 
       <div
@@ -105,9 +129,11 @@
           aria-expanded="false"
           placeholder="输入消息"
         ></textarea>
+        <button id="active-skill-chip" class="active-skill-chip" type="button" title="取消技能" aria-label="取消当前技能" hidden></button>
         <div class="composer-actions">
           <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">+</button>
           <button id="knowledge-button" class="icon-button knowledge-button" type="button" title="知识库" aria-label="知识库" aria-pressed="false">▤</button>
+          <button id="skill-button" class="icon-button skill-button" type="button" title="技能" aria-label="技能" aria-pressed="false">$</button>
           <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">◈</button>
           <button id="send-button" class="primary-button icon-action-button" type="submit" title="发送" aria-label="发送">↑</button>
           <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>

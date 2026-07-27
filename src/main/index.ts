@@ -318,6 +318,60 @@ function registerIpc(): void {
     return assistantManager.getEmbeddingSnapshot()
   })
 
+  ipcMain.handle('assistant:get-skills', (event) => {
+    requirePetSender(event)
+    return assistantManager.getSkillSnapshot()
+  })
+
+  ipcMain.handle('assistant:refresh-skills', (event) => {
+    requirePetSender(event)
+    return assistantManager.refreshSkills()
+  })
+
+  ipcMain.handle('assistant:preview-local-skills', async (event) => {
+    const window = requirePetSender(event)
+    const selection = await dialog.showOpenDialog(window, {
+      title: '选择包含 SKILL.md 的目录',
+      properties: ['openDirectory']
+    })
+    const [selectedPath] = selection.filePaths
+    if (selection.canceled || !selectedPath) {
+      return null
+    }
+    return assistantManager.previewLocalSkills(selectedPath)
+  })
+
+  ipcMain.handle('assistant:preview-github-skills', (event, url: string) => {
+    requirePetSender(event)
+    requireString(url)
+    return assistantManager.previewGithubSkills(url)
+  })
+
+  ipcMain.handle(
+    'assistant:install-skills',
+    (event, previewToken: string, skillIds: string[]) => {
+      requirePetSender(event)
+      requireString(previewToken)
+      if (!Array.isArray(skillIds)) {
+        throw new TypeError('Skill 安装选择无效。')
+      }
+      return assistantManager.installSkills(previewToken, skillIds)
+    }
+  )
+
+  ipcMain.handle('assistant:set-skill-enabled', (event, skillId: string, enabled: boolean) => {
+    requirePetSender(event)
+    requireString(skillId)
+    requireBoolean(enabled)
+    return assistantManager.setSkillEnabled(skillId, enabled)
+  })
+
+  ipcMain.handle('assistant:uninstall-skill', (event, skillId: string) => {
+    requirePetSender(event)
+    requireString(skillId)
+    return assistantManager.uninstallSkill(skillId)
+  })
+
   ipcMain.handle('assistant:download-embedding-model', (event, modelId: string) => {
     requirePetSender(event)
     requireEmbeddingModelId(modelId)

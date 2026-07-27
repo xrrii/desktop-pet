@@ -13,6 +13,8 @@ import type {
   AssistantPermissionResolution,
   AssistantRequest,
   AssistantRuntimeStatus,
+  AssistantSkillInstallPreview,
+  AssistantSkillSnapshot,
   AssistantToolResultRequest,
   ToolCall
 } from '../../shared/assistant'
@@ -74,6 +76,7 @@ export class AssistantManager {
     const conversationId = validateConversationId(input.conversationId)
     const knowledgeLibraryIds = validateKnowledgeLibraryIds(loadSettings().assistantKnowledgeLibraryIds)
     const taskId = randomUUID()
+    const skillId = input.skillId === undefined ? undefined : validateSkillId(input.skillId)
     const request: AssistantRequest = {
       protocolVersion: ASSISTANT_PROTOCOL_VERSION,
       taskId,
@@ -85,7 +88,8 @@ export class AssistantManager {
         locale: app.getLocale() || 'zh-CN',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
       },
-      knowledgeLibraryIds
+      knowledgeLibraryIds,
+      ...(skillId ? { skillInvocation: { skillId } } : {})
     }
     const client = await this.runtime.start()
     const state: ActiveTask = {
@@ -327,6 +331,46 @@ export class AssistantManager {
     await this.embeddingModels.delete(modelId)
   }
 
+  async getSkillSnapshot(): Promise<AssistantSkillSnapshot> {
+    return (await this.runtime.start()).getSkillSnapshot()
+  }
+
+  async refreshSkills(): Promise<AssistantSkillSnapshot> {
+    return (await this.runtime.start()).refreshSkills()
+  }
+
+  /** 本地路径只能由 Main 原生目录选择器传入。 */
+  async previewLocalSkills(path: string): Promise<AssistantSkillInstallPreview> {
+    return (await this.runtime.start()).previewLocalSkills(path)
+  }
+
+  /** GitHub 来源在 Main 先做协议和域名校验，Runtime 再解析仓库结构。 */
+  async previewGithubSkills(value: string): Promise<AssistantSkillInstallPreview> {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password) {
+      throw new TypeError('只允许不含凭据的 GitHub HTTPS URL。')
+    }
+    return (await this.runtime.start()).previewGithubSkills(url.toString())
+  }
+
+  async installSkills(previewToken: string, skillIds: string[]): Promise<AssistantSkillSnapshot> {
+    if (!/^[a-f0-9]{32}$/.test(previewToken) || !Array.isArray(skillIds) || skillIds.length > 50) {
+      throw new TypeError('Skill 安装选择无效。')
+    }
+    skillIds.forEach(validateSkillId)
+    return (await this.runtime.start()).installSkills(previewToken, skillIds)
+  }
+
+  async setSkillEnabled(skillId: string, enabled: boolean): Promise<boolean> {
+    validateSkillId(skillId)
+    return (await this.runtime.start()).setSkillEnabled(skillId, enabled)
+  }
+
+  async uninstallSkill(skillId: string): Promise<boolean> {
+    validateSkillId(skillId)
+    return (await this.runtime.start()).uninstallSkill(skillId)
+  }
+
   private handleRuntimeEvent(event: AssistantEvent): void {
     const state = this.activeTasks.get(event.taskId)
     if (!state || event.sequence <= state.lastRuntimeSequence) {
@@ -548,6 +592,13 @@ function validateEmbeddingModelId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-z0-9.-]{1,128}$/.test(value)) {
     throw new TypeError('Embedding model id is invalid.')
   }
+}
+
+function validateSkillId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(value)) {
+    throw new TypeError('Skill ID 无效。')
+  }
+  return value
 }
 
 function validateConversationId(value: unknown): string {

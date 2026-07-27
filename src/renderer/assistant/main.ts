@@ -9,6 +9,9 @@ import type {
   AssistantLayoutTracePhase,
   AssistantMemorySnapshot,
   AssistantRuntimeStatus,
+  AssistantSkillInstallPreview,
+  AssistantSkillSnapshot,
+  AssistantSkillSummary,
   AssistantWindowLayout,
   MemoryClearScope,
   MemoryItemKind,
@@ -30,6 +33,18 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const conversation = requireElement<HTMLElement>('#conversation')
   const memoryView = requireElement<HTMLElement>('#memory-view')
   const knowledgeView = requireElement<HTMLElement>('#knowledge-view')
+  const skillView = requireElement<HTMLElement>('#skill-view')
+  const skillContent = requireElement<HTMLElement>('#skill-content')
+  const skillAddLocal = requireElement<HTMLButtonElement>('#skill-add-local')
+  const skillRefresh = requireElement<HTMLButtonElement>('#skill-refresh')
+  const skillBack = requireElement<HTMLButtonElement>('#skill-back')
+  const skillGithubForm = requireElement<HTMLFormElement>('#skill-github-form')
+  const skillGithubUrl = requireElement<HTMLInputElement>('#skill-github-url')
+  const skillInstallPanel = requireElement<HTMLElement>('#skill-install-panel')
+  const skillInstallTitle = requireElement<HTMLElement>('#skill-install-title')
+  const skillInstallCandidates = requireElement<HTMLElement>('#skill-install-candidates')
+  const skillInstallCancel = requireElement<HTMLButtonElement>('#skill-install-cancel')
+  const skillInstallConfirm = requireElement<HTMLButtonElement>('#skill-install-confirm')
   const knowledgeContent = requireElement<HTMLElement>('#knowledge-content')
   const knowledgeAdd = requireElement<HTMLButtonElement>('#knowledge-add')
   const knowledgeBack = requireElement<HTMLButtonElement>('#knowledge-back')
@@ -61,6 +76,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const memoryClearConfirm = requireElement<HTMLButtonElement>('#memory-clear-confirm')
   const memoryButton = requireElement<HTMLButtonElement>('#memory-button')
   const knowledgeButton = requireElement<HTMLButtonElement>('#knowledge-button')
+  const skillButton = requireElement<HTMLButtonElement>('#skill-button')
+  const activeSkillChip = requireElement<HTMLButtonElement>('#active-skill-chip')
   const composer = requireElement<HTMLFormElement>('#composer')
   const input = requireElement<HTMLTextAreaElement>('#message-input')
   const sendButton = requireElement<HTMLButtonElement>('#send-button')
@@ -83,6 +100,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let selectedCommandIndex = 0
   let memoryMode = false
   let knowledgeMode = false
+  let skillMode = false
+  let skillSnapshot: AssistantSkillSnapshot | null = null
+  let pendingSkillPreview: AssistantSkillInstallPreview | null = null
+  let pendingSkillUninstall: AssistantSkillSummary | null = null
+  let selectedSkillId: string | null = null
   let knowledgeSnapshot: AssistantKnowledgeSnapshot | null = null
   let embeddingSnapshot: AssistantEmbeddingSnapshot | null = null
   let embeddingBusy = false
@@ -107,6 +129,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       } else {
         if (knowledgeMode) {
           closeKnowledgeView()
+        }
+        if (skillMode) {
+          closeSkillView()
         }
         void openMemoryView()
       }
@@ -184,6 +209,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         if (knowledgeMode) {
           closeKnowledgeView()
         }
+        if (skillMode) {
+          closeSkillView()
+        }
         void openMemoryView()
       }
     }
@@ -196,10 +224,38 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         if (memoryMode) {
           closeMemoryView()
         }
+        if (skillMode) {
+          closeSkillView()
+        }
         void openKnowledgeView()
       }
     }
   })
+  skillButton.addEventListener('click', () => {
+    if (!busy) {
+      if (skillMode) {
+        closeSkillView()
+      } else {
+        if (memoryMode) {
+          closeMemoryView()
+        }
+        if (knowledgeMode) {
+          closeKnowledgeView()
+        }
+        void openSkillView()
+      }
+    }
+  })
+  skillBack.addEventListener('click', closeSkillView)
+  skillRefresh.addEventListener('click', () => void refreshSkills())
+  skillAddLocal.addEventListener('click', () => void previewLocalSkills())
+  skillGithubForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    void previewGithubSkills()
+  })
+  skillInstallCancel.addEventListener('click', cancelSkillInstall)
+  skillInstallConfirm.addEventListener('click', () => void confirmSkillAction())
+  activeSkillChip.addEventListener('click', clearSelectedSkill)
   knowledgeBack.addEventListener('click', closeKnowledgeView)
   knowledgeAdd.addEventListener('click', () => void addKnowledgeLibrary())
   knowledgeDeleteCancel.addEventListener('click', cancelKnowledgeDelete)
@@ -242,10 +298,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   void Promise.all([
     window.desktopPet.getAssistantKnowledge(),
     window.desktopPet.getAssistantEmbeddingModels(),
+    window.desktopPet.getAssistantSkills(),
     window.desktopPet.getSettings()
-  ]).then(([snapshot, models, settings]) => {
+  ]).then(([snapshot, models, skills, settings]) => {
     knowledgeSnapshot = snapshot
     embeddingSnapshot = models
+    skillSnapshot = skills
     const existing = new Set(snapshot.libraries.map((library) => library.id))
     settings.assistantKnowledgeLibraryIds
       .filter((id) => existing.has(id))
@@ -274,6 +332,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
 
     clearError()
+    const skillId = selectedSkillId
     addMessage('user', message)
     activeAssistantMessage = addMessage('assistant', '')
     activeAssistantMessage.classList.add('streaming')
@@ -286,9 +345,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     try {
       const result = await window.desktopPet.askAssistant({
         input: message,
-        conversationId
+        conversationId,
+        ...(skillId ? { skillId } : {})
       })
       activeTaskId ??= result.taskId
+      clearSelectedSkill()
     } catch (error) {
       if (activeAssistantMessage) {
         activeAssistantMessage.textContent = '暂时无法回复。'
@@ -378,6 +439,263 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       knowledgePoll = null
     }
     input.focus()
+  }
+
+  /** 打开 Skill 管理视图，只读取脱敏元数据快照。 */
+  async function openSkillView(): Promise<void> {
+    clearError()
+    try {
+      skillSnapshot = await window.desktopPet.getAssistantSkills()
+      skillMode = true
+      conversation.hidden = true
+      skillView.hidden = false
+      input.disabled = true
+      sendButton.disabled = true
+      newConversationButton.disabled = true
+      skillButton.setAttribute('aria-pressed', 'true')
+      document.body.dataset.assistantMode = 'skill'
+      renderSkillView()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  function closeSkillView(): void {
+    skillMode = false
+    pendingSkillPreview = null
+    pendingSkillUninstall = null
+    skillInstallPanel.hidden = true
+    skillView.hidden = true
+    conversation.hidden = false
+    input.disabled = busy
+    sendButton.disabled = false
+    newConversationButton.disabled = busy
+    skillButton.setAttribute('aria-pressed', 'false')
+    document.body.dataset.assistantMode = 'chat'
+    input.focus()
+  }
+
+  /** 渲染 Skill 启停、来源、兼容性和卸载控制。 */
+  function renderSkillView(): void {
+    skillContent.replaceChildren()
+    const skills = skillSnapshot?.skills ?? []
+    if (skills.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'memory-empty'
+      empty.textContent = '还没有安装技能。'
+      skillContent.append(empty)
+      return
+    }
+    skills.forEach((skill) => {
+      const row = document.createElement('article')
+      row.className = 'memory-row skill-row'
+      const toggle = document.createElement('input')
+      toggle.type = 'checkbox'
+      toggle.className = 'skill-toggle'
+      toggle.checked = skill.enabled
+      toggle.disabled = skill.compatibility === 'invalid'
+      toggle.title = skill.enabled ? '禁用技能' : '启用技能'
+      toggle.setAttribute('aria-label', `${toggle.title}${skill.name}`)
+      toggle.addEventListener('change', () => void toggleSkill(skill, toggle.checked))
+
+      const main = document.createElement('div')
+      main.className = 'memory-row-main'
+      const title = document.createElement('strong')
+      title.textContent = skill.name
+      const detail = document.createElement('span')
+      const lastRun = skill.lastRun ? ` · 最近${skillRunStatusLabel(skill.lastRun.status)}` : ''
+      detail.textContent = `${skill.sourceDisplay} · ${skillCompatibilityLabel(skill.compatibility)}${lastRun}`
+      const description = document.createElement('small')
+      description.textContent = skill.lastError || skill.lastRun?.errorMessage || skill.description
+      main.append(title, detail, description)
+
+      const actions = document.createElement('div')
+      actions.className = 'skill-row-actions'
+      if (skill.sourceType === 'github' && skill.sourceUrl) {
+        const update = document.createElement('button')
+        update.type = 'button'
+        update.className = 'icon-button'
+        update.textContent = '↻'
+        update.title = '检查更新'
+        update.setAttribute('aria-label', `检查${skill.name}更新`)
+        update.addEventListener('click', () => void previewSkillUpdate(skill))
+        actions.append(update)
+      }
+      const remove = document.createElement('button')
+      remove.type = 'button'
+      remove.className = 'memory-remove icon-button'
+      remove.textContent = '×'
+      remove.title = '卸载技能'
+      remove.setAttribute('aria-label', `卸载${skill.name}`)
+      remove.addEventListener('click', () => beginSkillUninstall(skill))
+      actions.append(remove)
+      row.append(toggle, main, actions)
+      skillContent.append(row)
+    })
+  }
+
+  async function refreshSkills(): Promise<void> {
+    skillRefresh.disabled = true
+    clearError()
+    try {
+      skillSnapshot = await window.desktopPet.refreshAssistantSkills()
+      renderSkillView()
+      updateCommandMenu()
+    } catch (error) {
+      showError(error)
+    } finally {
+      skillRefresh.disabled = false
+    }
+  }
+
+  async function previewLocalSkills(): Promise<void> {
+    clearError()
+    try {
+      const preview = await window.desktopPet.previewLocalAssistantSkills()
+      if (preview) {
+        showSkillPreview(preview)
+      }
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  async function previewGithubSkills(): Promise<void> {
+    const url = skillGithubUrl.value.trim()
+    if (!url) {
+      return
+    }
+    clearError()
+    const submit = skillGithubForm.querySelector<HTMLButtonElement>('button[type="submit"]')
+    if (submit) {
+      submit.disabled = true
+    }
+    try {
+      showError('正在读取 GitHub 仓库…')
+      const preview = await window.desktopPet.previewGithubAssistantSkills(url)
+      clearError()
+      showSkillPreview(preview)
+    } catch (error) {
+      showError(error)
+    } finally {
+      if (submit) {
+        submit.disabled = false
+      }
+    }
+  }
+
+  async function previewSkillUpdate(skill: AssistantSkillSummary): Promise<void> {
+    if (!skill.sourceUrl) {
+      return
+    }
+    clearError()
+    try {
+      const preview = await window.desktopPet.previewGithubAssistantSkills(skill.sourceUrl)
+      showSkillPreview(preview)
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  function showSkillPreview(preview: AssistantSkillInstallPreview): void {
+    pendingSkillPreview = preview
+    pendingSkillUninstall = null
+    skillInstallTitle.textContent = `选择要从 ${preview.sourceDisplay} 安装的技能`
+    skillInstallCandidates.replaceChildren()
+    preview.candidates.forEach((candidate) => {
+      const label = document.createElement('label')
+      label.className = 'skill-install-candidate'
+      const checkbox = document.createElement('input')
+      checkbox.type = 'checkbox'
+      checkbox.value = candidate.id
+      checkbox.checked = true
+      const text = document.createElement('span')
+      text.textContent = `${candidate.name} · ${candidate.description}`
+      label.append(checkbox, text)
+      skillInstallCandidates.append(label)
+    })
+    skillInstallConfirm.textContent = '安装'
+    skillInstallPanel.hidden = false
+    skillInstallConfirm.focus()
+  }
+
+  function beginSkillUninstall(skill: AssistantSkillSummary): void {
+    pendingSkillUninstall = skill
+    pendingSkillPreview = null
+    skillInstallTitle.textContent = `确认卸载“${skill.name}”？只删除 PetDock 安装副本。`
+    skillInstallCandidates.replaceChildren()
+    skillInstallConfirm.textContent = '卸载'
+    skillInstallPanel.hidden = false
+    skillInstallConfirm.focus()
+  }
+
+  function cancelSkillInstall(): void {
+    pendingSkillPreview = null
+    pendingSkillUninstall = null
+    skillInstallPanel.hidden = true
+  }
+
+  async function confirmSkillAction(): Promise<void> {
+    skillInstallConfirm.disabled = true
+    try {
+      if (pendingSkillUninstall) {
+        await window.desktopPet.uninstallAssistantSkill(pendingSkillUninstall.id)
+      } else if (pendingSkillPreview) {
+        const selected = [...skillInstallCandidates.querySelectorAll<HTMLInputElement>('input:checked')]
+          .map((item) => item.value)
+        if (selected.length === 0) {
+          throw new Error('请至少选择一个技能。')
+        }
+        skillSnapshot = await window.desktopPet.installAssistantSkills(
+          pendingSkillPreview.previewToken,
+          selected
+        )
+      }
+      cancelSkillInstall()
+      skillSnapshot = await window.desktopPet.getAssistantSkills()
+      renderSkillView()
+      skillGithubUrl.value = ''
+    } catch (error) {
+      showError(error)
+    } finally {
+      skillInstallConfirm.disabled = false
+    }
+  }
+
+  async function toggleSkill(skill: AssistantSkillSummary, enabled: boolean): Promise<void> {
+    try {
+      await window.desktopPet.setAssistantSkillEnabled(skill.id, enabled)
+      skillSnapshot = await window.desktopPet.getAssistantSkills()
+      if (!enabled && selectedSkillId === skill.id) {
+        clearSelectedSkill()
+      }
+      renderSkillView()
+    } catch (error) {
+      showError(error)
+      skillSnapshot = await window.desktopPet.getAssistantSkills().catch(() => skillSnapshot)
+      renderSkillView()
+    }
+  }
+
+  function skillCompatibilityLabel(value: AssistantSkillSummary['compatibility']): string {
+    const labels: Record<AssistantSkillSummary['compatibility'], string> = {
+      compatible: '可用',
+      'instruction-only': '指令可用，脚本禁用',
+      'missing-dependencies': '缺少依赖',
+      'unsupported-runtime': '运行时不支持',
+      invalid: '无效'
+    }
+    return labels[value]
+  }
+
+  function skillRunStatusLabel(value: NonNullable<AssistantSkillSummary['lastRun']>['status']): string {
+    const labels: Record<NonNullable<AssistantSkillSummary['lastRun']>['status'], string> = {
+      running: '运行中',
+      completed: '已完成',
+      error: '失败',
+      cancelled: '已取消'
+    }
+    return labels[value]
   }
 
   /** 渲染知识库进度、聊天范围复选框和索引控制。 */
@@ -1072,6 +1390,23 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       return
     }
 
+    if (event.type === 'skill_started') {
+      showAssistantPlaceholder(`正在使用：${event.payload.name}`)
+      return
+    }
+
+    if (event.type === 'skill_completed') {
+      if (activeAssistantMessage?.dataset.placeholder === 'true') {
+        showAssistantPlaceholder(`技能“${event.payload.name}”执行完成。`)
+      }
+      return
+    }
+
+    if (event.type === 'skill_error') {
+      showError(`Skill ${event.payload.skillId}：${event.payload.message}`)
+      return
+    }
+
     if (event.type === 'tool_call') {
       showAssistantPlaceholder(`正在处理：${event.payload.preview}`)
       return
@@ -1268,12 +1603,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     newConversationButton.disabled = value
     knowledgeButton.disabled = value
     memoryButton.disabled = value
+    skillButton.disabled = value
   }
 
-  /** 根据输入框末尾的 `~` 触发符刷新命令列表，`$` 暂时保留给 Skill。 */
+  /** 根据输入框末尾的 `~` 或 `$` 触发符刷新本地命令列表。 */
   function updateCommandMenu(): void {
-    const state = getCommandPaletteState(input.value)
-    if (state.trigger !== '~' || state.options.length === 0 || busy) {
+    const state = getCommandPaletteState(input.value, skillCommandOptions())
+    if (!state.trigger || state.options.length === 0 || busy) {
       hideCommandMenu()
       return
     }
@@ -1322,9 +1658,20 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   function selectCommand(index: number): void {
-    const state = getCommandPaletteState(input.value)
+    const state = getCommandPaletteState(input.value, skillCommandOptions())
     const option: AssistantCommandOption | undefined = state.options[index]
-    if (state.trigger !== '~' || !option || state.tokenStart < 0) {
+    if (!state.trigger || !option || state.tokenStart < 0) {
+      hideCommandMenu()
+      return
+    }
+    if (option.kind === 'skill' && option.skillId) {
+      selectedSkillId = option.skillId
+      activeSkillChip.textContent = `$ ${option.label} ×`
+      activeSkillChip.hidden = false
+      composer.classList.add('has-active-skill')
+      input.value = input.value.slice(0, state.tokenStart).trimEnd()
+      input.focus()
+      resizeInput()
       hideCommandMenu()
       return
     }
@@ -1333,6 +1680,27 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     input.setSelectionRange(input.value.length, input.value.length)
     resizeInput()
     hideCommandMenu()
+  }
+
+  function skillCommandOptions(): AssistantCommandOption[] {
+    return (skillSnapshot?.skills ?? [])
+      .filter((skill) => skill.enabled && skill.compatibility !== 'invalid')
+      .map((skill) => ({
+        id: skill.id,
+        kind: 'skill',
+        label: skill.name,
+        description: skill.description,
+        inputPrefix: '',
+        searchText: `${skill.name} ${skill.description}`,
+        skillId: skill.id
+      }))
+  }
+
+  function clearSelectedSkill(): void {
+    selectedSkillId = null
+    activeSkillChip.hidden = true
+    activeSkillChip.textContent = ''
+    composer.classList.remove('has-active-skill')
   }
 
   function handleCommandKeydown(event: KeyboardEvent): boolean {
@@ -1416,6 +1784,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (knowledgeMode) {
         closeKnowledgeView()
       }
+      if (skillMode) {
+        closeSkillView()
+      }
       closing = false
       composer.classList.remove('is-open', 'is-closing')
       panel.hidden = true
@@ -1445,6 +1816,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     if (memoryMode) {
       closeMemoryView()
+    }
+    if (knowledgeMode) {
+      closeKnowledgeView()
+    }
+    if (skillMode) {
+      closeSkillView()
     }
     closing = true
     composer.classList.add('is-closing')

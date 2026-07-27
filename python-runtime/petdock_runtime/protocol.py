@@ -19,6 +19,14 @@ class AssistantContext(BaseModel):
     timezone: str = Field(min_length=1, max_length=128)
 
 
+class AssistantSkillInvocation(BaseModel):
+    """描述用户通过 `$` 菜单显式选择的 Skill。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skillId: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
 class AssistantRequest(BaseModel):
     """创建一个新的助手任务请求。"""
     model_config = ConfigDict(extra="forbid")
@@ -30,6 +38,7 @@ class AssistantRequest(BaseModel):
     source: Literal["pet", "assistant-window", "shortcut"]
     context: AssistantContext
     knowledgeLibraryIds: list[str] = Field(default_factory=list, max_length=20)
+    skillInvocation: AssistantSkillInvocation | None = None
 
 
 class KnowledgeLibraryCreateRequest(BaseModel):
@@ -94,3 +103,28 @@ class ToolLogRequest(BaseModel):
     ok: bool | None = None
     error: str | None = Field(default=None, max_length=4_000)
     durationMs: int | None = Field(default=None, ge=0, le=86_400_000)
+
+
+class SkillLocalPreviewRequest(BaseModel):
+    """接收 Electron Main 原生目录选择器授权的 Skill 来源。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=2_048)
+
+
+class SkillGithubPreviewRequest(BaseModel):
+    """接收 Main 校验前的 GitHub 公共仓库 URL。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=20, max_length=2_048)
+
+
+class SkillInstallRequest(BaseModel):
+    """安装用户在预览中勾选的 Skill。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    previewToken: str = Field(pattern=r"^[a-f0-9]{32}$")
+    skillIds: list[str] = Field(min_length=1, max_length=50)

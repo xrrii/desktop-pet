@@ -44,6 +44,7 @@ export interface AssistantRuntimeStatus {
 export interface AssistantAskInput {
   input: string
   conversationId: string
+  skillId?: string
 }
 
 export interface AssistantAskResult {
@@ -211,6 +212,61 @@ export interface AssistantRequest {
     timezone: string
   }
   knowledgeLibraryIds: string[]
+  skillInvocation?: {
+    skillId: string
+  }
+}
+
+export type AssistantSkillSourceType = 'local' | 'github'
+export type AssistantSkillCompatibility =
+  | 'compatible'
+  | 'instruction-only'
+  | 'missing-dependencies'
+  | 'unsupported-runtime'
+  | 'invalid'
+
+export interface AssistantSkillSummary {
+  id: string
+  name: string
+  description: string
+  sourceType: AssistantSkillSourceType
+  sourceDisplay: string
+  sourceUrl: string | null
+  versionLabel: string | null
+  resolvedCommit: string | null
+  compatibility: AssistantSkillCompatibility
+  permissions: string[]
+  enabled: boolean
+  installedAt: string
+  updatedAt: string
+  lastError: string | null
+  lastRun: {
+    status: 'running' | 'completed' | 'error' | 'cancelled'
+    errorMessage: string | null
+    createdAt: string
+  } | null
+}
+
+export interface AssistantSkillSnapshot {
+  skills: AssistantSkillSummary[]
+}
+
+export interface AssistantSkillInstallCandidate {
+  id: string
+  name: string
+  description: string
+  relativePath: string
+  compatibility: AssistantSkillCompatibility
+  permissions: string[]
+}
+
+export interface AssistantSkillInstallPreview {
+  previewToken: string
+  sourceType: AssistantSkillSourceType
+  sourceDisplay: string
+  resolvedCommit: string | null
+  expiresInSeconds: number
+  candidates: AssistantSkillInstallCandidate[]
 }
 
 export interface ToolCall {
@@ -233,6 +289,9 @@ export interface AssistantToolResultRequest {
 export type AssistantEvent =
   | AssistantMessageDeltaEvent
   | AssistantRetrievalSourcesEvent
+  | AssistantSkillStartedEvent
+  | AssistantSkillCompletedEvent
+  | AssistantSkillErrorEvent
   | AssistantToolCallEvent
   | AssistantPermissionRequiredEvent
   | AssistantToolResultEvent
@@ -243,6 +302,33 @@ interface AssistantEventBase {
   protocolVersion: typeof ASSISTANT_PROTOCOL_VERSION
   taskId: string
   sequence: number
+}
+
+export interface AssistantSkillStartedEvent extends AssistantEventBase {
+  type: 'skill_started'
+  payload: {
+    skillId: string
+    name: string
+    trigger: 'explicit-menu' | 'explicit-management' | 'agent'
+  }
+}
+
+export interface AssistantSkillCompletedEvent extends AssistantEventBase {
+  type: 'skill_completed'
+  payload: {
+    skillId: string
+    name: string
+    durationMs: number
+  }
+}
+
+export interface AssistantSkillErrorEvent extends AssistantEventBase {
+  type: 'skill_error'
+  payload: {
+    skillId: string
+    code: string
+    message: string
+  }
 }
 
 export interface AssistantMessageDeltaEvent extends AssistantEventBase {

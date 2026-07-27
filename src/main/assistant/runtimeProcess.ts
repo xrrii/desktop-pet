@@ -10,8 +10,10 @@ import type {
 } from '../../shared/assistant'
 import { logError, logInfo } from '../logger'
 import { AssistantRuntimeClient } from './runtimeClient'
+import { normalizeRuntimeEnvironment } from './runtimeEnvironment'
 
-const START_TIMEOUT_MS = 10_000
+// PyInstaller 单文件在 Windows 上需要先解包依赖，冷启动时间明显长于开发环境。
+const START_TIMEOUT_MS = app.isPackaged ? 30_000 : 10_000
 const STOP_TIMEOUT_MS = 3_000
 
 export class AssistantRuntimeProcess {
@@ -87,17 +89,19 @@ export class AssistantRuntimeProcess {
       this.setStatus({ state: 'failed', backend: null, error: message })
       throw error
     }
+    const environment = normalizeRuntimeEnvironment(process.env, {
+      ...runtimeEnvironment,
+      PETDOCK_RUNTIME_TOKEN: token,
+      PETDOCK_MEMORY_DB_PATH: join(app.getPath('userData'), 'assistant.db'),
+      PETDOCK_KNOWLEDGE_DB_PATH: join(app.getPath('userData'), 'knowledge.db'),
+      PETDOCK_CHROMA_PATH: join(app.getPath('userData'), 'rag', 'chroma'),
+      PETDOCK_SKILLS_DB_PATH: join(app.getPath('userData'), 'skills.db'),
+      PETDOCK_SKILLS_ROOT: join(app.getPath('userData'), 'skills', 'packages'),
+      PYTHONUNBUFFERED: '1'
+    })
     const child = spawn(invocation.command, invocation.args, {
       cwd: invocation.cwd,
-      env: {
-        ...process.env,
-        ...runtimeEnvironment,
-        PETDOCK_RUNTIME_TOKEN: token,
-        PETDOCK_MEMORY_DB_PATH: join(app.getPath('userData'), 'assistant.db'),
-        PETDOCK_KNOWLEDGE_DB_PATH: join(app.getPath('userData'), 'knowledge.db'),
-        PETDOCK_CHROMA_PATH: join(app.getPath('userData'), 'rag', 'chroma'),
-        PYTHONUNBUFFERED: '1'
-      },
+      env: environment,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true
     })

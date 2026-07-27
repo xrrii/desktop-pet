@@ -4,6 +4,7 @@ import json
 import secrets
 from collections.abc import Callable
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -14,6 +15,10 @@ from .knowledge import ChromaVectorStore, KnowledgeService
 from .knowledge_store import KnowledgeStore
 from .memory_store import MemoryStore
 from .memory_extractor import create_memory_extractor
+from .skill_registry import SkillRegistry
+from .skill_store import SkillStore
+from .skill_manifest import SkillManifestError
+from .skill_installer import SkillInstaller
 from .protocol import (
     AssistantRequest,
     MemoryClearRequest,
@@ -22,6 +27,9 @@ from .protocol import (
     KnowledgeLibraryCreateRequest,
     ToolLogRequest,
     ToolResultRequest,
+    SkillGithubPreviewRequest,
+    SkillInstallRequest,
+    SkillLocalPreviewRequest,
 )
 from .service import AssistantService
 
@@ -44,8 +52,11 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         ChromaVectorStore(config.chroma_path, embedding),
         fallback_vectors,
     )
+    skill_store = SkillStore(config.skills_db_path)
+    skills = SkillRegistry(config.skills_root, skill_store)
+    skill_installer = SkillInstaller(config.skills_root, skills)
     service = AssistantService(
-        create_backend(config, store, knowledge),
+        create_backend(config, store, knowledge, skills),
         create_memory_extractor(config, store),
     )
 
@@ -192,6 +203,106 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         authorize(authorization)
         return knowledge_store.snapshot()
 
+    @app.get("/v1/skills")
+    async def skill_snapshot(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回 Skill 管理界面需要的脱敏元数据。"""
+        authorize(authorization)
+        return skills.snapshot()
+
+    @app.post("/v1/skills/install/local/preview")
+    async def skill_preview_local(
+        request: SkillLocalPreviewRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """预览 Main 原生选择器授权的本地 Skill 目录。"""
+        authorize(authorization)
+        try:
+            return skill_installer.preview_local(request.path)
+        except (OSError, SkillManifestError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.post("/v1/skills/install/github/preview")
+    async def skill_preview_github(
+        request: SkillGithubPreviewRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """下载固定 commit 并返回 GitHub Skill 候选。"""
+        authorize(authorization)
+        try:
+            return await skill_installer.preview_github(request.url)
+        except (OSError, httpx.HTTPError, SkillManifestError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.post("/v1/skills/install")
+    async def skill_install(
+        request: SkillInstallRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """安装用户确认的预览候选并热刷新注册表。"""
+        authorize(authorization)
+        try:
+            return skill_installer.install(request.previewToken, request.skillIds)
+        except (OSError, SkillManifestError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.post("/v1/skills/refresh")
+    async def skill_refresh(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """重新扫描 Skill frontmatter，不加载技能正文。"""
+        authorize(authorization)
+        return skills.refresh()
+
+    @app.post("/v1/skills/{skill_id}/enable")
+    async def skill_enable(
+        skill_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """启用一个已安装 Skill。"""
+        authorize(authorization)
+        try:
+            return {"updated": skills.set_enabled(skill_id, True)}
+        except SkillManifestError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.post("/v1/skills/{skill_id}/disable")
+    async def skill_disable(
+        skill_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """禁用一个已安装 Skill。"""
+        authorize(authorization)
+        try:
+            return {"updated": skills.set_enabled(skill_id, False)}
+        except SkillManifestError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.get("/v1/skills/{skill_id}/runs")
+    async def skill_runs(
+        skill_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回指定 Skill 的最近运行日志。"""
+        authorize(authorization)
+        try:
+            return {"runs": skills.recent_runs(skill_id)}
+        except SkillManifestError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.delete("/v1/skills/{skill_id}")
+    async def skill_uninstall(
+        skill_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """卸载托管 Skill 包。"""
+        authorize(authorization)
+        try:
+            return {"deleted": skill_installer.uninstall(skill_id)}
+        except (OSError, SkillManifestError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
     @app.post("/v1/knowledge/reindex-all")
     async def knowledge_reindex_all(
         authorization: str | None = Header(default=None),
@@ -250,6 +361,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         """关闭 Runtime 服务并释放 SQLite 连接。"""
         authorize(authorization)
         await knowledge.close()
+        skills.close()
         store.close()
         if request_shutdown:
             request_shutdown()

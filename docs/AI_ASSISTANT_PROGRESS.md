@@ -5,6 +5,7 @@
 关联文档：
 
 - `docs/AI_ASSISTANT_ARCHITECTURE.md`
+- `docs/SKILL_SYSTEM_DEVELOPMENT.md`
 
 状态约定：
 
@@ -25,9 +26,9 @@ AI 助手总体状态：In Progress
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
-Python LangChain Runtime：Done（阶段 4）
+Python LangChain Runtime：Done（阶段 5）
 RAG 文档管理：Done（阶段 4）
-Skill 系统：Placeholder
+Skill 系统：Done（阶段 5）
 ```
 
 ## 2. 已完成事项
@@ -239,25 +240,31 @@ Skill 系统：Placeholder
 
 ### Skill 系统
 
-状态：Placeholder
+状态：Done
 
-- [ ] skill manifest 规范。
-- [ ] skill 目录扫描。
-- [ ] skill 启用/禁用。
-- [ ] skill 权限声明。
-- [ ] skill 参数 schema。
-- [ ] skill 注册为 Agent tool。
-- [ ] skill 日志展示。
-- [ ] skill 安装来源校验。
+- [x] 固化 Agent Skills 兼容、GitHub 安装和渐进式披露开发方案。
+- [x] skill manifest 规范。
+- [x] skill 目录扫描。
+- [x] skill 启用/禁用。
+- [x] skill 权限声明与运行时能力收缩。
+- [x] 固定内部工具参数 schema。
+- [x] skill 通过固定工具注册到 Agent。
+- [x] skill 运行状态和错误日志展示。
+- [x] 本地授权与 GitHub 安装来源校验。
+- [x] 启动仅注册 `name`、`description`，激活后加载正文，资源按需读取。
+- [x] `$` 显式调用与 Agent 自主激活。
+- [x] 本地目录、GitHub 公共仓库、多 Skill 候选、更新和卸载。
 
-待决策：
+实现基线：
 
-- skill runtime 类型。
-- 是否允许 Python skill。
-- 是否允许 HTTP skill。
-- 是否允许联网。
-- 是否允许执行本地进程。
-- 是否需要签名或来源校验。
+- `docs/SKILL_SYSTEM_DEVELOPMENT.md`
+
+首版边界：
+
+- 兼容 `SKILL.md` YAML frontmatter 以及可选 `skill.json` 扩展清单。
+- 含第三方脚本或外部依赖的 Skill 仅按 `instruction-only` 使用，不执行脚本。
+- 不支持私有 GitHub 仓库、GitHub Token、Skill 签名和远程信任服务。
+- Skill 不能直接联网或执行本地进程；声明权限只能收缩能力，最终由 Electron Main 复核。
 
 ## 5. 阻塞项
 
@@ -307,3 +314,15 @@ Skill 系统：Placeholder
 - 增加本地 embedding、FTS5 + 向量混合召回和结构化来源引用。
 - 增加安全目录扫描、增量索引、暂停/恢复及知识库管理界面。
 - 目录授权收口到 Electron Main 原生选择器，删除操作不触碰原始文件。
+
+### 2026-07-26（阶段 5）
+
+- 增加 Agent Skills 兼容清单、`skills.db`、元数据注册表和三级渐进式披露。
+- 增加 `search_skills`、`activate_skill`、`read_skill_resource` 固定内部工具和最多 6 轮 Agent 循环。
+- 支持本地目录及 GitHub 公共仓库预览、多候选选择、固定 commit、安全归档安装、更新和卸载。
+- 增加 Skill 管理视图、`$` 菜单、结构化 `skillId` 调用和运行状态反馈。
+- Skill 权限在 Runtime 侧收缩知识库、记忆和 OS 工具，外部 ToolCall 仍由 Electron Main 重新校验和审计。
+- 第三方脚本首版仅标记为 `instruction-only`，不会执行任意脚本、Shell 或依赖安装。
+- Runtime 改用受控构建脚本，Windows 下优先收集 System32 VC Runtime，打包版已通过真实本地 ONNX 模型启动验证。
+- `npm.cmd run check` 覆盖 15 个 TypeScript 测试、30 个 Python Runtime 测试、RAG 评测和生产构建。
+- `npm.cmd run test:runtime:packaged` 与 `npm.cmd run test:e2e:assistant:packaged` 验证独立 Runtime、Skill 管理界面和打包版链路。
