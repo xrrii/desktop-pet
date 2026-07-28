@@ -1,8 +1,8 @@
 # PetDock RAG 召回与检索质量优化方案
 
-版本：1.0  
-更新日期：2026-07-26  
-状态：后续 RAG 检索开发基线
+版本：1.1
+更新日期：2026-07-28
+状态：现行开发基线（R0/R3/R4 部分完成、R1 完成、R2 主体已实现但未完成正式验收）
 
 ## 1. 文档目的
 
@@ -25,29 +25,29 @@
 
 ## 2. 当前实现基线
 
-阶段 4 当前实现如下：
+当前 RAG v2 实现如下：
 
 - 用户主动勾选知识库后，Electron Main 将知识库 ID 附加到聊天请求。
-- Runtime 在初始请求中、模型判断工具意图之前直接执行知识库检索。
-- 文档按 2800 字符切分，Chunk 重叠 280 字符。
-- SQLite 保存知识库、文档、Chunk 和索引任务，FTS5 提供关键词召回。
-- Chroma 1.5 保存 384 维 Hash Embedding，使用余弦距离召回。
-- 向量和关键词通道各取 16 个候选，通过 RRF 融合，最多返回 5 条。
-- 向量候选使用固定余弦距离 `< 0.92` 过滤。
-- 只要融合后存在候选，就发送 `retrieval_sources` 并注入模型上下文。
+- Runtime 使用确定性 `RetrievalPlan` 区分 `SKIP`、`RETRIEVE`、`BOTH` 和 `CLARIFY`，明确目标的工具请求和普通闲聊默认不检索。
+- 文档使用 Chunk v2 按结构块和 Token 预算切分，目标 320 tokens、上限 448 tokens、字符重叠 96。
+- SQLite 保存知识库、文档、Chunk、Embedding Signature 和索引任务，FTS5 提供关键词召回。
+- Chroma 按 Index Signature 使用独立 collection，支持 Hash、本地 ONNX 和 OpenAI-compatible 在线 Provider。
+- 向量和关键词通道各取 40 个候选，通过 Weighted RRF、多信号准入和去重得到动态 `0-5` 条最终来源。
+- Provider 使用各自的候选与最终相似度门槛；查询锚点和最终分数共同决定是否允许零结果。
+- 活动向量检索失败时仅降级到独立 Hash 影子索引和 FTS5，不混用不同向量空间。
+- `retrieval_sources` 只在检索完成且来源通过最终准入后发送。
+- 每次检索记录脱敏 Trace，管线版本固定为 `rag-v2`；当前固定评测集包含 32 条用例并生成 JSON 报告。
 
-当前实现完成了本地知识库闭环，但它只是可运行基线，不是最终检索质量方案。
+当前实现已经完成 R1 误召回治理和 R2 的主要基础设施，但 R0 评测规模与 R2 真实模型验收尚未达到本文完成门槛。
 
-### 2.1 已确认问题
+### 2.1 当前剩余问题
 
-1. 缺少检索路由。打开 URL、打开应用、寒暄等请求也会触发知识库。
-2. Hash Embedding 只表示词元重叠，不能可靠判断中文语义和中英文代码混合语义。
-3. 固定距离阈值不能跨模型使用，不同模型的分数分布不可直接比较。
-4. RRF 只解决多路结果排序，不负责判断候选是否真正相关。
-5. 最终没有独立相关性门槛，无法稳定返回零条资料。
-6. Chunk 偏大，命中内容可能包含大量无关上下文。
-7. 没有固定评测集，模型、参数和阈值调整无法客观比较。
-8. 来源事件发出过早，工具请求即使最终正确执行，界面仍可能留下无关引用。
+1. 固定评测集只有 32 条，尚未达到 200 条以上的阶段门槛，当前满分不能代表复杂真实知识库质量。
+2. 本地 ONNX Provider 虽已实现并完成单模型 Runtime 加载验证，但两个模型的打包版下载、索引、查询、切换和回滚尚未完成完整验收。
+3. Provider 阈值仍是首版配置，尚未按足够规模的数据集分别校准。
+4. Chunk v2 已按结构和 Token 预算切分，但父子分块、标题层级增强和相邻 Chunk 扩展尚未实现。
+5. 当前最终准入使用确定性多信号评分，没有接入经过独立评测的 Reranker。
+6. 评测报告尚未覆盖完整的 Recall@K、分类型统计、P50/P95、峰值内存和磁盘占用。
 
 ## 3. 优化目标与非目标
 
@@ -266,7 +266,7 @@ class EmbeddingProvider(Protocol):
 
 必须区分 `embed_documents` 和 `embed_query`，因为 BGE、E5 等模型使用不同查询指令、文档前缀或池化方式。
 
-计划实现：
+已实现：
 
 - `OnnxLocalEmbeddingProvider`
 - `OpenAICompatibleEmbeddingProvider`
@@ -582,50 +582,64 @@ stageDurationMs
 
 ### R0：评测与可观测性基线
 
-- 建立 200 条以上固定评测集。
-- 给当前 Hash + FTS5 管线生成基线报告。
-- 增加 Retrieval Trace 数据结构和脱敏日志。
-- 固定 `retrievalPipelineVersion`。
+状态：In Progress
+
+- [ ] 建立 200 条以上固定评测集；当前为 32 条。
+- [x] 给当前 Hash + FTS5 管线生成 JSON 基线报告。
+- [x] 增加 Retrieval Trace 数据结构和脱敏日志。
+- [x] 固定 `retrievalPipelineVersion` 为 `rag-v2`。
 
 验收：任何后续分支都能生成与基线可对比的报告。
 
 ### R1：误召回治理
 
-- 增加确定性检索路由和结构化 `RetrievalPlan`。
-- 增加 URL/工具请求跳过规则和查询清洗。
-- 增加最终准入门槛、动态 `0-5` 和来源延迟发送。
-- 保留当前 Hash + FTS5，不在这一阶段同时替换所有组件。
+状态：Done
+
+- [x] 增加确定性检索路由和结构化 `RetrievalPlan`。
+- [x] 增加 URL/工具请求跳过规则和查询清洗。
+- [x] 增加最终准入门槛、动态 `0-5` 和来源延迟发送。
+- [x] 保留 Hash + FTS5 作为兼容与降级基线。
 
 验收：截图中的“打开 URL 却显示参考资料”回归用例通过，工具请求误检索率达到目标。
 
 ### R2：Embedding 基础设施
 
-- 实现统一 Provider。
-- 实现白名单下载器、SHA-256 校验和模型健康检查。
-- 实现 Index Signature、多 collection 和后台原子切换。
-- 实现在线 Provider 隐私确认和 Hash/FTS5 降级。
+状态：In Progress（主体实现完成，正式验收未完成）
+
+- [x] 实现统一 Provider。
+- [x] 实现白名单下载器、SHA-256 校验和模型健康检查。
+- [x] 实现 Index Signature、多 collection、配置切换和失败回滚。
+- [x] 实现在线 Provider 隐私确认和 Hash/FTS5 降级。
+- [ ] 完成两个白名单本地模型的打包版全链路验收。
 
 验收：至少一个本地 BGE 和一个 Multilingual E5 在打包版完成下载、索引、查询、切换和回滚闭环。
 
 ### R3：候选召回升级
 
-- 上线结构化 Chunk v2 和 Parent-Child 数据结构。
-- FTS5 增加标题、路径、Heading 和标识符信号。
-- 扩大候选池，使用 Weighted RRF 融合并保留原始信号。
-- 增加相邻 Chunk、跨通道和模板去重。
+状态：In Progress
+
+- [x] 上线按结构块和 Token 预算切分的 Chunk v2。
+- [ ] 增加 Parent-Child 数据结构和父段落扩展。
+- [x] FTS5 增加标题、路径、检索词元和精确标识符信号。
+- [x] 扩大候选池，使用 Weighted RRF 融合并保留原始信号。
+- [ ] 补齐相邻 Chunk 扩展和模板去重；当前已实现基础结果去重与单文档数量限制。
 
 验收：Document Recall@40 和 Chunk Recall@40 达到目标，且 Precision@3 不低于 R1。
 
 ### R4：精排与阈值校准
 
-- 建立 Reranker 白名单和统一接口。
-- 对融合候选进行精排。
-- 按模型和管线版本校准最终阈值。
-- 建立动态 Top-K、分数间隔截断和零结果策略。
+状态：In Progress（确定性准入基线已实现，Reranker 与正式校准未完成）
+
+- [ ] 建立 Reranker 白名单和统一接口。
+- [ ] 对融合候选进行精排。
+- [ ] 按模型和管线版本校准最终阈值。
+- [x] 建立确定性的动态 Top-K、分数间隔截断和零结果基线。
 
 验收：Precision@3、MRR@5 和 Zero-result Accuracy 达到目标，延迟和内存报告完整。
 
 ### R5：高级召回
+
+状态：Not Started
 
 - 根据失败样本决定是否引入单查询改写、多查询、MMR 和查询分解。
 - 对多跳问题增加受控的二次检索。

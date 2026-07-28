@@ -11,7 +11,7 @@ PetDock 后续的 AI 能力不应该直接塞进桌宠窗口。桌宠应保持�
 - AI 能理解用户、电脑环境、常用应用、常用文件和历史偏好。
 - AI 可以通过受控工具执行本地操作。
 - 高风险操作必须经过权限确认。
-- 后续可以引入 Python LangChain、RAG、skills、长期记忆和本地模型。
+- 已引入 Python LangChain、RAG、Skills、长期记忆和本地向量模型，并保持 Electron Main 权限边界。
 
 ## 2. 总体架构
 
@@ -344,78 +344,41 @@ dangerous
 - 本地模型或混合模型路由。
 - 多端控制或远程同步。
 
-## 9. Skill 系统占位设计
+## 9. Skill 系统设计与实现
 
-Skill 系统用于把特定领域能力做成可安装、可启用、可禁用的能力包。当前阶段先保留架构占位，不急于实现完整插件市场或复杂运行时。
+Skill 系统用于把特定领域能力做成可安装、可启用、可禁用的能力包。阶段 5 已完成首版实现，详细格式、安全边界和验收标准以 `docs/SKILL_SYSTEM_DEVELOPMENT.md` 为准。
 
-初步目标：
+当前实现：
 
-- 支持用户安装本地 skill。
-- 支持 skill 声明名称、版本、描述、入口、参数 schema。
-- 支持 skill 声明所需权限。
-- 支持启用/禁用 skill。
-- 支持将 skill 暴露给 Agent 作为工具或工作流。
-- 支持后续扩展为脚本型 skill、Python skill、HTTP skill 或 MCP-like skill。
+- 兼容以 `SKILL.md` 为入口、可选 `skill.json` 扩展清单的 Agent Skills 风格目录。
+- 支持从用户授权的本地目录和 GitHub 公共仓库预览、安装、启用、禁用、刷新、更新和卸载。
+- 支持单仓库单 Skill 与多 Skill 候选，GitHub 来源固定到明确 commit。
+- Runtime 启动时只注册 `name` 和 `description`；激活后读取正文，引用资料和静态资源继续按需加载。
+- 用户可以通过 `$` 菜单显式选择 Skill，Agent 也可以通过固定内部工具检索和激活 Skill。
+- Skill 权限只能收缩知识库、记忆和 OS 工具能力，Electron Main 仍执行最终权限校验和用户确认。
+- 安装、更新、调用状态和错误均通过结构化事件及脱敏日志展示。
 
-建议目录：
+当前目录：
 
 ```text
 PetDock userData/
+  skills.db
   skills/
-    open-browser/
-      skill.json
-      README.md
-      handler.py
-    project-helper/
-      skill.json
-      handler.py
+    packages/
+      <skill-id>/
+        SKILL.md
+        skill.json        可选
+        references/       可选，按需读取
+        assets/           可选，按需读取
+        scripts/          可选，首版不执行
 ```
 
-skill manifest 占位：
+首版边界：
 
-```json
-{
-  "id": "project-helper",
-  "name": "Project Helper",
-  "version": "0.1.0",
-  "description": "Project-specific assistant utilities.",
-  "entry": "handler.py",
-  "runtime": "python",
-  "permissions": ["read_files", "open_url"],
-  "tools": [
-    {
-      "name": "summarize_project",
-      "description": "Summarize a project directory.",
-      "schema": {}
-    }
-  ]
-}
-```
-
-待决策问题：
-
-- skill 是否允许联网。
-- skill 是否允许执行本地进程。
-- skill 是否允许访问用户文件。
-- skill 的权限授权是安装时确认，还是首次调用时确认。
-- skill 是否需要签名或来源校验。
-- skill 是否允许热更新。
-- skill 日志和错误如何展示给用户。
-
-安全原则：
-
-- skill 不能绕过 Electron Main 的权限系统。
-- skill 的文件访问必须走授权目录。
-- skill 执行日志必须可追踪。
-- 危险 skill 默认禁用。
-- 第三方 skill 不默认拥有 shell 权限。
-
-第一阶段只建议实现：
-
-- 本地 skill 目录扫描。
-- manifest 读取和校验。
-- 启用/禁用状态存储。
-- 将安全 skill 注册为 Agent tool。
+- 第三方脚本、外部命令和额外依赖只标记为 `instruction-only`，不执行任意 Shell 或本地进程。
+- 不支持私有 GitHub 仓库、GitHub Token、Skill 签名和远程信任服务。
+- Skill 不能直接联网；Skill 资源读取不能越出自身目录，也不能扩大用户已经授予的文件访问范围。
+- 状态变更后无需重启应用或 Runtime 即可生效，但不做后台定时检查和静默更新。
 
 ## 10. RAG 文档管理设计
 
@@ -429,7 +392,7 @@ RAG 文档管理用于让 PetDock 理解用户指定的文档、项目、笔记�
 - 支持查看索引状态。
 - 支持暂停、恢复、删除索引。
 - 支持按项目、目录、标签组织文档。
-- 支持后续接入 embedding 和向量检索。
+- 支持 Hash、本地 ONNX 和 OpenAI-compatible 在线 embedding，并隔离不同模型的向量空间。
 
 建议概念模型：
 
@@ -471,6 +434,8 @@ documents
   content_hash
   modified_ns
   embedding_state
+  embedding_signature
+  chunk_strategy_version
   indexed_at
 
 document_chunks
@@ -483,26 +448,31 @@ document_chunks
 document_chunks_fts
   chunk_id
   library_id
+  title
+  relative_path
   content
+  search_tokens
 
-Chroma collection: petdock_knowledge_v1
+Chroma collection: petdock_knowledge_<index-signature>
   chunk id
   embedding
   libraryId / documentId metadata
+
+Legacy Hash collection: petdock_knowledge_v1
 ```
 
-阶段 4 已决策：
+当前已决策：
 
-- 向量库使用 Chroma 1.5，本地 embedding 使用 384 维确定性 hash 基线。
+- 向量库使用 Chroma 1.5，默认使用 384 维确定性 Hash 基线，并允许用户切换白名单本地 ONNX 或在线 Provider。
 - 第一版仅索引允许扩展名内、UTF-8 编码且不超过 2 MB 的文本文件。
 - 使用手动增量刷新，不启用文件系统 watcher。
 - 默认排除隐藏目录、构建目录、依赖目录、符号链接和敏感文件名。
 - 删除知识库同时删除 SQLite/FTS5/Chroma 数据，不删除来源文件。
 - 知识库默认不参与对话；用户主动勾选后，命中片段才进入当前模型上下文。
 
-后续待决策：
+待决策（未排期）：
 
-- 语义 embedding provider、模型和维度。
+- 默认本地 embedding 模型及各模型阈值。
 - PDF、DOCX、PPTX 解析策略。
 - watcher、父子分块、query rewrite 和 reranker。
 
@@ -523,6 +493,10 @@ Chroma collection: petdock_knowledge_v1
 - 本地 embedding、SQLite FTS5 与 Chroma 混合召回。
 - 增量刷新、暂停、恢复、错误状态和结构化引用。
 - 敏感文件、链接、构建目录、超大文件和非文本内容排除。
+- RAG v2 确定性检索路由、查询清洗、动态 `0-5`、最终准入和脱敏 Trace。
+- Hash、本地 ONNX、在线 Provider、白名单模型下载与配置界面。
+- Index Signature、独立 Chroma collection、Hash 影子索引和配置切换失败回滚。
+- 32 条固定检索基线用例和 JSON 指标报告；扩大评测规模与真实模型打包验收仍未完成。
 
 ## 11. 存储设计
 
@@ -639,6 +613,8 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 ### 阶段 1：输入框 + 普通聊天
 
+状态：已完成
+
 - 桌宠与助手使用同一个透明窗口；展开时扩大组合窗口，收起时恢复桌宠尺寸。
 - 根据桌宠两侧可用空间决定停靠方向，输入框从桌宠一侧向外展开。
 - 展开状态拖动整个组合窗口，桌宠和输入框使用同一坐标系，不存在双窗口跟随延迟。
@@ -673,6 +649,8 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 ### 阶段 3：记忆
 
+状态：已完成
+
 - SQLite 会话历史、用户偏好、常用应用、常用目录和工具执行日志。
 - Runtime 通过 `/v1/memory`、`/v1/memory/conversation/:id`、`/v1/memory/item` 和 `/v1/memory/clear` 提供受鉴权的查询、恢复和清理接口。
 - 数据库位于 Electron 用户数据目录的 `assistant.db`，由 Python Runtime 管理，Renderer 不直接访问文件。
@@ -689,6 +667,8 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 ### 阶段 4：RAG
 
+状态：已完成（本地知识库核心闭环；检索增强按独立基线继续记录）
+
 - 独立 SQLite 知识库主存储与 Chroma 持久化向量索引。
 - 安全文件扫描、文档 chunk 和本地 embedding。
 - FTS5 + Chroma 混合检索与 RRF 排序。
@@ -703,6 +683,8 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 ### 阶段 5：Skill 系统
 
+状态：已完成
+
 详细实现基线见 `docs/SKILL_SYSTEM_DEVELOPMENT.md`。
 
 - skills 目录。
@@ -716,25 +698,19 @@ PETDOCK_PYTHON=<optional development Python executable>
 - 用户能安装/启用/禁用 skill。
 - skill 不能绕过权限系统。
 
-## 15. 当前建议
+## 15. 当前状态
 
-第一版不要直接做完整重 Agent。建议先实现最小闭环：
-
-```text
-桌宠双击
-  -> 打开输入框
-  -> Electron Main 调 Python Runtime
-  -> LangChain 返回回复
-  -> 输入框显示回复
-```
-
-随后再加入：
+阶段 1 至阶段 5 的核心功能已经形成完整闭环：
 
 ```text
-open_url
-open_app
-open_file_or_folder
-permission_confirm
+桌宠入口与助手 UI
+  -> Python LangChain Runtime
+  -> 受控工具调用与权限确认
+  -> 会话历史和长期记忆
+  -> 本地知识库与来源引用
+  -> 可安装、可启停的 Skill 系统
 ```
 
-这样边界是正确的，后续接 RAG、tool、skill 不需要推翻重做。
+Electron Main、Preload、Renderer 和 Python Runtime 的职责边界保持稳定，核心功能不需要为后续增强推翻重做。
+
+下一项已确定的方案基线是 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`，范围包括附件对话、Artifact 文件输出、联网搜索、复杂文档和多文件受控修改。当前状态为 Not Started；文档中的 C1 至 C5 是依赖顺序，不代表已经安排具体开发日期。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。

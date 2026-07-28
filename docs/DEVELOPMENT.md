@@ -534,7 +534,7 @@ npm.cmd run pack
 - IPC handler 必须校验调用窗口身份并验证外部输入。
 - 密钥和用户隐私数据不得写入仓库、普通配置文件或日志。
 
-AI 助手的下一阶段开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
+AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、文件输出、联网搜索、复杂文档和多文件修改必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
 ## 15. AI Assistant Runtime
 
@@ -591,7 +591,7 @@ npm.cmd run test:e2e:assistant:langchain
 
 阶段 4 的知识库业务数据保存在用户数据目录的 `knowledge.db`，Chroma 向量索引保存在 `rag/chroma`。用户只能通过助手内“知识库”界面调用 Electron Main 原生目录选择器授权来源；Renderer 不接触真实路径。管理界面支持索引进度、暂停、继续、刷新和删除，删除索引不会删除来源文件。
 
-当前索引支持 UTF-8 文本、Markdown、JSON/YAML/TOML、常见源码和脚本文件。默认跳过隐藏目录、构建产物、依赖目录、符号链接、敏感凭据文件、超过 2 MB 的文件和非 UTF-8 内容。检索使用 SQLite FTS5 与 Chroma 向量结果的 RRF 融合；本地 hash embedding 是零下载离线基线，后续可通过统一接口替换为语义 embedding 模型。
+当前索引支持 UTF-8 文本、Markdown、JSON/YAML/TOML、常见源码和脚本文件。默认跳过隐藏目录、构建产物、依赖目录、符号链接、敏感凭据文件、超过 2 MB 的文件和非 UTF-8 内容。检索使用 SQLite FTS5 与 Chroma 向量结果的 Weighted RRF 和多信号准入；Hash Embedding 是零下载离线基线，用户也可以在知识库界面选择白名单本地 ONNX 模型或配置 OpenAI-compatible 在线 Embedding。不同 Provider 使用独立 Index Signature 和 Chroma collection，失败时只能降级到独立 Hash 影子索引及 FTS5。
 
 知识库前的复选框决定该库是否参与对话检索，默认不选；选择结果由 Electron Main 持久化到 `settings.json`，用户主动勾选后命中片段才可能进入当前模型上下文。Runtime 会通过独立 `retrieval_sources` 事件返回来源，Renderer 展示知识库、相对路径和片段。检索到的文档始终按不可信资料处理，其中的指令不能授权系统工具。
 

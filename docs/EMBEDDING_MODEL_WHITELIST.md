@@ -1,10 +1,10 @@
 # PetDock 本地向量模型白名单
 
-更新日期：2026-07-26
+更新日期：2026-07-28
 
 ## 1. 结论
 
-PetDock 可以在不引入 PyTorch 的情况下接入用户下载的本地向量模型。当前 Python Runtime 已经通过 Chroma 间接包含 `onnxruntime 1.28.0` 和 `tokenizers 0.23.1`，后续只需实现统一的 ONNX embedding provider、下载器和索引版本切换。
+PetDock 已经在不引入 PyTorch 的情况下接入用户下载的本地向量模型。当前 Python Runtime 通过 Chroma 间接包含 `onnxruntime 1.28.0` 和 `tokenizers 0.23.1`，并已实现 Hash、本地 ONNX 和 OpenAI-compatible 在线 Embedding Provider、白名单下载器、模型配置界面、独立索引签名及切换失败回滚。
 
 白名单的机器可读来源为 `assets/assistant/embedding-model-whitelist.json`。下载器只能消费白名单内固定版本的文件，并且必须在加载前核对文件大小和 SHA-256。
 
@@ -49,16 +49,16 @@ BGE 官方说明指出 v1.5 可以不带指令工作，但短查询检索长文�
 
 E5 官方要求检索任务保留查询和文档前缀，否则会造成性能下降。该模型更适合中英文混合资料，但最终默认模型仍应由 PetDock 自有评测集决定。
 
-## 5. 下载后接入流程
+## 5. 当前接入流程
 
 1. Electron Main 从内置白名单读取模型，Renderer 只接收可展示字段，不接触任意下载 URL。
 2. 用户选择模型后，Main 将文件下载为 `.partial`，支持暂停、续传和进度事件。
 3. 每个文件下载完成后核对长度和 SHA-256；任一不一致都删除临时文件并标记失败。
-4. 校验通过后，将目录原子重命名到 `userData/rag/models/<model-id>/<revision>`。
+4. 单个文件校验通过后从 `.partial` 原子重命名为目标文件；全部文件完成后写入安装清单。
 5. Main 把模型目录和白名单推理配置传给 Python Runtime，Runtime 使用 `tokenizers` 和 `onnxruntime` 执行健康检查。
 6. 健康检查至少验证输入名称、输出维度、有限数值和归一化结果，不能只判断文件能否打开。
-7. 以模型 ID、revision、维度、池化方式、前缀和 Chunk 策略生成 `indexSignature`，创建独立 Chroma collection。
-8. 新索引后台构建完成后再切换活动索引；失败时保留旧索引，并降级到 FTS5 或 Hash 影子索引。
+7. 以模型 ID、revision、维度、池化方式、前缀和 Chunk 策略生成 `indexSignature`，不同签名使用独立 Chroma collection。
+8. 切换 Provider 时重启 Runtime 并执行健康检查；启动失败则恢复原配置。检索或写入失败时保留业务数据，并降级到 FTS5 或独立 Hash 影子索引。
 
 不同模型的向量空间不能混用。在线模型、本地 ONNX 模型和 Hash Embedding 必须分别使用独立 collection，不能在 API 失败时拿 Hash 查询其他模型生成的向量。
 
@@ -73,4 +73,4 @@ E5 官方要求检索任务保留查询和文档前缀，否则会造成性能�
 - 完成许可证展示、来源归属和删除模型流程。
 - 下载源不可用时有清晰错误提示，不绕过摘要校验。
 
-当前白名单解决了候选选择、版本固定和下载完整性问题；用户界面、下载管理器、ONNX provider 与索引切换仍需作为下一阶段实现。
+当前白名单、用户界面、下载管理器、ONNX/在线 Provider、索引隔离和配置回滚均已实现。尚未完成的是上线准入验收：至少一个 BGE 和一个 Multilingual E5 需要在打包版完成真实下载、索引、查询、切换和回滚闭环，固定评测集也需要继续扩充并补齐性能报告。上述事项当前未排期，默认模型仍保持待评测决定。

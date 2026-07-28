@@ -6,6 +6,7 @@
 
 - `docs/AI_ASSISTANT_ARCHITECTURE.md`
 - `docs/SKILL_SYSTEM_DEVELOPMENT.md`
+- `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`
 
 状态约定：
 
@@ -19,16 +20,19 @@ Deferred     延后
 
 ## 1. 当前总览
 
-更新时间：2026-07-26
+更新时间：2026-07-28
 
 ```text
-AI 助手总体状态：In Progress
+AI 助手核心功能状态：Done（阶段 1 至阶段 5）
+后续增强状态：Not Started（对话资源能力方案已确定，尚未开发）
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
 Python LangChain Runtime：Done（阶段 5）
 RAG 文档管理：Done（阶段 4）
+RAG 检索优化：In Progress（R0/R3/R4 部分完成、R1 完成、R2 主体已实现但未完成正式验收）
 Skill 系统：Done（阶段 5）
+对话资源能力：Not Started（C1 至 C5）
 ```
 
 ## 2. 已完成事项
@@ -64,8 +68,8 @@ Skill 系统：Done（阶段 5）
 - [x] 明确 Python LangChain 作为 Agent Runtime。
 - [x] 明确 Electron Main 作为权限和系统能力边界。
 - [x] 补充能力列表和演进路线。
-- [x] 补充 Skill 系统占位设计。
-- [x] 补充 RAG 文档管理占位设计。
+- [x] 补充 Skill 系统设计，并在阶段 5 完成实现基线。
+- [x] 补充 RAG 文档管理设计，并在阶段 4 完成核心闭环。
 - [x] 固化本地 Runtime 鉴权、生命周期和协议版本要求。
 - [x] 明确桌宠与助手 UI 使用单一透明窗口和最小化 preload。
 
@@ -94,7 +98,7 @@ Skill 系统：Done（阶段 5）
 - `npm.cmd run build` 通过。
 - `npm.cmd run pack` 通过。
 
-## 3. 近期计划
+## 3. 核心功能阶段（已完成）
 
 ### 阶段 1：助手输入框 + 普通聊天
 
@@ -217,23 +221,56 @@ Skill 系统：Done（阶段 5）
 - `npm.cmd run test:runtime:packaged` 通过，验证独立 exe readiness、健康检查和优雅关闭。
 - `npm.cmd run test:e2e:assistant:packaged` 通过，覆盖知识库管理视图并生成视觉回归截图。
 
-## 4. 中长期占位
+## 4. 增强能力状态
+
+### 对话资源能力
+
+状态：Not Started（方案已批准，尚未开发）
+
+- [ ] C1：拖拽附件与文本解析。
+- [ ] C2：基础 Artifact 文件输出。
+- [ ] C3：联网搜索与网页引用。
+- [ ] C4：PDF、Office 和图片输入输出。
+- [ ] C5：多文件分析、临时索引和受控修改。
+
+实现基线：
+
+- `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`
+
+已决策的核心交互：
+
+- 文件可以拖到展开的对话区。
+- 文件可以直接拖到收起的桌宠，成功接收后自动展开助手。
+- 文件只加入输入草稿，不自动发送。
+- 文件输出先生成应用内 Artifact，用户通过原生保存对话框决定最终位置。
 
 ### RAG 后续增强
 
-状态：Deferred
+状态：In Progress（已实现部分能力，剩余事项未排期）
 
 - [x] 建立首版本地 ONNX 向量模型白名单，固定模型版本、推理规则、下载文件与 SHA-256。
 - [x] 固化 RAG 召回与检索质量优化方案、阶段门槛和完成定义。
-- [ ] OpenAI-compatible 和本地 ONNX embedding provider。
+- [x] 增加确定性检索路由、查询清洗、动态结果数量、最终准入和延迟来源事件。
+- [x] 实现统一 Embedding Provider，支持 Hash、本地 ONNX 和 OpenAI-compatible 在线接口。
+- [x] 增加模型配置界面、白名单下载、暂停续传、完整性校验、在线密钥加密和切换失败回滚。
+- [x] 增加 Index Signature、独立 Chroma collection 和 Hash 影子索引降级。
+- [x] 建立固定检索评测工具、32 条基线用例和 JSON 指标报告。
+- [ ] 将固定评测集扩充到 200 条以上，并补齐分类型指标、延迟、内存和磁盘报告。
+- [ ] 在打包版完成至少一个 BGE 和一个 Multilingual E5 的真实下载、索引、查询、切换和回滚验收。
 - [ ] PDF、DOCX、PPTX 文档解析。
 - [ ] 文件系统 watcher 与自动增量更新。
 - [ ] query rewrite、父子分块和 reranker。
-- [ ] 固定评测集与 Recall@K、MRR 指标面板。
 
-待决策：
+当前验证：
 
-- embedding 模型和 provider 配置界面。
+- `npm.cmd run check` 通过：19 个 TypeScript 测试、30 个 Python Runtime 测试、RAG 评测和生产构建。
+- 当前 32 条检索基线用例的路由准确率、工具误召回率、零结果准确率、文档召回、Precision@3 和 MRR@3 均达到预期。
+- `npm.cmd run test:runtime:packaged` 与 `npm.cmd run test:e2e:assistant:packaged` 通过。
+- 打包版 E2E 已覆盖模型选择和下载确认界面，尚未执行大型模型的真实网络下载与全量重建验收。
+
+待决策（均未排期）：
+
+- 默认本地 embedding 模型及各模型阈值。
 - 二进制办公文档的解析依赖与隐私提示。
 - 是否默认启用文件系统 watcher。
 - 在线模型使用知识片段时的逐库授权策略。
@@ -326,3 +363,13 @@ Skill 系统：Done（阶段 5）
 - Runtime 改用受控构建脚本，Windows 下优先收集 System32 VC Runtime，打包版已通过真实本地 ONNX 模型启动验证。
 - `npm.cmd run check` 覆盖 15 个 TypeScript 测试、30 个 Python Runtime 测试、RAG 评测和生产构建。
 - `npm.cmd run test:runtime:packaged` 与 `npm.cmd run test:e2e:assistant:packaged` 验证独立 Runtime、Skill 管理界面和打包版链路。
+
+### 2026-07-28（现状同步与方案基线）
+
+- 核心功能阶段 1 至阶段 5 全部完成。
+- 新增 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`，固定附件对话、文件输出、联网搜索、复杂文档和多文件修改的开发边界。
+- 对话资源能力当前为 Not Started，C1 至 C5 只确定依赖顺序，不代表已经安排具体开发日期。
+- RAG v2 已实现确定性路由、动态准入、结构化 Trace、统一 Embedding Provider 和模型管理界面。
+- 本地 ONNX、在线 Embedding、独立向量空间、Hash 降级和切换失败回滚主体代码已落地。
+- 固定评测工具当前包含 32 条基线用例；200 条以上评测集、完整性能报告和两个本地模型的打包版全链路验收仍未完成。
+- 最新验证为 19 个 TypeScript 测试、30 个 Python Runtime 测试、RAG 基线评测、生产构建、打包 Runtime 冒烟和打包助手 E2E 全部通过。
