@@ -43,6 +43,8 @@ skills.db*
 # Build and packaged output
 dist/
 release/
+release-*/
+temp/
 
 # Logs
 *.log
