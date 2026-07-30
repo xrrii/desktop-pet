@@ -29,6 +29,10 @@ body {
   cursor: grabbing;
 }
 
+#pet-root.is-attachment-drop-target {
+  filter: drop-shadow(0 0 8px rgb(46 139 115 / 0.92));
+}
+
 #pet-canvas {
   display: block;
   width: 100%;

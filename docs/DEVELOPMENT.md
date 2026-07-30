@@ -536,6 +536,8 @@ npm.cmd run pack
 
 AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、文件输出、联网搜索、复杂文档和多文件修改必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
+对话资源能力当前进度：C1、C1.1 已完成，C2 至 C5 未开始。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送和来源展示验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。
+
 ## 15. AI Assistant Runtime
 
 首次开发需要创建 Python 虚拟环境并安装锁定依赖：

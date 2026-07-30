@@ -2,6 +2,8 @@ import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainEvent, type Ipc
 import { basename } from 'node:path'
 import type {
   AssistantAskInput,
+  AssistantAttachmentDropZone,
+  AssistantAttachmentPreviewInput,
   AssistantEmbeddingOnlineInput,
   AssistantLayoutTrace,
   MemoryClearScope,
@@ -218,6 +220,43 @@ function registerIpc(): void {
       throw new TypeError('Assistant request is invalid.')
     }
     return assistantManager.ask(request)
+  })
+
+  ipcMain.handle(
+    'assistant:stage-dropped-files',
+    async (event, paths: unknown, dropZone: unknown) => {
+      const window = requirePetSender(event)
+      requireAttachmentPaths(paths)
+      const zone = requireAttachmentDropZone(dropZone)
+      if (zone === 'pet') {
+        openAssistantForPet(window)
+      }
+      const attachments = await assistantManager.stageAttachments(paths)
+      return { dropZone: zone, attachments }
+    }
+  )
+
+  ipcMain.handle('assistant:pick-attachments', async (event) => {
+    const window = requirePetSender(event)
+    const selection = await dialog.showOpenDialog(window, {
+      title: '选择要添加到对话的文本文件',
+      properties: ['openFile', 'multiSelections']
+    })
+    if (selection.canceled || selection.filePaths.length === 0) {
+      return []
+    }
+    return assistantManager.stageAttachments(selection.filePaths)
+  })
+
+  ipcMain.handle('assistant:remove-attachment', (event, attachmentId: unknown) => {
+    requirePetSender(event)
+    requireAttachmentId(attachmentId)
+    return assistantManager.removeDraftAttachment(attachmentId)
+  })
+
+  ipcMain.handle('assistant:preview-attachment', (event, input: AssistantAttachmentPreviewInput) => {
+    requirePetSender(event)
+    return assistantManager.previewAttachment(input)
   })
 
   ipcMain.handle('assistant:cancel', (event, taskId: string) => {
@@ -489,6 +528,33 @@ function requireBoolean(value: unknown): asserts value is boolean {
 function requireString(value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new TypeError('IPC value must be a non-empty string.')
+  }
+}
+
+/** 限制单次拖拽路径数量；路径值仅在 Preload 与 Main 间流转。 */
+function requireAttachmentPaths(value: unknown): asserts value is string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 10 ||
+    value.some((item) => typeof item !== 'string' || item.length < 1 || item.length > 32_768)
+  ) {
+    throw new TypeError('附件路径列表无效。')
+  }
+}
+
+/** 校验附件只能投放到桌宠或已展开对话区。 */
+function requireAttachmentDropZone(value: unknown): AssistantAttachmentDropZone {
+  if (value !== 'pet' && value !== 'conversation') {
+    throw new TypeError('附件投放区域无效。')
+  }
+  return value
+}
+
+/** 校验 Renderer 只能提交固定格式的附件 ID。 */
+function requireAttachmentId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) {
+    throw new TypeError('附件 ID 无效。')
   }
 }
 

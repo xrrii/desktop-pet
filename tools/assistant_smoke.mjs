@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { createServer as createTcpServer } from 'node:net'
 import { dirname, join, parse, resolve } from 'node:path'
@@ -25,6 +25,8 @@ const rightScreenshotPath = join(
 const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' ? 'langchain' : 'mock'
 const expectedResponse = backend === 'langchain' ? '本地模型适配测试通过' : '离线模式回应'
 const assistantThemes = ['quiet', 'note', 'glass', 'pixel', 'apple']
+const attachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-attachment.md')
+const unsupportedAttachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-unsupported.exe')
 let child
 
 async function main() {
@@ -314,6 +316,17 @@ async function main() {
     ) {
       throw new Error(`Assistant did not collapse to the pet bounds: ${JSON.stringify(collapsed)}`)
     }
+
+    if (backend === 'mock') {
+      await assertCollapsedPetAttachmentDrop(petClient)
+      await evaluate(petClient, `document.querySelector('#close-button').click()`)
+      await waitForEvaluation(
+        petClient,
+        'document.body.dataset.assistantOpen',
+        (value) => value === 'false',
+        5_000
+      )
+    }
     await waitForTarget(port, (target) => target.title === 'Desktop Pet')
 
     process.stdout.write(`ASSISTANT_SMOKE_OK\n${screenshotPath}\n${rightScreenshotPath}\n`)
@@ -333,7 +346,118 @@ async function main() {
       child.kill()
     }
     await fakeModel?.close()
+    await rm(attachmentSmokePath, { force: true }).catch(() => undefined)
+    await rm(unsupportedAttachmentSmokePath, { force: true }).catch(() => undefined)
   }
+}
+
+/** 验证真实文件拖到收起桌宠后自动展开，并完成只附件对话。 */
+async function assertCollapsedPetAttachmentDrop(client) {
+  await mkdir(dirname(attachmentSmokePath), { recursive: true })
+  await writeFile(unsupportedAttachmentSmokePath, 'unsupported attachment', 'utf8')
+  await dropFileOnCollapsedPet(client, unsupportedAttachmentSmokePath)
+  await waitForEvaluation(
+    client,
+    `(() => ({
+      expanded: document.body.dataset.assistantOpen,
+      error: document.querySelector('#error-banner').textContent,
+      errorHidden: document.querySelector('#error-banner').hidden,
+      attachmentCount: document.querySelectorAll('#attachment-list .attachment-chip').length
+    }))()`,
+    (value) => value?.expanded === 'true' && value?.errorHidden === false &&
+      value?.error?.includes('暂不支持') && value?.attachmentCount === 0,
+    10_000
+  )
+  const unsupportedScreenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const unsupportedScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-unsupported-drop$1')
+  await writeFile(unsupportedScreenshotPath, Buffer.from(unsupportedScreenshot.data, 'base64'))
+  await evaluate(client, `document.querySelector('#close-button').click()`)
+  await waitForEvaluation(
+    client,
+    'document.body.dataset.assistantOpen',
+    (value) => value === 'false',
+    5_000
+  )
+
+  await writeFile(
+    attachmentSmokePath,
+    '# C1 附件冒烟\n\n附件测试口令：青色星光。',
+    'utf8'
+  )
+  await dropFileOnCollapsedPet(client, attachmentSmokePath)
+
+  await waitForEvaluation(
+    client,
+    `(() => ({
+      expanded: document.body.dataset.assistantOpen,
+      attachment: document.querySelector('#attachment-list .attachment-chip-name')?.textContent
+    }))()`,
+    (value) => value?.expanded === 'true' && value?.attachment === 'assistant-smoke-attachment.md',
+    10_000
+  )
+  await waitForExpandedWindow(client)
+  await evaluate(client, `document.querySelector('#attachment-list .attachment-chip-name').click()`)
+  await waitForEvaluation(
+    client,
+    `(() => ({
+      open: document.querySelector('#attachment-preview').open,
+      text: document.querySelector('#attachment-preview-content').textContent
+    }))()`,
+    (value) => value?.open === true && value?.text?.includes('青色星光'),
+    10_000
+  )
+  const previewScreenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const previewScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-attachment-preview$1')
+  await writeFile(previewScreenshotPath, Buffer.from(previewScreenshot.data, 'base64'))
+  await evaluate(client, `document.querySelector('#attachment-preview-close').click()`)
+  await submitMessage(client, '')
+  await waitForEvaluation(
+    client,
+    `(() => {
+      const text = document.querySelector('#conversation').innerText
+      return text.includes('青色星光') &&
+        !!document.querySelector('.message.user .message-attachment') &&
+        !!document.querySelector('.attachment-sources')
+    })()`,
+    (value) => value === true,
+    15_000
+  )
+  await evaluate(client, `document.querySelector('.message.user .message-attachment').click()`)
+  await waitForEvaluation(
+    client,
+    `document.querySelector('#attachment-preview-content').textContent`,
+    (value) => typeof value === 'string' && value.includes('青色星光'),
+    10_000
+  )
+  await evaluate(client, `document.querySelector('#attachment-preview-close').click()`)
+  await waitForEvaluation(
+    client,
+    `document.querySelector('#send-button').getAttribute('aria-label')`,
+    (value) => value === '发送',
+    5_000
+  )
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const attachmentScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-attachment$1')
+  await writeFile(attachmentScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+}
+
+/** 使用 CDP 向当前收起桌宠投放一个真实文件。 */
+async function dropFileOnCollapsedPet(client, filePath) {
+  const point = await evaluate(
+    client,
+    `(() => {
+      const rect = document.querySelector('#pet-root').getBoundingClientRect()
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+    })()`
+  )
+  const dragData = {
+    items: [{ mimeType: 'text/plain', data: '' }],
+    files: [filePath],
+    dragOperationsMask: 1
+  }
+  await client.send('Input.dispatchDragEvent', { type: 'dragEnter', ...point, data: dragData })
+  await client.send('Input.dispatchDragEvent', { type: 'dragOver', ...point, data: dragData })
+  await client.send('Input.dispatchDragEvent', { type: 'drop', ...point, data: dragData })
 }
 
 /** 提交会被离线后端原样回显的 Markdown，并验证安全富文本节点。 */

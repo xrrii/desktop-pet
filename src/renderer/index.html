@@ -10,7 +10,7 @@
     <title>Desktop Pet</title>
   </head>
   <body data-side="left" data-assistant-open="false" data-theme="quiet">
-    <section id="assistant-panel" class="assistant-shell" aria-label="AI 助手" hidden>
+    <section id="assistant-panel" class="assistant-shell" aria-label="AI 助手" data-assistant-drop-zone="conversation" hidden>
       <section id="conversation" class="conversation" aria-live="polite"></section>
 
       <section id="memory-view" class="memory-view" aria-label="记忆管理" hidden>
@@ -115,6 +115,7 @@
       ></div>
 
       <form id="composer" class="composer">
+        <div id="attachment-list" class="attachment-list" aria-label="待发送附件" hidden></div>
         <span id="runtime-status" class="runtime-status" data-state="starting" title="正在启动">
           <span class="status-dot" aria-hidden="true"></span>
           <span id="runtime-status-text" class="visually-hidden">正在启动</span>
@@ -132,6 +133,7 @@
         <button id="active-skill-chip" class="active-skill-chip" type="button" title="取消技能" aria-label="取消当前技能" hidden></button>
         <div class="composer-actions">
           <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">+</button>
+          <button id="attachment-button" class="icon-button" type="button" title="添加附件" aria-label="添加附件">⊕</button>
           <button id="knowledge-button" class="icon-button knowledge-button" type="button" title="知识库" aria-label="知识库" aria-pressed="false">▤</button>
           <button id="skill-button" class="icon-button skill-button" type="button" title="技能" aria-label="技能" aria-pressed="false">$</button>
           <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">◈</button>
@@ -139,9 +141,24 @@
           <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>
         </div>
       </form>
+
+      <dialog id="attachment-preview" class="attachment-preview" aria-labelledby="attachment-preview-title">
+        <header class="attachment-preview-header">
+          <div>
+            <h2 id="attachment-preview-title">附件预览</h2>
+            <small id="attachment-preview-meta"></small>
+          </div>
+          <button id="attachment-preview-close" class="icon-button" type="button" title="关闭预览" aria-label="关闭预览">×</button>
+        </header>
+        <pre id="attachment-preview-content" class="attachment-preview-content" tabindex="0"></pre>
+        <footer class="attachment-preview-footer">
+          <span id="attachment-preview-status" role="status"></span>
+          <button id="attachment-preview-more" class="secondary-button" type="button" hidden>加载更多</button>
+        </footer>
+      </dialog>
     </section>
 
-    <main id="pet-root" aria-label="Desktop pet">
+    <main id="pet-root" aria-label="Desktop pet" data-assistant-drop-zone="pet">
       <canvas id="pet-canvas" width="192" height="208"></canvas>
       <div id="pet-error" role="status" hidden></div>
     </main>

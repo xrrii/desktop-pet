@@ -1,5 +1,10 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
+  AssistantAttachmentDropResult,
+  AssistantAttachmentDropZone,
+  AssistantAttachmentPreview,
+  AssistantAttachmentPreviewInput,
+  AssistantAttachmentSummary,
   AssistantAskInput,
   AssistantAskResult,
   AssistantConversationMessage,
@@ -26,6 +31,12 @@ import type {
   PetManifestInput,
   PetSettings
 } from '../shared/pet'
+
+const attachmentStagedListeners = new Set<(result: AssistantAttachmentDropResult) => void>()
+const attachmentErrorListeners = new Set<(message: string) => void>()
+const attachmentDragListeners = new Set<
+  (state: { dropZone: AssistantAttachmentDropZone | null; active: boolean }) => void
+>()
 
 const api = {
   moveWindow: (x: number, y: number): Promise<{ x: number; y: number } | null> =>
@@ -67,6 +78,13 @@ const api = {
     ipcRenderer.invoke('assistant:set-theme', theme),
   askAssistant: (request: AssistantAskInput): Promise<AssistantAskResult> =>
     ipcRenderer.invoke('assistant:ask', request),
+  pickAssistantAttachments: (): Promise<AssistantAttachmentSummary[]> =>
+    ipcRenderer.invoke('assistant:pick-attachments'),
+  removeAssistantAttachment: (attachmentId: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:remove-attachment', attachmentId),
+  previewAssistantAttachment: (
+    input: AssistantAttachmentPreviewInput
+  ): Promise<AssistantAttachmentPreview> => ipcRenderer.invoke('assistant:preview-attachment', input),
   cancelAssistant: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke('assistant:cancel', taskId),
   resolveAssistantPermission: (input: AssistantPermissionResolution): Promise<boolean> =>
@@ -174,9 +192,96 @@ const api = {
     const listener = (): void => callback()
     ipcRenderer.on('assistant:open-memory', listener)
     return () => ipcRenderer.removeListener('assistant:open-memory', listener)
+  },
+  onAssistantAttachmentsStaged: (
+    callback: (result: AssistantAttachmentDropResult) => void
+  ): (() => void) => {
+    attachmentStagedListeners.add(callback)
+    return () => attachmentStagedListeners.delete(callback)
+  },
+  onAssistantAttachmentStageError: (callback: (message: string) => void): (() => void) => {
+    attachmentErrorListeners.add(callback)
+    return () => attachmentErrorListeners.delete(callback)
+  },
+  onAssistantAttachmentDragState: (
+    callback: (state: { dropZone: AssistantAttachmentDropZone | null; active: boolean }) => void
+  ): (() => void) => {
+    attachmentDragListeners.add(callback)
+    return () => attachmentDragListeners.delete(callback)
   }
 }
 
 contextBridge.exposeInMainWorld('desktopPet', api)
+
+/** 安装拖拽拦截器；真实路径只直接提交给 Main，不进入页面上下文。 */
+function installAttachmentDropHandlers(): void {
+  window.addEventListener('dragover', (event) => {
+    const dropZone = findAttachmentDropZone(event.target)
+    if (!dropZone || !event.dataTransfer?.types.includes('Files')) {
+      return
+    }
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    emitAttachmentDragState(dropZone, true)
+  })
+  window.addEventListener('dragleave', (event) => {
+    if (event.relatedTarget === null) {
+      emitAttachmentDragState(null, false)
+    }
+  })
+  window.addEventListener('drop', (event) => {
+    const dropZone = findAttachmentDropZone(event.target)
+    if (!dropZone || !event.dataTransfer) {
+      return
+    }
+    event.preventDefault()
+    emitAttachmentDragState(null, false)
+    const paths = [...event.dataTransfer.files]
+      .map((file) => webUtils.getPathForFile(file))
+      .filter((path) => path.length > 0)
+    if (paths.length === 0) {
+      return
+    }
+    void ipcRenderer
+      .invoke('assistant:stage-dropped-files', paths, dropZone)
+      .then((result: AssistantAttachmentDropResult) => {
+        attachmentStagedListeners.forEach((listener) => listener(result))
+      })
+      .catch((error: unknown) => {
+        const message = normalizeAttachmentStageError(error)
+        attachmentErrorListeners.forEach((listener) => listener(message))
+      })
+  })
+}
+
+/** 根据页面声明的投放区解析桌宠或对话区，不读取页面提供的路径。 */
+function findAttachmentDropZone(target: EventTarget | null): AssistantAttachmentDropZone | null {
+  if (!(target instanceof Element)) {
+    return null
+  }
+  const value = target.closest<HTMLElement>('[data-assistant-drop-zone]')?.dataset.assistantDropZone
+  return value === 'pet' || value === 'conversation' ? value : null
+}
+
+/** 向 Renderer 广播不含文件路径的拖拽视觉状态。 */
+function emitAttachmentDragState(
+  dropZone: AssistantAttachmentDropZone | null,
+  active: boolean
+): void {
+  attachmentDragListeners.forEach((listener) => listener({ dropZone, active }))
+}
+
+/** 去除 Electron IPC 包装前缀，只向 Renderer 返回 Main 生成的脱敏业务错误。 */
+function normalizeAttachmentStageError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  const matched = message.match(/^Error invoking remote method '[^']+': (?:TypeError|Error): (.+)$/)
+  return matched?.[1] || message || '附件添加失败。'
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', installAttachmentDropHandlers, { once: true })
+} else {
+  installAttachmentDropHandlers()
+}
 
 export type DesktopPetApi = typeof api

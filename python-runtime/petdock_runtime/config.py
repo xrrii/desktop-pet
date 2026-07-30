@@ -30,6 +30,7 @@ class RuntimeConfig:
     embedding_base_url: str | None = None
     embedding_model: str | None = None
     embedding_dimensions: int | None = None
+    attachment_root: str = "attachments"
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -56,6 +57,9 @@ class RuntimeConfig:
         )
         skills_root = os.environ.get("PETDOCK_SKILLS_ROOT", "").strip() or os.path.join(
             os.getcwd(), "skills", "packages"
+        )
+        attachment_root = os.environ.get("PETDOCK_ATTACHMENT_ROOT", "").strip() or os.path.join(
+            os.getcwd(), "assistant", "attachments"
         )
         embedding_provider = os.environ.get("PETDOCK_EMBEDDING_PROVIDER", "hash").strip().lower()
         if embedding_provider not in {"hash", "local", "online"}:
@@ -102,6 +106,7 @@ class RuntimeConfig:
             chroma_path=chroma_path,
             skills_db_path=skills_db_path,
             skills_root=skills_root,
+            attachment_root=attachment_root,
             embedding_provider=embedding_provider,  # type: ignore[arg-type]
             embedding_model_dir=embedding_model_dir,
             embedding_descriptor_json=embedding_descriptor_json,

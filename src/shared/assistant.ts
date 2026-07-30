@@ -45,10 +45,59 @@ export interface AssistantAskInput {
   input: string
   conversationId: string
   skillId?: string
+  attachmentIds?: string[]
 }
 
 export interface AssistantAskResult {
   taskId: string
+}
+
+export type AssistantAttachmentStatus = 'staging' | 'parsing' | 'ready' | 'error'
+export type AssistantAttachmentDropZone = 'pet' | 'conversation'
+
+export interface AssistantAttachmentSummary {
+  id: string
+  conversationId: string | null
+  name: string
+  extension: string
+  detectedMime: string
+  sizeBytes: number
+  status: AssistantAttachmentStatus
+  parserId: string | null
+  warning: string | null
+  error: string | null
+}
+
+export interface AssistantAttachmentDropResult {
+  dropZone: AssistantAttachmentDropZone
+  attachments: AssistantAttachmentSummary[]
+}
+
+export interface AssistantAttachmentMessageRef {
+  id: string
+  name: string
+  detectedMime: string
+  sizeBytes: number
+}
+
+export interface AssistantAttachmentPreviewInput {
+  attachmentId: string
+  conversationId: string
+  offset?: number
+}
+
+export interface AssistantAttachmentPreview {
+  id: string
+  name: string
+  detectedMime: string
+  sizeBytes: number
+  status: AssistantAttachmentStatus
+  error: string | null
+  content: string
+  offset: number
+  nextOffset: number | null
+  totalCharacters: number
+  truncated: boolean
 }
 
 export type KnowledgeLibraryStatus = 'pending' | 'indexing' | 'paused' | 'ready' | 'error'
@@ -149,6 +198,7 @@ export interface AssistantConversationMessage {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  attachments?: AssistantAttachmentMessageRef[]
 }
 
 export interface AssistantMemorySummary {
@@ -212,6 +262,7 @@ export interface AssistantRequest {
     timezone: string
   }
   knowledgeLibraryIds: string[]
+  attachmentIds: string[]
   skillInvocation?: {
     skillId: string
   }
@@ -289,6 +340,7 @@ export interface AssistantToolResultRequest {
 export type AssistantEvent =
   | AssistantMessageDeltaEvent
   | AssistantRetrievalSourcesEvent
+  | AssistantAttachmentSourcesEvent
   | AssistantSkillStartedEvent
   | AssistantSkillCompletedEvent
   | AssistantSkillErrorEvent
@@ -342,6 +394,18 @@ export interface AssistantRetrievalSourcesEvent extends AssistantEventBase {
   type: 'retrieval_sources'
   payload: {
     sources: AssistantRetrievalSource[]
+  }
+}
+
+export interface AssistantAttachmentSourcesEvent extends AssistantEventBase {
+  type: 'attachment_sources'
+  payload: {
+    sources: Array<{
+      id: string
+      name: string
+      excerpt: string
+      truncated: boolean
+    }>
   }
 }
 

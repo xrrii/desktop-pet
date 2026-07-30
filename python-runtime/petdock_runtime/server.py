@@ -8,6 +8,7 @@ import httpx
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
+from .attachment_store import AttachmentStore
 from .backends import create_backend
 from .config import RuntimeConfig
 from .embeddings import LocalHashEmbedding, create_embedding_provider
@@ -21,6 +22,8 @@ from .skill_manifest import SkillManifestError
 from .skill_installer import SkillInstaller
 from .protocol import (
     AssistantRequest,
+    AttachmentRegisterRequest,
+    AttachmentPreviewRequest,
     MemoryClearRequest,
     MemoryCandidateResolutionRequest,
     MemoryItemRequest,
@@ -40,6 +43,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     """创建带本地 SQLite、聊天、工具和记忆接口的 FastAPI 应用。"""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     store = MemoryStore(config.memory_db_path)
+    attachments = AttachmentStore(config.memory_db_path, config.attachment_root)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
     embedding = create_embedding_provider(config)
     fallback_vectors = (
@@ -56,7 +60,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     skills = SkillRegistry(config.skills_root, skill_store)
     skill_installer = SkillInstaller(config.skills_root, skills)
     service = AssistantService(
-        create_backend(config, store, knowledge, skills),
+        create_backend(config, store, knowledge, skills, attachments),
         create_memory_extractor(config, store),
     )
 
@@ -90,6 +94,51 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
         return {"taskId": request.taskId}
+
+    @app.post("/v1/attachments")
+    async def attachment_register(
+        request: AttachmentRegisterRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """登记 Main 已复制到受控目录的附件并执行 UTF-8 解析。"""
+        authorize(authorization)
+        try:
+            return {"attachments": attachments.register_many(request.model_dump()["attachments"])}
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except OSError as error:
+            raise HTTPException(status_code=400, detail="附件读取失败。") from error
+
+    @app.delete("/v1/attachments/{attachment_id}")
+    async def attachment_delete(
+        attachment_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """只删除尚未发送的草稿附件。"""
+        authorize(authorization)
+        if len(attachment_id) != 32 or any(character not in "0123456789abcdef" for character in attachment_id):
+            raise HTTPException(status_code=400, detail="Invalid attachment id")
+        return {"deleted": attachments.delete_draft(attachment_id)}
+
+    @app.post("/v1/attachments/{attachment_id}/preview")
+    async def attachment_preview(
+        attachment_id: str,
+        request: AttachmentPreviewRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回草稿或指定会话附件的分页文本预览。"""
+        authorize(authorization)
+        if len(attachment_id) != 32 or any(character not in "0123456789abcdef" for character in attachment_id):
+            raise HTTPException(status_code=400, detail="Invalid attachment id")
+        try:
+            return attachments.preview(
+                attachment_id,
+                request.conversationId,
+                request.offset,
+                request.limit,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
 
     @app.get("/v1/events/{task_id}")
     async def events(
@@ -171,6 +220,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     ) -> dict[str, bool]:
         """删除一条记忆、会话或常用项。"""
         authorize(authorization)
+        if request.kind == "conversation":
+            attachments.delete_conversation(request.id)
         return {"deleted": store.delete_item(request.kind, request.id)}
 
     @app.post("/v1/memory/candidate/{candidate_id}")
@@ -192,6 +243,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     ) -> dict[str, bool]:
         """按范围清理会话、长期记忆或工具日志。"""
         authorize(authorization)
+        if request.scope in {"all", "conversations"}:
+            attachments.clear_conversations()
         store.clear(request.scope)
         return {"cleared": True}
 
@@ -362,6 +415,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         authorize(authorization)
         await knowledge.close()
         skills.close()
+        attachments.cleanup_drafts()
+        attachments.close()
         store.close()
         if request_shutdown:
             request_shutdown()

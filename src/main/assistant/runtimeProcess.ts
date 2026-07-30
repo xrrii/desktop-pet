@@ -97,6 +97,7 @@ export class AssistantRuntimeProcess {
       PETDOCK_CHROMA_PATH: join(app.getPath('userData'), 'rag', 'chroma'),
       PETDOCK_SKILLS_DB_PATH: join(app.getPath('userData'), 'skills.db'),
       PETDOCK_SKILLS_ROOT: join(app.getPath('userData'), 'skills', 'packages'),
+      PETDOCK_ATTACHMENT_ROOT: join(app.getPath('userData'), 'assistant', 'attachments'),
       PYTHONUNBUFFERED: '1'
     })
     const child = spawn(invocation.command, invocation.args, {

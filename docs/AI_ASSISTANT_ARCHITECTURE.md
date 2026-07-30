@@ -713,4 +713,4 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 Electron Main、Preload、Renderer 和 Python Runtime 的职责边界保持稳定，核心功能不需要为后续增强推翻重做。
 
-下一项已确定的方案基线是 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`，范围包括附件对话、Artifact 文件输出、联网搜索、复杂文档和多文件受控修改。当前状态为 Not Started；文档中的 C1 至 C5 是依赖顺序，不代表已经安排具体开发日期。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。
+后续增强以 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md` 为方案基线，范围包括附件对话、Artifact 文件输出、联网搜索、复杂文档和多文件受控修改。当前 C1 与 C1.1 已完成，C2 至 C5 为 Not Started；附件暂存、文本预览和历史恢复已验证现有 Main、Preload、Renderer 和 Runtime 边界可直接承载受控附件，不需要改写核心架构。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。

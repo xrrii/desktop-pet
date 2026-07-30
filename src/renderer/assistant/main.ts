@@ -1,5 +1,7 @@
 import './styles.css'
 import type {
+  AssistantAttachmentMessageRef,
+  AssistantAttachmentSummary,
   AssistantEmbeddingOnlineInput,
   AssistantEmbeddingModelSnapshot,
   AssistantEmbeddingSnapshot,
@@ -29,8 +31,16 @@ type PendingEmbeddingAction =
   | { kind: 'switch'; modelId: string | null }
   | { kind: 'configure-online'; input: AssistantEmbeddingOnlineInput }
 
+interface AttachmentPreviewState {
+  attachmentId: string
+  conversationId: string
+  nextOffset: number | null
+  loadedCharacters: number
+}
+
 export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): void {
   const panel = requireElement<HTMLElement>('#assistant-panel')
+  const petRoot = requireElement<HTMLElement>('#pet-root')
   const conversation = requireElement<HTMLElement>('#conversation')
   const memoryView = requireElement<HTMLElement>('#memory-view')
   const knowledgeView = requireElement<HTMLElement>('#knowledge-view')
@@ -80,6 +90,15 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const skillButton = requireElement<HTMLButtonElement>('#skill-button')
   const activeSkillChip = requireElement<HTMLButtonElement>('#active-skill-chip')
   const composer = requireElement<HTMLFormElement>('#composer')
+  const attachmentList = requireElement<HTMLElement>('#attachment-list')
+  const attachmentButton = requireElement<HTMLButtonElement>('#attachment-button')
+  const attachmentPreview = requireElement<HTMLDialogElement>('#attachment-preview')
+  const attachmentPreviewTitle = requireElement<HTMLElement>('#attachment-preview-title')
+  const attachmentPreviewMeta = requireElement<HTMLElement>('#attachment-preview-meta')
+  const attachmentPreviewContent = requireElement<HTMLElement>('#attachment-preview-content')
+  const attachmentPreviewStatus = requireElement<HTMLElement>('#attachment-preview-status')
+  const attachmentPreviewClose = requireElement<HTMLButtonElement>('#attachment-preview-close')
+  const attachmentPreviewMore = requireElement<HTMLButtonElement>('#attachment-preview-more')
   const input = requireElement<HTMLTextAreaElement>('#message-input')
   const sendButton = requireElement<HTMLButtonElement>('#send-button')
   const newConversationButton = requireElement<HTMLButtonElement>('#new-conversation')
@@ -120,11 +139,21 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let pendingClearScope: MemoryClearScope | null = null
   let pendingDelete: { kind: MemoryItemKind; id: string; title: string } | null = null
   const permissionCards = new Map<string, HTMLElement>()
+  let pendingAttachments: AssistantAttachmentSummary[] = []
+  let attachmentPreviewState: AttachmentPreviewState | null = null
 
   window.desktopPet.onAssistantEvent(handleEvent)
   window.desktopPet.onAssistantStatus(renderRuntimeStatus)
   window.desktopPet.onAssistantLayout(applyLayout)
   window.desktopPet.onAssistantTheme(applyTheme)
+  window.desktopPet.onAssistantAttachmentsStaged((result) => {
+    addPendingAttachments(result.attachments)
+  })
+  window.desktopPet.onAssistantAttachmentStageError(showError)
+  window.desktopPet.onAssistantAttachmentDragState(({ dropZone, active }) => {
+    panel.classList.toggle('is-attachment-drop-target', active && dropZone === 'conversation')
+    petRoot.classList.toggle('is-attachment-drop-target', active && dropZone === 'pet')
+  })
   window.desktopPet.onAssistantOpenMemory(() => {
     if (!busy) {
       if (memoryMode) {
@@ -160,6 +189,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
 
   document.addEventListener('keydown', (event) => {
+    if (attachmentPreview.open) {
+      return
+    }
     if (event.key === 'Escape' && expanded) {
       closeAssistant()
     }
@@ -194,6 +226,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (busy) {
       return
     }
+    void clearPendingAttachments()
+    closeAttachmentPreview()
     conversationId = crypto.randomUUID()
     activeTaskId = null
     activeAssistantMessage = null
@@ -207,6 +241,26 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
 
   closeButton.addEventListener('click', closeAssistant)
+
+  attachmentButton.addEventListener('click', () => {
+    if (busy) {
+      return
+    }
+    attachmentButton.disabled = true
+    void window.desktopPet
+      .pickAssistantAttachments()
+      .then(addPendingAttachments)
+      .catch(showError)
+      .finally(() => {
+        attachmentButton.disabled = false
+      })
+  })
+
+  attachmentPreviewClose.addEventListener('click', closeAttachmentPreview)
+  attachmentPreviewMore.addEventListener('click', () => void loadNextAttachmentPreviewPage())
+  attachmentPreview.addEventListener('close', () => {
+    attachmentPreviewState = null
+  })
 
   memoryButton.addEventListener('click', () => {
     if (!busy) {
@@ -334,13 +388,18 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       return
     }
     const message = input.value.trim()
-    if (!message) {
+    if (pendingAttachments.some((item) => item.status !== 'ready')) {
+      showError('请先移除解析失败的附件。')
+      return
+    }
+    const readyAttachments = pendingAttachments.filter((item) => item.status === 'ready')
+    if (!message && readyAttachments.length === 0) {
       return
     }
 
     clearError()
     const skillId = selectedSkillId
-    addMessage('user', message)
+    addMessage('user', message, readyAttachments)
     resetAssistantMarkdownRendering()
     activeAssistantMessage = addMessage('assistant', '')
     activeAssistantMessage.classList.add('streaming')
@@ -354,9 +413,14 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       const result = await window.desktopPet.askAssistant({
         input: message,
         conversationId,
+        attachmentIds: readyAttachments.map((item) => item.id),
         ...(skillId ? { skillId } : {})
       })
       activeTaskId ??= result.taskId
+      pendingAttachments = pendingAttachments.filter(
+        (item) => !readyAttachments.some((sent) => sent.id === item.id)
+      )
+      renderPendingAttachments()
       clearSelectedSkill()
     } catch (error) {
       if (activeAssistantMessage) {
@@ -1295,6 +1359,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   async function selectConversation(id: string): Promise<void> {
+    await clearPendingAttachments()
+    closeAttachmentPreview()
     conversationId = id
     closeMemoryView()
     conversation.replaceChildren()
@@ -1304,7 +1370,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     lastSequence = 0
     try {
       const messages = await window.desktopPet.getAssistantConversationMessages(id)
-      messages.forEach((message) => addMessage(message.role, message.content))
+      messages.forEach((message) => addMessage(message.role, message.content, message.attachments))
     } catch (error) {
       showError(error)
     }
@@ -1397,6 +1463,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
     if (event.type === 'retrieval_sources') {
       renderRetrievalSources(event.payload.sources)
+      return
+    }
+
+    if (event.type === 'attachment_sources') {
+      renderAttachmentSources(event.payload.sources)
       return
     }
 
@@ -1564,7 +1635,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     scrollConversation()
   }
 
-  function addMessage(role: 'user' | 'assistant', content: string): HTMLElement {
+  function addMessage(
+    role: 'user' | 'assistant',
+    content: string,
+    attachments: AssistantAttachmentMessageRef[] = []
+  ): HTMLElement {
     const article = document.createElement('article')
     article.className = `message ${role}`
     const body = document.createElement('div')
@@ -1572,7 +1647,14 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (role === 'assistant') {
       renderAssistantMarkdownInto(body, content)
     } else {
-      body.textContent = content
+      if (content) {
+        const text = document.createElement('div')
+        text.textContent = content
+        body.append(text)
+      }
+      if (attachments.length > 0) {
+        body.append(createMessageAttachmentList(attachments))
+      }
     }
     article.append(body)
     conversation.append(article)
@@ -1661,6 +1743,223 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     scrollConversation()
   }
 
+  /** 展示本轮实际进入模型上下文的附件来源和截断状态。 */
+  function renderAttachmentSources(
+    sources: Extract<AssistantEvent, { type: 'attachment_sources' }>['payload']['sources']
+  ): void {
+    const article = activeAssistantMessage?.closest('article')
+    if (!article || sources.length === 0) {
+      return
+    }
+    article.querySelector('.attachment-sources')?.remove()
+    const details = document.createElement('details')
+    details.className = 'retrieval-sources attachment-sources'
+    const summary = document.createElement('summary')
+    summary.textContent = `已读取附件 ${sources.length}`
+    details.append(summary)
+    sources.forEach((source) => {
+      const item = document.createElement('div')
+      item.className = 'retrieval-source attachment-source'
+      const title = document.createElement('strong')
+      title.textContent = source.name + (source.truncated ? '（内容已截断）' : '')
+      const excerpt = document.createElement('p')
+      excerpt.textContent = source.excerpt || '附件无可展示摘要。'
+      item.append(title, excerpt)
+      details.append(item)
+    })
+    article.append(details)
+    scrollConversation()
+  }
+
+  /** 合并新暂存附件并限制当前草稿最多十个，多余项立即回收。 */
+  function addPendingAttachments(attachments: AssistantAttachmentSummary[]): void {
+    clearError()
+    const existingIds = new Set(pendingAttachments.map((item) => item.id))
+    const unique = attachments.filter((item) => !existingIds.has(item.id))
+    const accepted = unique.slice(0, Math.max(0, 10 - pendingAttachments.length))
+    const rejected = unique.slice(accepted.length)
+    pendingAttachments.push(...accepted)
+    renderPendingAttachments()
+    rejected.forEach((item) => {
+      void window.desktopPet.removeAssistantAttachment(item.id).catch(() => undefined)
+    })
+    if (rejected.length > 0) {
+      showError('每轮最多添加 10 个附件。')
+    }
+    if (accepted.some((item) => item.status === 'error')) {
+      showError('部分附件不是有效的 UTF-8 文本，发送前请移除。')
+    }
+    if (accepted.length > 0) {
+      input.focus()
+    }
+  }
+
+  /** 渲染待发送附件及解析状态，文件名过长时由 CSS 省略。 */
+  function renderPendingAttachments(): void {
+    attachmentList.replaceChildren()
+    pendingAttachments.forEach((attachment) => {
+      const chip = document.createElement('div')
+      chip.className = 'attachment-chip'
+      chip.dataset.status = attachment.status
+      chip.title = attachment.error
+        ? `${attachment.name}：${attachmentErrorText(attachment.error)}`
+        : attachment.name
+      const name = document.createElement('button')
+      name.type = 'button'
+      name.className = 'attachment-chip-name attachment-preview-button'
+      name.title = `预览 ${attachment.name}`
+      name.textContent = attachment.name
+      name.addEventListener('click', () => void openAttachmentPreview(attachment.id, conversationId))
+      const size = document.createElement('small')
+      size.textContent = attachment.status === 'error'
+        ? '解析失败'
+        : formatAttachmentSize(attachment.sizeBytes)
+      const remove = document.createElement('button')
+      remove.type = 'button'
+      remove.className = 'attachment-remove'
+      remove.title = '移除附件'
+      remove.setAttribute('aria-label', `移除附件 ${attachment.name}`)
+      remove.textContent = '×'
+      remove.disabled = busy
+      remove.addEventListener('click', () => void removePendingAttachment(attachment.id))
+      chip.append(name, size, remove)
+      attachmentList.append(chip)
+    })
+    attachmentList.hidden = pendingAttachments.length === 0
+  }
+
+  /** 删除单个未发送草稿，Runtime 拒绝删除已绑定历史附件。 */
+  async function removePendingAttachment(attachmentId: string): Promise<void> {
+    try {
+      await window.desktopPet.removeAssistantAttachment(attachmentId)
+      pendingAttachments = pendingAttachments.filter((item) => item.id !== attachmentId)
+      renderPendingAttachments()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 回收当前对话框内全部未发送附件。 */
+  async function clearPendingAttachments(): Promise<void> {
+    const drafts = pendingAttachments
+    pendingAttachments = []
+    renderPendingAttachments()
+    await Promise.allSettled(
+      drafts.map((item) => window.desktopPet.removeAssistantAttachment(item.id))
+    )
+  }
+
+  /** 创建历史用户消息中的只读附件标签。 */
+  function createMessageAttachmentList(attachments: AssistantAttachmentMessageRef[]): HTMLElement {
+    const list = document.createElement('div')
+    list.className = 'message-attachments'
+    attachments.forEach((attachment) => {
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = 'message-attachment attachment-preview-button'
+      item.title = `预览 ${attachment.name}`
+      item.textContent = `${attachment.name} · ${formatAttachmentSize(attachment.sizeBytes)}`
+      item.addEventListener('click', () => void openAttachmentPreview(attachment.id, conversationId))
+      list.append(item)
+    })
+    return list
+  }
+
+  /** 把字节数格式化为附件标签使用的短文本。 */
+  function formatAttachmentSize(sizeBytes: number): string {
+    if (sizeBytes < 1024) {
+      return `${sizeBytes} B`
+    }
+    if (sizeBytes < 1024 * 1024) {
+      return `${Math.ceil(sizeBytes / 1024)} KB`
+    }
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  /** 把 Runtime 内部解析码转换为用户可理解的错误。 */
+  function attachmentErrorText(error: string): string {
+    return error === 'attachment_decode_failed' ? '文件不是有效的 UTF-8 文本' : error
+  }
+
+  /** 打开附件预览并加载第一页，真实路径和完整数据库记录不会进入 Renderer。 */
+  async function openAttachmentPreview(
+    attachmentId: string,
+    ownerConversationId: string
+  ): Promise<void> {
+    attachmentPreviewState = {
+      attachmentId,
+      conversationId: ownerConversationId,
+      nextOffset: 0,
+      loadedCharacters: 0
+    }
+    attachmentPreviewTitle.textContent = '附件预览'
+    attachmentPreviewMeta.textContent = ''
+    attachmentPreviewContent.textContent = ''
+    attachmentPreviewStatus.textContent = '正在加载...'
+    attachmentPreviewMore.hidden = true
+    if (!attachmentPreview.open) {
+      attachmentPreview.showModal()
+    }
+    await loadNextAttachmentPreviewPage()
+  }
+
+  /** 按 Runtime 返回的字符偏移继续追加文本，避免一次把大文件放入页面。 */
+  async function loadNextAttachmentPreviewPage(): Promise<void> {
+    const state = attachmentPreviewState
+    if (!state || state.nextOffset === null) {
+      return
+    }
+    const requestedOffset = state.nextOffset
+    attachmentPreviewMore.disabled = true
+    attachmentPreviewStatus.textContent = requestedOffset === 0 ? '正在加载...' : '正在加载更多...'
+    try {
+      const preview = await window.desktopPet.previewAssistantAttachment({
+        attachmentId: state.attachmentId,
+        conversationId: state.conversationId,
+        offset: requestedOffset
+      })
+      if (attachmentPreviewState !== state || !attachmentPreview.open) {
+        return
+      }
+      attachmentPreviewTitle.textContent = preview.name
+      attachmentPreviewMeta.textContent = `${formatAttachmentSize(preview.sizeBytes)} · ${preview.detectedMime}`
+      if (preview.status === 'error') {
+        attachmentPreviewContent.textContent = attachmentErrorText(preview.error || '附件解析失败。')
+        attachmentPreviewStatus.textContent = '无法预览'
+        state.nextOffset = null
+        attachmentPreviewMore.hidden = true
+        return
+      }
+      if (requestedOffset === 0) {
+        attachmentPreviewContent.textContent = preview.content || '文件没有可预览文本。'
+      } else {
+        attachmentPreviewContent.textContent += preview.content
+      }
+      state.nextOffset = preview.nextOffset
+      state.loadedCharacters = preview.nextOffset ?? preview.totalCharacters
+      attachmentPreviewStatus.textContent = preview.truncated
+        ? `已加载 ${state.loadedCharacters} / ${preview.totalCharacters} 字符`
+        : `共 ${preview.totalCharacters} 字符`
+      attachmentPreviewMore.hidden = !preview.truncated
+    } catch (error) {
+      if (attachmentPreviewState === state) {
+        attachmentPreviewStatus.textContent = '预览加载失败'
+        attachmentPreviewContent.textContent = error instanceof Error ? error.message : String(error)
+        attachmentPreviewMore.hidden = true
+      }
+    } finally {
+      attachmentPreviewMore.disabled = false
+    }
+  }
+
+  /** 关闭附件预览并丢弃分页状态。 */
+  function closeAttachmentPreview(): void {
+    attachmentPreviewState = null
+    if (attachmentPreview.open) {
+      attachmentPreview.close()
+    }
+  }
+
   function setBusy(value: boolean): void {
     busy = value
     input.disabled = value
@@ -1673,6 +1972,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     knowledgeButton.disabled = value
     memoryButton.disabled = value
     skillButton.disabled = value
+    attachmentButton.disabled = value
+    renderPendingAttachments()
   }
 
   /** 根据输入框末尾的 `~` 或 `$` 触发符刷新本地命令列表。 */
@@ -1892,7 +2193,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (skillMode) {
       closeSkillView()
     }
+    closeAttachmentPreview()
     closing = true
+    void clearPendingAttachments()
     composer.classList.add('is-closing')
     window.setTimeout(() => {
       void window.desktopPet.closeAssistant().catch(showError)

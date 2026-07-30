@@ -4,7 +4,13 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-from .backends import AssistantBackend, RetrievalContext, SkillLifecycleEvent, ToolCallRequest
+from .backends import (
+    AssistantBackend,
+    AttachmentContext,
+    RetrievalContext,
+    SkillLifecycleEvent,
+    ToolCallRequest,
+)
 from .memory_extractor import MemoryExtractor
 from .protocol import AssistantRequest, ToolResultRequest
 
@@ -111,6 +117,9 @@ class AssistantService:
                             "retrieval_sources",
                             {"sources": [source.public() for source in output.sources]},
                         )
+                        continue
+                    if isinstance(output, AttachmentContext):
+                        await emit("attachment_sources", {"sources": output.sources})
                         continue
                     if isinstance(output, SkillLifecycleEvent):
                         await emit(output.type, output.payload)

@@ -175,21 +175,34 @@ class MemoryStore:
             result.append({"role": row["role"], "content": row["content"], "metadata": metadata})
         return result
 
-    def conversation_messages(self, conversation_id: str) -> list[dict[str, str]]:
-        """返回用于恢复聊天界面的用户/助手消息，不暴露工具参数。"""
+    def conversation_messages(self, conversation_id: str) -> list[dict[str, Any]]:
+        """返回用于恢复聊天界面的用户/助手消息及脱敏附件摘要。"""
         rows = self._connection.execute(
             """
-            SELECT role, content, created_at FROM messages
+            SELECT role, content, metadata_json, created_at FROM messages
             WHERE conversation_id=? AND role IN ('user', 'assistant')
             ORDER BY id ASC LIMIT 200
             """,
             (conversation_id,),
         ).fetchall()
-        return [
-            {"role": row["role"], "content": row["content"], "createdAt": row["created_at"]}
-            for row in rows
-            if row["content"]
-        ]
+        messages: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                metadata = json.loads(row["metadata_json"])
+            except json.JSONDecodeError:
+                metadata = {}
+            attachments = metadata.get("attachments", []) if isinstance(metadata, dict) else []
+            if not row["content"] and not attachments:
+                continue
+            message: dict[str, Any] = {
+                "role": row["role"],
+                "content": row["content"],
+                "createdAt": row["created_at"],
+            }
+            if isinstance(attachments, list) and attachments:
+                message["attachments"] = attachments
+            messages.append(message)
+        return messages
 
     def remember_preference(self, value: str, source: str = "user") -> bool:
         """保存一条已确认偏好；敏感或空内容会被拒绝。"""

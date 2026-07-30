@@ -1,6 +1,10 @@
 import { app } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 import type {
+  AssistantAttachmentSummary,
+  AssistantAttachmentPreview,
+  AssistantAttachmentPreviewInput,
   AssistantAskInput,
   AssistantAskResult,
   AssistantConversationMessage,
@@ -20,12 +24,17 @@ import type {
 } from '../../shared/assistant'
 import { ASSISTANT_PROTOCOL_VERSION } from '../../shared/assistant'
 import { loadSettings } from '../store'
-import { logError } from '../logger'
+import { logError, logInfo } from '../logger'
 import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess } from './runtimeProcess'
 import { EmbeddingModelManager } from './embeddingModelManager'
 import { AssistantToolHost } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
+import {
+  AssistantAttachmentManager,
+  isAttachmentSummary,
+  type AssistantAttachmentRegistration
+} from './attachmentManager'
 
 const PERMISSION_TIMEOUT_MS = 60_000
 
@@ -51,6 +60,7 @@ export class AssistantManager {
   private readonly toolHost = new AssistantToolHost()
   private readonly activeTasks = new Map<string, ActiveTask>()
   private readonly pendingPermissions = new Map<string, PendingPermission>()
+  private readonly draftAttachments = new Map<string, AssistantAttachmentSummary>()
 
   constructor(
     onStatus: (status: AssistantRuntimeStatus) => void,
@@ -70,9 +80,87 @@ export class AssistantManager {
     await this.runtime.start()
   }
 
+  /** 暂存并解析用户明确添加的文件，任何失败都会清理本批次受控副本。 */
+  async stageAttachments(paths: string[]): Promise<AssistantAttachmentSummary[]> {
+    const client = await this.runtime.start()
+    const manager = this.createAttachmentManager()
+    let registrations: AssistantAttachmentRegistration[]
+    try {
+      registrations = await manager.stage(paths)
+    } catch (error) {
+      if (isNodeFileSystemError(error)) {
+        logInfo('assistant attachment staging failed', { code: error.code || 'UNKNOWN' })
+        throw new Error('附件暂存失败，请确认文件仍然存在且可读取。')
+      }
+      throw error
+    }
+    try {
+      const attachments = await client.registerAttachments(registrations)
+      if (
+        attachments.length !== registrations.length ||
+        !attachments.every(isAttachmentSummary) ||
+        attachments.some((item, index) => item.id !== registrations[index].id)
+      ) {
+        throw new Error('Runtime 返回了无效的附件登记结果。')
+      }
+      logInfo('assistant attachments staged', {
+        count: attachments.length,
+        ready: attachments.filter((item) => item.status === 'ready').length
+      })
+      attachments.forEach((item) => this.draftAttachments.set(item.id, item))
+      return attachments
+    } catch (error) {
+      await Promise.allSettled(
+        registrations.map((item) => client.deleteDraftAttachment(item.id))
+      )
+      await manager.rollback(registrations)
+      throw error
+    }
+  }
+
+  /** 删除用户尚未发送的附件草稿。 */
+  async removeDraftAttachment(attachmentId: string): Promise<boolean> {
+    validateAttachmentId(attachmentId)
+    if (!this.draftAttachments.has(attachmentId)) {
+      return false
+    }
+    const deleted = await (await this.runtime.start()).deleteDraftAttachment(attachmentId)
+    if (deleted) {
+      this.draftAttachments.delete(attachmentId)
+    }
+    return deleted
+  }
+
+  /** 获取草稿或会话附件的分页文本预览，Renderer 无法指定文件路径。 */
+  async previewAttachment(input: AssistantAttachmentPreviewInput): Promise<AssistantAttachmentPreview> {
+    if (!input || typeof input !== 'object') {
+      throw new TypeError('附件预览请求无效。')
+    }
+    validateAttachmentId(input.attachmentId)
+    const offset = input.offset === undefined ? 0 : input.offset
+    if (!Number.isInteger(offset) || offset < 0 || offset > 10_000_000) {
+      throw new TypeError('附件预览位置无效。')
+    }
+    const conversationId = this.draftAttachments.has(input.attachmentId)
+      ? null
+      : validateConversationId(input.conversationId)
+    return (await this.runtime.start()).previewAttachment(
+      input.attachmentId,
+      conversationId,
+      offset
+    )
+  }
+
   /** 创建聊天任务，并把 Runtime 与 Main 产生的事件统一编排后发送给 Renderer。 */
   async ask(input: AssistantAskInput): Promise<AssistantAskResult> {
-    const message = validateMessage(input.input)
+    const attachmentIds = validateAttachmentIds(input.attachmentIds)
+    attachmentIds.forEach((attachmentId) => {
+      const attachment = this.draftAttachments.get(attachmentId)
+      if (!attachment || attachment.status !== 'ready') {
+        throw new TypeError('附件未暂存、解析未完成或已被发送。')
+      }
+    })
+    const message = validateMessage(input.input, attachmentIds.length > 0)
     const conversationId = validateConversationId(input.conversationId)
     const knowledgeLibraryIds = validateKnowledgeLibraryIds(loadSettings().assistantKnowledgeLibraryIds)
     const taskId = randomUUID()
@@ -89,6 +177,7 @@ export class AssistantManager {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
       },
       knowledgeLibraryIds,
+      attachmentIds,
       ...(skillId ? { skillInvocation: { skillId } } : {})
     }
     const client = await this.runtime.start()
@@ -100,6 +189,7 @@ export class AssistantManager {
     this.activeTasks.set(taskId, state)
     try {
       await client.createTask(request)
+      attachmentIds.forEach((attachmentId) => this.draftAttachments.delete(attachmentId))
     } catch (error) {
       this.activeTasks.delete(taskId)
       throw error
@@ -202,6 +292,7 @@ export class AssistantManager {
       this.clearPendingPermissions(taskId)
     }
     this.activeTasks.clear()
+    this.draftAttachments.clear()
     await this.runtime.stop()
   }
 
@@ -560,17 +651,46 @@ export class AssistantManager {
       .then((client) => client.recordToolLog(entry))
       .catch((error: unknown) => logError('assistant memory tool log failed', error))
   }
+
+  /** 按需创建附件暂存器，确保 app userData 已在 Electron Ready 后解析。 */
+  private createAttachmentManager(): AssistantAttachmentManager {
+    return new AssistantAttachmentManager(join(app.getPath('userData'), 'assistant', 'attachments'))
+  }
 }
 
-function validateMessage(value: unknown): string {
+function validateMessage(value: unknown, hasAttachments: boolean): string {
   if (typeof value !== 'string') {
     throw new TypeError('Message must be a string.')
   }
   const message = value.trim()
-  if (!message || message.length > 12_000) {
-    throw new TypeError('Message must contain between 1 and 12000 characters.')
+  if ((!message && !hasAttachments) || message.length > 12_000) {
+    throw new TypeError('消息不能为空，除非本轮至少包含一个附件；消息最长 12000 字符。')
   }
   return message
+}
+
+/** 校验 Renderer 只能引用本轮已暂存的随机附件 ID。 */
+function validateAttachmentIds(value: unknown): string[] {
+  if (value === undefined) {
+    return []
+  }
+  if (!Array.isArray(value) || value.length > 10 || new Set(value).size !== value.length) {
+    throw new TypeError('附件 ID 列表无效。')
+  }
+  value.forEach(validateAttachmentId)
+  return value
+}
+
+/** 校验单个随机附件 ID 的固定格式。 */
+function validateAttachmentId(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) {
+    throw new TypeError('附件 ID 无效。')
+  }
+}
+
+/** 识别 Node 文件系统错误，避免把包含真实路径的原始消息返回 Renderer。 */
+function isNodeFileSystemError(value: unknown): value is NodeJS.ErrnoException {
+  return value instanceof Error && typeof (value as NodeJS.ErrnoException).code === 'string'
 }
 
 function validateKnowledgeLibraryIds(value: unknown): string[] {

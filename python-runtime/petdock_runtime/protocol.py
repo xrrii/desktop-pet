@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+import re
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 """PetDock Assistant Runtime 的 HTTP 协议模型。
 
@@ -34,11 +35,52 @@ class AssistantRequest(BaseModel):
     protocolVersion: Literal[1]
     taskId: str = Field(min_length=1, max_length=128)
     conversationId: str = Field(min_length=1, max_length=128)
-    input: str = Field(min_length=1, max_length=12_000)
+    input: str = Field(max_length=12_000)
     source: Literal["pet", "assistant-window", "shortcut"]
     context: AssistantContext
     knowledgeLibraryIds: list[str] = Field(default_factory=list, max_length=20)
+    attachmentIds: list[str] = Field(default_factory=list, max_length=10)
     skillInvocation: AssistantSkillInvocation | None = None
+
+    @model_validator(mode="after")
+    def validate_input_and_attachments(self) -> "AssistantRequest":
+        """要求文本或附件至少存在一项，并校验附件 ID 去重与格式。"""
+        if not self.input.strip() and not self.attachmentIds:
+            raise ValueError("消息和附件不能同时为空。")
+        if len(set(self.attachmentIds)) != len(self.attachmentIds):
+            raise ValueError("附件 ID 不能重复。")
+        if any(not re.fullmatch(r"[a-f0-9]{32}", item) for item in self.attachmentIds):
+            raise ValueError("附件 ID 无效。")
+        return self
+
+
+class AttachmentRegistrationItem(BaseModel):
+    """描述 Main 已复制到受控目录的单个附件。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    name: str = Field(min_length=1, max_length=255)
+    relativePath: str = Field(min_length=1, max_length=1_024)
+    sizeBytes: int = Field(ge=1, le=10 * 1024 * 1024)
+
+
+class AttachmentRegisterRequest(BaseModel):
+    """批量登记用户本轮明确投放的受控附件。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attachments: list[AttachmentRegistrationItem] = Field(min_length=1, max_length=10)
+
+
+class AttachmentPreviewRequest(BaseModel):
+    """请求读取草稿或指定会话附件的一段已解析文本。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversationId: str | None = Field(default=None, min_length=1, max_length=128)
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=65_536, ge=1, le=100_000)
 
 
 class KnowledgeLibraryCreateRequest(BaseModel):

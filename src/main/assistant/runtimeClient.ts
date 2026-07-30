@@ -1,4 +1,6 @@
 import type {
+  AssistantAttachmentSummary,
+  AssistantAttachmentPreview,
   AssistantMemorySnapshot,
   AssistantConversationMessage,
   AssistantEvent,
@@ -13,6 +15,7 @@ import type {
   MemoryItemKind
 } from '../../shared/assistant'
 import type { ToolAuditEntry } from './auditLog'
+import type { AssistantAttachmentRegistration } from './attachmentManager'
 
 export class AssistantRuntimeClient {
   private readonly baseUrl: string
@@ -37,6 +40,45 @@ export class AssistantRuntimeClient {
       method: 'POST',
       body: JSON.stringify(request)
     })
+  }
+
+  /** 登记 Main 已复制的附件，响应中不包含受控文件路径或正文。 */
+  async registerAttachments(
+    registrations: AssistantAttachmentRegistration[]
+  ): Promise<AssistantAttachmentSummary[]> {
+    const response = await this.request('/v1/attachments', {
+      method: 'POST',
+      body: JSON.stringify({ attachments: registrations })
+    })
+    const payload = (await response.json()) as { attachments?: unknown }
+    return Array.isArray(payload.attachments)
+      ? (payload.attachments as AssistantAttachmentSummary[])
+      : []
+  }
+
+  /** 删除尚未绑定到会话的附件草稿。 */
+  async deleteDraftAttachment(attachmentId: string): Promise<boolean> {
+    const response = await this.request(`/v1/attachments/${encodeURIComponent(attachmentId)}`, {
+      method: 'DELETE'
+    })
+    const payload = (await response.json()) as { deleted?: unknown }
+    return payload.deleted === true
+  }
+
+  /** 按附件 ID 获取一段已解析文本，Runtime 负责校验草稿或会话归属。 */
+  async previewAttachment(
+    attachmentId: string,
+    conversationId: string | null,
+    offset: number
+  ): Promise<AssistantAttachmentPreview> {
+    const response = await this.request(
+      `/v1/attachments/${encodeURIComponent(attachmentId)}/preview`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ conversationId, offset, limit: 65_536 })
+      }
+    )
+    return (await response.json()) as AssistantAttachmentPreview
   }
 
   async streamEvents(
@@ -284,7 +326,7 @@ function isAssistantEvent(value: unknown): value is AssistantEvent {
     typeof event.taskId === 'string' &&
     Number.isInteger(event.sequence) &&
     typeof event.type === 'string' &&
-    ['message_delta', 'retrieval_sources', 'skill_started', 'skill_completed', 'skill_error', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
+    ['message_delta', 'retrieval_sources', 'attachment_sources', 'skill_started', 'skill_completed', 'skill_error', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
       event.type
     ) &&
     !!event.payload &&
