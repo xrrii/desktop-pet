@@ -1,6 +1,8 @@
 import type {
   AssistantAttachmentSummary,
   AssistantAttachmentPreview,
+  AssistantArtifactPreview,
+  AssistantArtifactSummary,
   AssistantMemorySnapshot,
   AssistantConversationMessage,
   AssistantEvent,
@@ -79,6 +81,58 @@ export class AssistantRuntimeClient {
       }
     )
     return (await response.json()) as AssistantAttachmentPreview
+  }
+
+  /** 获取指定会话 Artifact 的脱敏元数据。 */
+  async getArtifact(artifactId: string, conversationId: string): Promise<AssistantArtifactSummary> {
+    const query = new URLSearchParams({ conversationId })
+    const response = await this.request(
+      `/v1/artifacts/${encodeURIComponent(artifactId)}?${query.toString()}`,
+      { method: 'GET' }
+    )
+    return (await response.json()) as AssistantArtifactSummary
+  }
+
+  /** 获取 Artifact 的分页纯文本预览。 */
+  async previewArtifact(
+    artifactId: string,
+    conversationId: string,
+    offset: number
+  ): Promise<AssistantArtifactPreview> {
+    const response = await this.request(`/v1/artifacts/${encodeURIComponent(artifactId)}/preview`, {
+      method: 'POST',
+      body: JSON.stringify({ conversationId, offset, limit: 65_536 })
+    })
+    return (await response.json()) as AssistantArtifactPreview
+  }
+
+  /** 读取 Main 原生保存流程需要的完整 Artifact 字节。 */
+  async getArtifactContent(artifactId: string, conversationId: string): Promise<Uint8Array> {
+    const query = new URLSearchParams({ conversationId })
+    const response = await this.request(
+      `/v1/artifacts/${encodeURIComponent(artifactId)}/content?${query.toString()}`,
+      { method: 'GET' }
+    )
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
+  /** 标记 Artifact 已经由 Main 另存到用户选择的位置。 */
+  async markArtifactSaved(artifactId: string, conversationId: string): Promise<AssistantArtifactSummary> {
+    const response = await this.request(`/v1/artifacts/${encodeURIComponent(artifactId)}/saved`, {
+      method: 'POST',
+      body: JSON.stringify({ conversationId })
+    })
+    return (await response.json()) as AssistantArtifactSummary
+  }
+
+  /** 删除应用内 Artifact，Runtime 会复核会话归属。 */
+  async deleteArtifact(artifactId: string, conversationId: string): Promise<boolean> {
+    const response = await this.request(`/v1/artifacts/${encodeURIComponent(artifactId)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ conversationId })
+    })
+    const payload = (await response.json()) as { deleted?: unknown }
+    return payload.deleted === true
   }
 
   async streamEvents(
@@ -326,7 +380,7 @@ function isAssistantEvent(value: unknown): value is AssistantEvent {
     typeof event.taskId === 'string' &&
     Number.isInteger(event.sequence) &&
     typeof event.type === 'string' &&
-    ['message_delta', 'retrieval_sources', 'attachment_sources', 'skill_started', 'skill_completed', 'skill_error', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
+    ['message_delta', 'retrieval_sources', 'attachment_sources', 'artifact_created', 'artifact_status', 'skill_started', 'skill_completed', 'skill_error', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
       event.type
     ) &&
     !!event.payload &&

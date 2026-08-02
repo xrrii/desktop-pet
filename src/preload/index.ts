@@ -5,6 +5,10 @@ import type {
   AssistantAttachmentPreview,
   AssistantAttachmentPreviewInput,
   AssistantAttachmentSummary,
+  AssistantArtifactAccessInput,
+  AssistantArtifactPreview,
+  AssistantArtifactPreviewInput,
+  AssistantArtifactSaveResult,
   AssistantAskInput,
   AssistantAskResult,
   AssistantConversationMessage,
@@ -85,6 +89,14 @@ const api = {
   previewAssistantAttachment: (
     input: AssistantAttachmentPreviewInput
   ): Promise<AssistantAttachmentPreview> => ipcRenderer.invoke('assistant:preview-attachment', input),
+  previewAssistantArtifact: (
+    input: AssistantArtifactPreviewInput
+  ): Promise<AssistantArtifactPreview> => ipcRenderer.invoke('assistant:preview-artifact', input),
+  saveAssistantArtifact: (
+    input: AssistantArtifactAccessInput
+  ): Promise<AssistantArtifactSaveResult> => ipcRenderer.invoke('assistant:save-artifact', input),
+  deleteAssistantArtifact: (input: AssistantArtifactAccessInput): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:delete-artifact', input),
   cancelAssistant: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke('assistant:cancel', taskId),
   resolveAssistantPermission: (input: AssistantPermissionResolution): Promise<boolean> =>

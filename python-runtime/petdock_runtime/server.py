@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 from collections.abc import Callable
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from .attachment_store import AttachmentStore
+from .artifact_store import ArtifactStore
 from .backends import create_backend
 from .config import RuntimeConfig
 from .embeddings import LocalHashEmbedding, create_embedding_provider
@@ -22,6 +24,8 @@ from .skill_manifest import SkillManifestError
 from .skill_installer import SkillInstaller
 from .protocol import (
     AssistantRequest,
+    ArtifactAccessRequest,
+    ArtifactPreviewRequest,
     AttachmentRegisterRequest,
     AttachmentPreviewRequest,
     MemoryClearRequest,
@@ -38,12 +42,15 @@ from .service import AssistantService
 
 """FastAPI 路由层，只负责鉴权、协议校验和 Runtime 服务编排。"""
 
+LOGGER = logging.getLogger("petdock.server")
+
 
 def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | None = None) -> FastAPI:
     """创建带本地 SQLite、聊天、工具和记忆接口的 FastAPI 应用。"""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     store = MemoryStore(config.memory_db_path)
     attachments = AttachmentStore(config.memory_db_path, config.attachment_root)
+    artifacts = ArtifactStore(config.memory_db_path, config.artifact_root)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
     embedding = create_embedding_provider(config)
     fallback_vectors = (
@@ -60,7 +67,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     skills = SkillRegistry(config.skills_root, skill_store)
     skill_installer = SkillInstaller(config.skills_root, skills)
     service = AssistantService(
-        create_backend(config, store, knowledge, skills, attachments),
+        create_backend(config, store, knowledge, skills, attachments, artifacts),
         create_memory_extractor(config, store),
     )
 
@@ -167,6 +174,92 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
+    @app.get("/v1/artifacts/{artifact_id}")
+    async def artifact_get(
+        artifact_id: str,
+        conversationId: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回指定会话 Artifact 的脱敏元数据。"""
+        authorize(authorization)
+        _validate_resource_id(artifact_id, "artifact")
+        try:
+            return artifacts.get(artifact_id, conversationId).summary()
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+
+    @app.post("/v1/artifacts/{artifact_id}/preview")
+    async def artifact_preview(
+        artifact_id: str,
+        request: ArtifactPreviewRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回指定会话 Artifact 的分页纯文本预览。"""
+        authorize(authorization)
+        _validate_resource_id(artifact_id, "artifact")
+        try:
+            return artifacts.preview(
+                artifact_id,
+                request.conversationId,
+                request.offset,
+                request.limit,
+            )
+        except UnicodeError as error:
+            LOGGER.warning("Artifact 预览读取失败 id=%s error=%s", artifact_id, error)
+            raise HTTPException(status_code=500, detail="artifact_preview_failed") from error
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except OSError as error:
+            LOGGER.warning("Artifact 预览读取失败 id=%s error=%s", artifact_id, error)
+            raise HTTPException(status_code=500, detail="artifact_preview_failed") from error
+
+    @app.get("/v1/artifacts/{artifact_id}/content")
+    async def artifact_content(
+        artifact_id: str,
+        conversationId: str,
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        """向 Main 返回完整 Artifact 字节；接口仍需启动令牌和会话归属。"""
+        authorize(authorization)
+        _validate_resource_id(artifact_id, "artifact")
+        try:
+            record, content = artifacts.read_bytes(artifact_id, conversationId)
+            return Response(
+                content=content,
+                media_type=record.detected_mime,
+                headers={"Cache-Control": "no-store"},
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except OSError as error:
+            LOGGER.warning("Artifact 内容读取失败 id=%s error=%s", artifact_id, error)
+            raise HTTPException(status_code=500, detail="artifact_content_read_failed") from error
+
+    @app.post("/v1/artifacts/{artifact_id}/saved")
+    async def artifact_saved(
+        artifact_id: str,
+        request: ArtifactAccessRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """记录 Artifact 已由 Main 另存，不记录用户选择的目标路径。"""
+        authorize(authorization)
+        _validate_resource_id(artifact_id, "artifact")
+        try:
+            return artifacts.mark_saved(artifact_id, request.conversationId).summary()
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+
+    @app.delete("/v1/artifacts/{artifact_id}")
+    async def artifact_delete(
+        artifact_id: str,
+        request: ArtifactAccessRequest,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, bool]:
+        """删除应用内 Artifact，不影响用户已经另存的外部副本。"""
+        authorize(authorization)
+        _validate_resource_id(artifact_id, "artifact")
+        return {"deleted": artifacts.delete(artifact_id, request.conversationId)}
+
     @app.post("/v1/cancel/{task_id}")
     async def cancel(
         task_id: str,
@@ -201,7 +294,25 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     ) -> dict[str, object]:
         """返回指定会话的用户/助手消息，用于恢复聊天界面。"""
         authorize(authorization)
-        return {"messages": store.conversation_messages(conversation_id)}
+        messages = store.conversation_messages(conversation_id)
+        for message in messages:
+            raw_artifacts = message.get("artifacts")
+            if not isinstance(raw_artifacts, list):
+                continue
+            current_artifacts: list[dict[str, object]] = []
+            for item in raw_artifacts:
+                artifact_id = item.get("id") if isinstance(item, dict) else None
+                if not isinstance(artifact_id, str):
+                    continue
+                try:
+                    current_artifacts.append(artifacts.get(artifact_id, conversation_id).summary())
+                except ValueError:
+                    continue
+            if current_artifacts:
+                message["artifacts"] = current_artifacts
+            else:
+                message.pop("artifacts", None)
+        return {"messages": messages}
 
     @app.post("/v1/memory/tool-log")
     async def memory_tool_log(
@@ -222,6 +333,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         authorize(authorization)
         if request.kind == "conversation":
             attachments.delete_conversation(request.id)
+            if not artifacts.delete_conversation(request.id):
+                raise HTTPException(status_code=500, detail="artifact_cleanup_failed")
         return {"deleted": store.delete_item(request.kind, request.id)}
 
     @app.post("/v1/memory/candidate/{candidate_id}")
@@ -245,6 +358,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         authorize(authorization)
         if request.scope in {"all", "conversations"}:
             attachments.clear_conversations()
+            if not artifacts.clear_conversations():
+                raise HTTPException(status_code=500, detail="artifact_cleanup_failed")
         store.clear(request.scope)
         return {"cleared": True}
 
@@ -417,9 +532,16 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         skills.close()
         attachments.cleanup_drafts()
         attachments.close()
+        artifacts.close()
         store.close()
         if request_shutdown:
             request_shutdown()
         return {"accepted": True}
 
     return app
+
+
+def _validate_resource_id(value: str, label: str) -> None:
+    """校验附件和 Artifact 使用的 32 位随机十六进制 ID。"""
+    if len(value) != 32 or any(character not in "0123456789abcdef" for character in value):
+        raise HTTPException(status_code=400, detail=f"Invalid {label} id")

@@ -713,4 +713,4 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 Electron Main、Preload、Renderer 和 Python Runtime 的职责边界保持稳定，核心功能不需要为后续增强推翻重做。
 
-后续增强以 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md` 为方案基线，范围包括附件对话、Artifact 文件输出、联网搜索、复杂文档和多文件受控修改。当前 C1 与 C1.1 已完成，C2 至 C5 为 Not Started；附件暂存、文本预览和历史恢复已验证现有 Main、Preload、Renderer 和 Runtime 边界可直接承载受控附件，不需要改写核心架构。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。
+后续增强以 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md` 为方案基线，范围包括附件对话、Artifact 文件输出、联网搜索、复杂文档和多文件受控修改。当前 C1 与 C1.1 已完成，C2 已完成实现并处于验收收尾，C3 至 C5 为 Not Started。C2 沿用既有职责边界：Runtime 的 `create_artifact` 只向应用受控目录生成白名单文本文件并维护 SQLite 索引，Main 只按 Artifact ID 读取内容、打开原生“另存为”对话框并执行可恢复的原子写入，Preload 仅暴露预览、保存和删除 IPC，Renderer 只展示脱敏摘要、卡片和只读预览。开发版已验证生成、预览和删除，独立 Runtime 打包形态测试通过；Windows 原生保存对话框自动化和完整 Electron 打包版保存闭环尚待稳定验收，因此 C2 暂不标记为 Done。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。

@@ -5,6 +5,10 @@ import type {
   AssistantAttachmentSummary,
   AssistantAttachmentPreview,
   AssistantAttachmentPreviewInput,
+  AssistantArtifactAccessInput,
+  AssistantArtifactPreview,
+  AssistantArtifactPreviewInput,
+  AssistantArtifactSummary,
   AssistantAskInput,
   AssistantAskResult,
   AssistantConversationMessage,
@@ -149,6 +153,58 @@ export class AssistantManager {
       conversationId,
       offset
     )
+  }
+
+  /** 获取指定会话 Artifact 的分页预览，Renderer 只能引用随机 ID。 */
+  async previewArtifact(input: AssistantArtifactPreviewInput): Promise<AssistantArtifactPreview> {
+    const { artifactId, conversationId } = validateArtifactAccess(input)
+    const offset = input.offset === undefined ? 0 : input.offset
+    if (!Number.isInteger(offset) || offset < 0 || offset > 50_000_000) {
+      throw new TypeError('Artifact 预览位置无效。')
+    }
+    return (await this.runtime.start()).previewArtifact(artifactId, conversationId, offset)
+  }
+
+  /** 获取原生保存对话框展示所需的 Artifact 元数据。 */
+  async getArtifact(input: AssistantArtifactAccessInput): Promise<AssistantArtifactSummary> {
+    const { artifactId, conversationId } = validateArtifactAccess(input)
+    return (await this.runtime.start()).getArtifact(artifactId, conversationId)
+  }
+
+  /** 仅供 Main 保存流程读取完整字节，不向 Preload 或 Renderer 暴露。 */
+  async getArtifactContent(input: AssistantArtifactAccessInput): Promise<Uint8Array> {
+    const { artifactId, conversationId } = validateArtifactAccess(input)
+    return (await this.runtime.start()).getArtifactContent(artifactId, conversationId)
+  }
+
+  /** 在 Main 成功写入用户选择位置后标记 Artifact 已另存。 */
+  async markArtifactSaved(input: AssistantArtifactAccessInput): Promise<AssistantArtifactSummary> {
+    const { artifactId, conversationId } = validateArtifactAccess(input)
+    return (await this.runtime.start()).markArtifactSaved(artifactId, conversationId)
+  }
+
+  /** 删除应用内 Artifact；外部另存副本不受影响。 */
+  async deleteArtifact(input: AssistantArtifactAccessInput): Promise<boolean> {
+    const { artifactId, conversationId } = validateArtifactAccess(input)
+    const deleted = await (await this.runtime.start()).deleteArtifact(artifactId, conversationId)
+    if (deleted) {
+      this.recordArtifactAudit('delete', artifactId, true)
+    }
+    return deleted
+  }
+
+  /** 写入不含正文和目标路径的 Artifact 审计记录。 */
+  recordArtifactAudit(action: 'create' | 'save' | 'delete', artifactId: string, ok: boolean, error?: string): void {
+    writeToolAudit({
+      taskId: `artifact-${action}`,
+      toolCallId: artifactId,
+      toolName: `artifact_${action}`,
+      args: { artifactId },
+      risk: 'safe',
+      policyDecision: 'internal',
+      ok,
+      error
+    })
   }
 
   /** 创建聊天任务，并把 Runtime 与 Main 产生的事件统一编排后发送给 Renderer。 */
@@ -476,6 +532,15 @@ export class AssistantManager {
       return
     }
 
+    if (event.type === 'artifact_created') {
+      this.recordArtifactAudit(
+        'create',
+        event.payload.artifact.id,
+        event.payload.artifact.status === 'ready',
+        event.payload.artifact.error || undefined
+      )
+    }
+
     this.emit(event.taskId, event)
     if (event.type === 'done') {
       this.cleanupTask(event.taskId)
@@ -685,6 +750,21 @@ function validateAttachmentIds(value: unknown): string[] {
 function validateAttachmentId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) {
     throw new TypeError('附件 ID 无效。')
+  }
+}
+
+/** 校验 Renderer 只能按随机 Artifact ID 和当前会话访问应用内生成文件。 */
+function validateArtifactAccess(value: unknown): AssistantArtifactAccessInput {
+  if (!value || typeof value !== 'object') {
+    throw new TypeError('Artifact 请求无效。')
+  }
+  const input = value as Partial<AssistantArtifactAccessInput>
+  if (typeof input.artifactId !== 'string' || !/^[a-f0-9]{32}$/.test(input.artifactId)) {
+    throw new TypeError('Artifact ID 无效。')
+  }
+  return {
+    artifactId: input.artifactId,
+    conversationId: validateConversationId(input.conversationId)
   }
 }
 

@@ -1,9 +1,12 @@
 import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
-import { basename } from 'node:path'
+import { basename, extname } from 'node:path'
 import type {
   AssistantAskInput,
   AssistantAttachmentDropZone,
   AssistantAttachmentPreviewInput,
+  AssistantArtifactAccessInput,
+  AssistantArtifactPreviewInput,
+  AssistantArtifactSaveResult,
   AssistantEmbeddingOnlineInput,
   AssistantLayoutTrace,
   MemoryClearScope,
@@ -11,6 +14,7 @@ import type {
   AssistantPermissionResolution
 } from '../shared/assistant'
 import { AssistantManager } from './assistant/assistantManager'
+import { writeArtifactAtomically } from './assistant/artifactFileWriter'
 import { logError, logInfo } from './logger'
 import { setAssistantTheme } from './theme'
 import {
@@ -257,6 +261,62 @@ function registerIpc(): void {
   ipcMain.handle('assistant:preview-attachment', (event, input: AssistantAttachmentPreviewInput) => {
     requirePetSender(event)
     return assistantManager.previewAttachment(input)
+  })
+
+  ipcMain.handle('assistant:preview-artifact', (event, input: AssistantArtifactPreviewInput) => {
+    requirePetSender(event)
+    return assistantManager.previewArtifact(input)
+  })
+
+  ipcMain.handle('assistant:delete-artifact', (event, input: AssistantArtifactAccessInput) => {
+    requirePetSender(event)
+    return assistantManager.deleteArtifact(input)
+  })
+
+  ipcMain.handle('assistant:save-artifact', async (event, input: AssistantArtifactAccessInput) => {
+    const window = requirePetSender(event)
+    const artifact = await assistantManager.getArtifact(input)
+    if (artifact.status !== 'ready') {
+      throw new Error('Artifact 尚未生成成功。')
+    }
+    const extension = extname(artifact.name).slice(1) || 'txt'
+    const selection = await dialog.showSaveDialog(window, {
+      title: '保存生成文件',
+      defaultPath: artifact.name,
+      filters: [{ name: `${extension.toUpperCase()} 文件`, extensions: [extension] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    })
+    if (selection.canceled || !selection.filePath) {
+      assistantManager.recordArtifactAudit('save', artifact.id, false, 'artifact_save_cancelled')
+      return {
+        status: 'cancelled',
+        artifact,
+        error: null
+      } satisfies AssistantArtifactSaveResult
+    }
+    try {
+      const content = await assistantManager.getArtifactContent(input)
+      const result = await writeArtifactAtomically(selection.filePath, content)
+      const saved = await assistantManager.markArtifactSaved(input)
+      assistantManager.recordArtifactAudit('save', artifact.id, true)
+      logInfo('assistant artifact saved', {
+        artifactId: artifact.id,
+        bytes: content.byteLength,
+        overwritten: result.overwritten
+      })
+      return { status: 'saved', artifact: saved, error: null } satisfies AssistantArtifactSaveResult
+    } catch (error) {
+      const code = error instanceof Error && 'code' in error
+        ? String((error as NodeJS.ErrnoException).code || 'UNKNOWN')
+        : 'UNKNOWN'
+      assistantManager.recordArtifactAudit('save', artifact.id, false, 'artifact_save_failed')
+      logError('assistant artifact save failed', { artifactId: artifact.id, code })
+      return {
+        status: 'failed',
+        artifact,
+        error: '文件保存失败，应用内生成文件仍然保留，可以重试。'
+      } satisfies AssistantArtifactSaveResult
+    }
   })
 
   ipcMain.handle('assistant:cancel', (event, taskId: string) => {

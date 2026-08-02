@@ -24,7 +24,7 @@ Deferred     延后
 
 ```text
 AI 助手核心功能状态：Done（阶段 1 至阶段 5）
-后续增强状态：In Progress（C1 已完成，C2 至 C5 未开始）
+后续增强状态：In Progress（C1、C1.1 已完成，C2 实现完成并处于验收收尾，C3 至 C5 未开始）
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
@@ -32,7 +32,7 @@ Python LangChain Runtime：Done（阶段 5）
 RAG 文档管理：Done（阶段 4）
 RAG 检索优化：In Progress（R0/R3/R4 部分完成、R1 完成、R2 主体已实现但未完成正式验收）
 Skill 系统：Done（阶段 5）
-对话资源能力：In Progress（C1 Done，C2 至 C5 Not Started）
+对话资源能力：In Progress（C1、C1.1 Done，C2 In Progress，C3 至 C5 Not Started）
 ```
 
 ## 2. 已完成事项
@@ -225,11 +225,11 @@ Skill 系统：Done（阶段 5）
 
 ### 对话资源能力
 
-状态：In Progress（C1、C1.1 已完成）
+状态：In Progress（C1、C1.1 已完成，C2 实现完成并处于验收收尾）
 
 - [x] C1：拖拽附件与文本解析。
 - [x] C1.1：草稿/历史附件文本预览与失败投放提示。
-- [ ] C2：基础 Artifact 文件输出。
+- [ ] C2：基础 Artifact 文件输出（实现完成，原生保存对话框与打包版 E2E 待收尾）。
 - [ ] C3：联网搜索与网页引用。
 - [ ] C4：PDF、Office 和图片输入输出。
 - [ ] C5：多文件分析、临时索引和受控修改。
@@ -261,6 +261,16 @@ C1.1 已实现：
 - Runtime 只按附件 ID 返回已解析文本，并校验草稿/会话归属；Renderer 仍不接触路径。
 - 不支持格式拖到收起桌宠时立即展开助手，错误提示去除 Electron IPC 包装前缀。
 - E2E 覆盖 `.exe` 失败投放、草稿预览、只附件发送和历史附件预览。
+
+C2 已实现：
+
+- Runtime 增加受控 `create_artifact` 内部工具、Artifact SQLite 索引和应用内受控目录，支持 TXT、Markdown、JSON、JSONL、YAML、CSV、TSV、XML、HTML、CSS、JavaScript、TypeScript、Python、Java、Kotlin、Go、Rust、SQL、TOML 和 INI。
+- 模型只能提交建议文件名、格式和 UTF-8 正文；Runtime 执行格式白名单、25 MB 上限、文件名清理、Windows 保留名和会话归属校验，Renderer 不接触真实路径或完整正文接口。
+- `artifact_created` 事件和历史消息均可恢复 Artifact 卡片；卡片提供只读预览、另存、失败重试和删除，文本支持分页，CSV/TSV 最多展示前 50 行、每行前 12 列。
+- 保存必须由 Main 打开原生“另存为”对话框；Main 按 Artifact ID 从 Runtime 取回内容，并通过同目录临时文件直接原子替换目标，替换失败时原目标未被移走，取消或失败时保留应用内 Artifact。
+- Artifact 生成、保存和删除写入不含正文及目标路径的现有 JSONL 工具审计日志；删除会话、清空会话或显式删除卡片时清理应用内文件，外部另存副本不由 PetDock 管理。
+- `npm.cmd run typecheck`、26 个 TypeScript 测试和 35 个 Python Runtime 测试通过；Runtime 测试覆盖七种格式、Windows 文件名清理、大小与会话隔离、生成事件、预览、内容读取、保存标记和会话清理，Main 写入测试覆盖新建、原子覆盖、替换失败保留原文件、清理异常不误报和 Windows 符号链接拒绝。
+- 开发版 E2E 已验证 Artifact 生成、卡片、预览和删除，独立 Runtime 的打包形态启动测试通过；Windows 原生“另存为”对话框的取消与实际保存自动化仍不稳定，完整 Electron unpacked 包在本机构建阶段无进展，因此打包版生成、预览和保存闭环尚未完成验收，C2 暂不标记为 Done。
 
 ### RAG 后续增强
 
@@ -407,3 +417,10 @@ C1.1 已实现：
 - 增加 Runtime 附件预览接口和归属校验，Main/Preload/Renderer 全链路只使用附件 ID。
 - 修复不支持格式拖到收起桌宠后未自动展开的问题，并清理 IPC 错误包装文本。
 - 开发版 E2E 已覆盖不支持格式提示、草稿预览和历史附件预览；C2 至 C5 状态不变。
+
+### 2026-07-28（C2 基础 Artifact 文件输出）
+
+- 完成 `create_artifact`、Artifact 受控目录与数据库、SSE 事件、历史恢复、卡片、文本/表格预览和生命周期清理。
+- 完成 Main 原生“另存为”、按 ID 读取、原子新建/覆盖、替换失败保留原目标和脱敏审计；Renderer 与 Preload 不接触 Artifact 真实路径。
+- `npm.cmd run typecheck`、26 个 TypeScript 测试和 35 个 Python Runtime 测试通过。
+- 开发版 E2E 已验证生成、卡片、预览和删除，独立 Runtime 打包形态测试通过；Windows 原生保存对话框自动化与完整 Electron 打包版保存闭环尚未稳定通过，C2 保持 In Progress，待验收收尾后再标记 Done。

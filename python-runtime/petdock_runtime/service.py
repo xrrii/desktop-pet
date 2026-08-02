@@ -6,6 +6,7 @@ from typing import Any
 
 from .backends import (
     AssistantBackend,
+    ArtifactCreatedEvent,
     AttachmentContext,
     RetrievalContext,
     SkillLifecycleEvent,
@@ -120,6 +121,9 @@ class AssistantService:
                         continue
                     if isinstance(output, AttachmentContext):
                         await emit("attachment_sources", {"sources": output.sources})
+                        continue
+                    if isinstance(output, ArtifactCreatedEvent):
+                        await emit("artifact_created", {"artifact": output.artifact.summary()})
                         continue
                     if isinstance(output, SkillLifecycleEvent):
                         await emit(output.type, output.payload)

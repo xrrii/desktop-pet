@@ -536,7 +536,7 @@ npm.cmd run pack
 
 AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、文件输出、联网搜索、复杂文档和多文件修改必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
-对话资源能力当前进度：C1、C1.1 已完成，C2 至 C5 未开始。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送和来源展示验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。
+对话资源能力当前进度：C1、C1.1 已完成，C2 已完成实现并处于验收收尾，C3 至 C5 未开始。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送和来源展示验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可用 `$env:PETDOCK_SMOKE_DEV='1'; $env:PETDOCK_SMOKE_C2_ONLY='1'; node tools\assistant_smoke.mjs` 聚焦验证 Artifact 生成、卡片、预览和删除。C2 已实现原生“另存为”、原子写入、审计和清理；独立 Runtime 打包形态测试已通过，但 Windows 原生保存对话框自动化和完整 Electron 打包版闭环尚未稳定通过，因此当前不能把 C2 视为已完成验收。
 
 ## 15. AI Assistant Runtime
 
@@ -572,6 +572,14 @@ npm.cmd run test:e2e:assistant:langchain
 ```
 
 `npm.cmd run check` 会执行 TypeScript 类型检查、TypeScript 单元测试、Python Runtime 测试和 Electron 生产构建。
+
+C2 离线 Mock 可使用以下明确指令生成 Artifact：
+
+```text
+生成文件 | 文件名=report.md | 格式=md | 内容=# 报告
+```
+
+Runtime 只在 Main 注入的 Artifact 根目录生成白名单 UTF-8 文本文件，单个文件上限 25 MB；Renderer 只提交 Artifact ID 和会话 ID。保存时 Main 打开原生“另存为”对话框，再从 Runtime 获取完整内容并执行同目录临时写入和可恢复覆盖。当前单元/集成测试覆盖六种基础格式、文件名清理、会话隔离、生成/预览/读取/保存标记/清理、新建/覆盖和符号链接拒绝；原生保存对话框 E2E 稳定前仍需人工核对取消、另存和覆盖行为，不能只以生成/预览通过代替完整保存验收。
 
 阶段 2 工具调用测试可在离线 Mock Runtime 中使用以下明确指令：
 

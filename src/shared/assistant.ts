@@ -100,6 +100,45 @@ export interface AssistantAttachmentPreview {
   truncated: boolean
 }
 
+export type AssistantArtifactPreviewKind = 'text' | 'table' | 'none'
+export type AssistantArtifactStatus = 'generating' | 'ready' | 'error'
+
+export interface AssistantArtifactSummary {
+  id: string
+  conversationId: string
+  messageId: string | null
+  name: string
+  detectedMime: string
+  sizeBytes: number
+  previewKind: AssistantArtifactPreviewKind
+  status: AssistantArtifactStatus
+  error: string | null
+  saved: boolean
+}
+
+export interface AssistantArtifactAccessInput {
+  artifactId: string
+  conversationId: string
+}
+
+export interface AssistantArtifactPreviewInput extends AssistantArtifactAccessInput {
+  offset?: number
+}
+
+export interface AssistantArtifactPreview extends AssistantArtifactSummary {
+  content: string
+  offset: number
+  nextOffset: number | null
+  totalCharacters: number
+  truncated: boolean
+}
+
+export interface AssistantArtifactSaveResult {
+  status: 'saved' | 'cancelled' | 'failed'
+  artifact: AssistantArtifactSummary
+  error: string | null
+}
+
 export type KnowledgeLibraryStatus = 'pending' | 'indexing' | 'paused' | 'ready' | 'error'
 
 export interface AssistantKnowledgeSnapshot {
@@ -199,6 +238,7 @@ export interface AssistantConversationMessage {
   content: string
   createdAt: string
   attachments?: AssistantAttachmentMessageRef[]
+  artifacts?: AssistantArtifactSummary[]
 }
 
 export interface AssistantMemorySummary {
@@ -341,6 +381,8 @@ export type AssistantEvent =
   | AssistantMessageDeltaEvent
   | AssistantRetrievalSourcesEvent
   | AssistantAttachmentSourcesEvent
+  | AssistantArtifactCreatedEvent
+  | AssistantArtifactStatusEvent
   | AssistantSkillStartedEvent
   | AssistantSkillCompletedEvent
   | AssistantSkillErrorEvent
@@ -406,6 +448,20 @@ export interface AssistantAttachmentSourcesEvent extends AssistantEventBase {
       excerpt: string
       truncated: boolean
     }>
+  }
+}
+
+export interface AssistantArtifactCreatedEvent extends AssistantEventBase {
+  type: 'artifact_created'
+  payload: {
+    artifact: AssistantArtifactSummary
+  }
+}
+
+export interface AssistantArtifactStatusEvent extends AssistantEventBase {
+  type: 'artifact_status'
+  payload: {
+    artifact: AssistantArtifactSummary
   }
 }
 

@@ -859,6 +859,20 @@ body[data-theme="apple"] .memory-candidate span {
   margin-top: auto;
 }
 
+.message.has-artifact {
+  flex-direction: column;
+}
+
+body[data-side="left"] .message.user.has-artifact,
+body[data-side="right"] .message.assistant.has-artifact {
+  align-items: flex-end;
+}
+
+body[data-side="left"] .message.assistant.has-artifact,
+body[data-side="right"] .message.user.has-artifact {
+  align-items: flex-start;
+}
+
 body[data-side="left"] .message.user,
 body[data-side="right"] .message.assistant {
   justify-content: flex-end;
@@ -912,6 +926,84 @@ body[data-side="right"] .message.user {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.artifact-card {
+  width: min(330px, 86%);
+  margin-top: 7px;
+  padding: 9px;
+  border: 1px solid #9fb0b9;
+  border-radius: 7px;
+  color: #26313b;
+  background: rgb(248 251 252 / 0.98);
+  box-shadow: 0 5px 16px rgb(28 35 45 / 0.14);
+}
+
+.artifact-card[data-status="error"] {
+  border-color: #d56e63;
+  background: rgb(255 247 245 / 0.98);
+}
+
+.artifact-card-header {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.artifact-file-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #91aaa3;
+  border-radius: 5px;
+  color: #2e6f62;
+  background: #eef6f3;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.artifact-card-title {
+  min-width: 0;
+}
+
+.artifact-card-title strong,
+.artifact-card-title small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-card-title strong {
+  font-size: 12px;
+}
+
+.artifact-card-title small,
+.artifact-card-status {
+  color: #68727e;
+  font-size: 10px;
+}
+
+.artifact-card-status {
+  display: block;
+  min-height: 16px;
+  margin-top: 6px;
+}
+
+.artifact-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.artifact-card-actions button {
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 11px;
 }
 
 .message.assistant .message-body {
@@ -1366,6 +1458,42 @@ body[data-side="right"] .error-banner {
   user-select: text;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.artifact-preview-content {
+  display: block;
+  padding: 0;
+}
+
+.artifact-preview-content pre {
+  min-height: 100%;
+  margin: 0;
+  padding: 14px;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.artifact-table-scroll {
+  max-width: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.artifact-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.artifact-table-scroll td {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 5px 7px;
+  border: 1px solid #d5dae0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .attachment-preview-footer {

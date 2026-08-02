@@ -183,7 +183,7 @@ attachmentIds?: string[]
 
 ## 7. C1：附件对话
 
-状态：Not Started
+状态：Done（2026-07-28）
 
 ### 7.1 用户交互
 
@@ -358,7 +358,7 @@ warnings[]
 
 ## 8. C2：基础文件输出
 
-状态：Not Started
+状态：In Progress（实现完成，原生保存对话框与打包版 E2E 验收收尾中）
 
 ### 8.1 Artifact 模型
 
@@ -366,10 +366,10 @@ Artifact 是 Runtime 在应用受控目录生成、由用户决定是否保存�
 
 首版支持：
 
-- Markdown、TXT
-- JSON、JSONL
-- CSV、TSV
-- 常见代码和配置文件
+- 文本与标记：TXT、Markdown、HTML、XML
+- 结构化数据：JSON、JSONL、YAML、CSV、TSV
+- 样式、脚本与代码：CSS、JavaScript、TypeScript、Python、Java、Kotlin、Go、Rust、SQL
+- 配置：TOML、INI
 
 Runtime 增加受控内部工具 `create_artifact`。工具参数只能包含建议文件名、允许的格式和内容，不能包含绝对路径、相对目录穿越或外部 URL。
 
@@ -390,13 +390,16 @@ Runtime 增加受控内部工具 `create_artifact`。工具参数只能包含建
 
 Main 只能通过 Artifact ID 获取内容，不接受 Renderer 提交源文件路径。Runtime 提供带启动令牌的 Artifact 元数据/内容接口，且只能读取数据库已登记、位于 Artifact 根目录的文件。
 
+当前实现还提供按 Artifact ID 的分页预览、保存标记和删除接口。Runtime 启动时由 Main 注入 Artifact 根目录，数据库只保存该目录内的相对路径；生成和完整读取均校验 25 MB 上限，完整读取还会校验实际字节数未被替换。
+
 ### 8.3 预览和生命周期
 
-- 文本和代码在助手内提供只读预览。
-- CSV 提供有限行列预览，不能因为大表格撑开窗口。
+- 文本和代码在助手内提供按字符分页的只读预览。
+- CSV/TSV 最多展示前 50 行、每行前 12 列，不能因为大表格撑开窗口。
 - Artifact 卡片显示文件名、类型、大小、生成状态和保存按钮。
 - Artifact 与生成它的会话及消息关联。
-- 未另存的 Artifact 在删除会话或清理生成文件时删除。
+- 应用内 Artifact 在用户显式删除、删除所属会话或清空会话时删除；启动时清理超过宽限期且未登记的孤立目录。
+- 另存成功只记录脱敏保存时间，不删除应用内 Artifact，便于历史消息恢复和再次保存。
 - 另存后的外部副本不再由 PetDock 管理。
 
 ### 8.4 安全约束
@@ -405,7 +408,7 @@ Main 只能通过 Artifact ID 获取内容，不接受 Renderer 提交源文件�
 - 首版单个 Artifact 最大 25 MB。
 - 不允许生成可执行文件、快捷方式、注册表文件或带宏 Office 文件。
 - 覆盖现有文件必须由原生保存对话框和 Main 明确确认。
-- Artifact 生成和保存均写入脱敏审计日志。
+- Artifact 生成、保存和删除均写入现有 JSONL 工具审计日志，只记录 Artifact ID、动作、结果和错误码，不记录正文或目标路径。
 
 ### 8.5 C2 完成门槛
 
@@ -415,6 +418,15 @@ Main 只能通过 Artifact ID 获取内容，不接受 Renderer 提交源文件�
 - 保存位置只能来自原生保存对话框。
 - 覆盖、取消和保存失败不会损坏临时 Artifact。
 - 打包版可以生成、预览和保存文件。
+
+当前验收记录：
+
+- [x] Runtime 测试覆盖 TXT、Markdown、JSON、JSONL、YAML、CSV、TSV 七种格式，以及文件名清理、Windows 保留名、格式/大小限制和跨会话拒绝。
+- [x] Runtime 集成测试覆盖 Mock 生成事件、历史卡片、分页预览、完整内容读取、保存标记和会话删除清理。
+- [x] Main 单元测试覆盖新建文件、原子覆盖、替换失败保留原文件、清理异常不误报和 Windows 符号链接拒绝；保存实现使用同目录临时文件直接替换目标，不预先移走原文件。
+- [x] 开发版 E2E 已验证 Artifact 生成、卡片操作、预览内容和删除；独立 Runtime 打包形态启动测试通过。
+- [ ] Windows 原生“另存为”对话框的取消与实际保存自动化尚未稳定通过。
+- [ ] 打包版生成、预览和保存完整闭环尚未完成自动化验收。
 
 ## 9. C3：联网搜索与网页引用
 
@@ -615,6 +627,7 @@ assistant:stage-dropped-files       Preload 内部提交系统 File 路径
 assistant:pick-attachments          打开原生文件选择器
 assistant:get-attachments           获取当前草稿/会话附件摘要
 assistant:remove-attachment         删除未发送附件或解除草稿绑定
+assistant:preview-artifact          获取应用内 Artifact 分页预览
 assistant:save-artifact             通过原生保存对话框保存 Artifact
 assistant:delete-artifact           删除应用内 Artifact
 assistant:get-web-settings          获取脱敏联网配置
@@ -630,7 +643,9 @@ POST   /v1/attachments              注册并解析 Main 已暂存的附件
 GET    /v1/attachments              查询附件状态
 DELETE /v1/attachments/:id          清理附件和解析结果
 GET    /v1/artifacts/:id            获取 Artifact 元数据
-GET    /v1/artifacts/:id/content    由 Main 流式读取 Artifact 内容
+POST   /v1/artifacts/:id/preview    获取经过会话归属校验的分页预览
+GET    /v1/artifacts/:id/content    由 Main 读取 Artifact 完整内容
+POST   /v1/artifacts/:id/saved      标记用户已完成外部另存
 DELETE /v1/artifacts/:id            清理 Artifact
 ```
 
@@ -719,6 +734,8 @@ source_changed_before_write
 
 ### C2：基础 Artifact 输出
 
+状态：In Progress（实现完成，验收收尾中）
+
 - `create_artifact` 内部工具。
 - Artifact 数据库、目录、事件、卡片、预览和保存。
 - 覆盖确认、审计和清理。
@@ -792,6 +809,8 @@ C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 - PDF、Office、图片和多文件的开发版/打包版行为一致。
 - 应用退出后不遗留 Runtime、锁文件、未登记草稿附件或未完成网络请求。
 
+当前 C2 开发版 E2E 已执行并验证到生成、卡片、预览和删除，独立 Runtime 打包形态启动测试通过。原生“另存为”属于 Windows 系统对话框，现有 UI Automation 对取消、填写目标和确认保存仍不稳定；完整 Electron unpacked 包在本机构建阶段无进展。在原生保存和完整打包版闭环稳定通过前，不得把 C2 记为完成验收。原子新建/覆盖及应用内 Artifact 保留规则继续由 Main 单元测试和 Runtime 集成测试兜底，但不能替代原生对话框 E2E。
+
 ## 17. 已决策事项
 
 - 文件可以拖到对话区，也可以拖到收起桌宠；拖到桌宠成功后自动展开助手。
@@ -829,7 +848,7 @@ C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 ```text
 [x] C1 拖拽附件、桌宠自动展开和文本解析通过验收
 [x] C1.1 草稿/历史附件文本预览和失败投放提示通过验收
-[ ] C2 Artifact 生成、预览和受控保存通过验收
+[ ] C2 Artifact 生成、预览和受控保存通过验收（实现完成，原生保存对话框与打包版 E2E 待收尾）
 [ ] C3 联网搜索、网页引用和网络安全通过验收
 [ ] C4 PDF、Office 和图片输入输出通过验收
 [ ] C5 多文件临时索引和受控修改通过验收

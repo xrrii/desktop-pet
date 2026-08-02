@@ -156,6 +156,21 @@
           <button id="attachment-preview-more" class="secondary-button" type="button" hidden>加载更多</button>
         </footer>
       </dialog>
+
+      <dialog id="artifact-preview" class="attachment-preview artifact-preview" aria-labelledby="artifact-preview-title">
+        <header class="attachment-preview-header">
+          <div>
+            <h2 id="artifact-preview-title">生成文件预览</h2>
+            <small id="artifact-preview-meta"></small>
+          </div>
+          <button id="artifact-preview-close" class="icon-button" type="button" title="关闭预览" aria-label="关闭生成文件预览">×</button>
+        </header>
+        <div id="artifact-preview-content" class="attachment-preview-content artifact-preview-content" tabindex="0"></div>
+        <footer class="attachment-preview-footer">
+          <span id="artifact-preview-status" role="status"></span>
+          <button id="artifact-preview-more" class="secondary-button" type="button" hidden>加载更多</button>
+        </footer>
+      </dialog>
     </section>
 
     <main id="pet-root" aria-label="Desktop pet" data-assistant-drop-zone="pet">

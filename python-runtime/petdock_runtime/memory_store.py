@@ -192,7 +192,8 @@ class MemoryStore:
             except json.JSONDecodeError:
                 metadata = {}
             attachments = metadata.get("attachments", []) if isinstance(metadata, dict) else []
-            if not row["content"] and not attachments:
+            artifacts = metadata.get("artifacts", []) if isinstance(metadata, dict) else []
+            if not row["content"] and not attachments and not artifacts:
                 continue
             message: dict[str, Any] = {
                 "role": row["role"],
@@ -201,6 +202,8 @@ class MemoryStore:
             }
             if isinstance(attachments, list) and attachments:
                 message["attachments"] = attachments
+            if isinstance(artifacts, list) and artifacts:
+                message["artifacts"] = artifacts
             messages.append(message)
         return messages
 

@@ -2,6 +2,7 @@ import './styles.css'
 import type {
   AssistantAttachmentMessageRef,
   AssistantAttachmentSummary,
+  AssistantArtifactSummary,
   AssistantEmbeddingOnlineInput,
   AssistantEmbeddingModelSnapshot,
   AssistantEmbeddingSnapshot,
@@ -36,6 +37,14 @@ interface AttachmentPreviewState {
   conversationId: string
   nextOffset: number | null
   loadedCharacters: number
+}
+
+interface ArtifactPreviewState {
+  artifactId: string
+  conversationId: string
+  nextOffset: number | null
+  loadedCharacters: number
+  previewKind: AssistantArtifactSummary['previewKind']
 }
 
 export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): void {
@@ -99,6 +108,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const attachmentPreviewStatus = requireElement<HTMLElement>('#attachment-preview-status')
   const attachmentPreviewClose = requireElement<HTMLButtonElement>('#attachment-preview-close')
   const attachmentPreviewMore = requireElement<HTMLButtonElement>('#attachment-preview-more')
+  const artifactPreview = requireElement<HTMLDialogElement>('#artifact-preview')
+  const artifactPreviewTitle = requireElement<HTMLElement>('#artifact-preview-title')
+  const artifactPreviewMeta = requireElement<HTMLElement>('#artifact-preview-meta')
+  const artifactPreviewContent = requireElement<HTMLElement>('#artifact-preview-content')
+  const artifactPreviewStatus = requireElement<HTMLElement>('#artifact-preview-status')
+  const artifactPreviewClose = requireElement<HTMLButtonElement>('#artifact-preview-close')
+  const artifactPreviewMore = requireElement<HTMLButtonElement>('#artifact-preview-more')
   const input = requireElement<HTMLTextAreaElement>('#message-input')
   const sendButton = requireElement<HTMLButtonElement>('#send-button')
   const newConversationButton = requireElement<HTMLButtonElement>('#new-conversation')
@@ -141,6 +157,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const permissionCards = new Map<string, HTMLElement>()
   let pendingAttachments: AssistantAttachmentSummary[] = []
   let attachmentPreviewState: AttachmentPreviewState | null = null
+  let artifactPreviewState: ArtifactPreviewState | null = null
+  const artifactCards = new Map<string, HTMLElement>()
 
   window.desktopPet.onAssistantEvent(handleEvent)
   window.desktopPet.onAssistantStatus(renderRuntimeStatus)
@@ -189,7 +207,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
 
   document.addEventListener('keydown', (event) => {
-    if (attachmentPreview.open) {
+    if (attachmentPreview.open || artifactPreview.open) {
       return
     }
     if (event.key === 'Escape' && expanded) {
@@ -228,6 +246,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     void clearPendingAttachments()
     closeAttachmentPreview()
+    closeArtifactPreview()
     conversationId = crypto.randomUUID()
     activeTaskId = null
     activeAssistantMessage = null
@@ -235,6 +254,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     lastSequence = 0
     conversation.replaceChildren()
     permissionCards.clear()
+    artifactCards.clear()
     hideCommandMenu()
     clearError()
     input.focus()
@@ -260,6 +280,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   attachmentPreviewMore.addEventListener('click', () => void loadNextAttachmentPreviewPage())
   attachmentPreview.addEventListener('close', () => {
     attachmentPreviewState = null
+  })
+  artifactPreviewClose.addEventListener('click', closeArtifactPreview)
+  artifactPreviewMore.addEventListener('click', () => void loadNextArtifactPreviewPage())
+  artifactPreview.addEventListener('close', () => {
+    artifactPreviewState = null
   })
 
   memoryButton.addEventListener('click', () => {
@@ -1361,16 +1386,18 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   async function selectConversation(id: string): Promise<void> {
     await clearPendingAttachments()
     closeAttachmentPreview()
+    closeArtifactPreview()
     conversationId = id
     closeMemoryView()
     conversation.replaceChildren()
+    artifactCards.clear()
     activeTaskId = null
     activeAssistantMessage = null
     resetAssistantMarkdownRendering()
     lastSequence = 0
     try {
       const messages = await window.desktopPet.getAssistantConversationMessages(id)
-      messages.forEach((message) => addMessage(message.role, message.content, message.attachments))
+      messages.forEach((message) => addMessage(message.role, message.content, message.attachments, message.artifacts))
     } catch (error) {
       showError(error)
     }
@@ -1383,6 +1410,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (deleted && kind === 'conversation' && id === conversationId) {
         conversationId = crypto.randomUUID()
         conversation.replaceChildren()
+        artifactCards.clear()
+        closeArtifactPreview()
       }
       memorySnapshot = await window.desktopPet.getAssistantMemory()
       renderMemoryTab()
@@ -1468,6 +1497,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
     if (event.type === 'attachment_sources') {
       renderAttachmentSources(event.payload.sources)
+      return
+    }
+
+    if (event.type === 'artifact_created' || event.type === 'artifact_status') {
+      renderArtifactCard(event.payload.artifact)
       return
     }
 
@@ -1638,7 +1672,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   function addMessage(
     role: 'user' | 'assistant',
     content: string,
-    attachments: AssistantAttachmentMessageRef[] = []
+    attachments: AssistantAttachmentMessageRef[] = [],
+    artifacts: AssistantArtifactSummary[] = []
   ): HTMLElement {
     const article = document.createElement('article')
     article.className = `message ${role}`
@@ -1657,6 +1692,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       }
     }
     article.append(body)
+    artifacts.forEach((artifact) => article.append(createArtifactCard(artifact)))
+    if (artifacts.length > 0) {
+      article.classList.add('has-artifact')
+    }
     conversation.append(article)
     scrollConversation()
     return body
@@ -1769,6 +1808,312 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     })
     article.append(details)
     scrollConversation()
+  }
+
+  /** 将实时 Artifact 事件挂到当前助手消息，并按 ID 更新已有状态。 */
+  function renderArtifactCard(artifact: AssistantArtifactSummary): void {
+    const existing = artifactCards.get(artifact.id)
+    if (existing) {
+      existing.replaceWith(createArtifactCard(artifact))
+      return
+    }
+    const article = activeAssistantMessage?.closest<HTMLElement>('article')
+    if (!article) {
+      return
+    }
+    article.classList.add('has-artifact')
+    article.append(createArtifactCard(artifact))
+    scrollConversation()
+  }
+
+  /** 创建包含预览、另存、重试和删除操作的稳定 Artifact 卡片。 */
+  function createArtifactCard(artifact: AssistantArtifactSummary): HTMLElement {
+    const card = document.createElement('section')
+    card.className = 'artifact-card'
+    card.dataset.artifactId = artifact.id
+    card.dataset.status = artifact.status
+    const header = document.createElement('div')
+    header.className = 'artifact-card-header'
+    const icon = document.createElement('span')
+    icon.className = 'artifact-file-icon'
+    icon.textContent = artifact.name.split('.').pop()?.slice(0, 4) || 'FILE'
+    const title = document.createElement('div')
+    title.className = 'artifact-card-title'
+    const name = document.createElement('strong')
+    name.textContent = artifact.name
+    name.title = artifact.name
+    const meta = document.createElement('small')
+    meta.textContent = `${formatAttachmentSize(artifact.sizeBytes)} · ${artifact.detectedMime}`
+    title.append(name, meta)
+    header.append(icon, title)
+    const status = document.createElement('span')
+    status.className = 'artifact-card-status'
+    status.textContent = artifactStatusText(artifact)
+    const actions = document.createElement('div')
+    actions.className = 'artifact-card-actions'
+
+    if (artifact.status === 'ready') {
+      const preview = createArtifactAction('预览', `预览 ${artifact.name}`)
+      preview.addEventListener('click', () => void openArtifactPreview(artifact))
+      const save = createArtifactAction(artifact.saved ? '再次保存' : '保存', `保存 ${artifact.name}`)
+      save.addEventListener('click', () => void saveArtifact(artifact, status, save))
+      actions.append(preview, save)
+    } else if (artifact.status === 'error') {
+      const retry = createArtifactAction('重新生成', `重新生成 ${artifact.name}`)
+      retry.addEventListener('click', () => void retryArtifact(artifact))
+      actions.append(retry)
+    }
+
+    const remove = createArtifactAction('删除', `删除 ${artifact.name}`)
+    remove.addEventListener('click', () => void deleteArtifact(artifact, card))
+    actions.append(remove)
+    card.append(header, status, actions)
+    artifactCards.set(artifact.id, card)
+    return card
+  }
+
+  /** 创建 Artifact 文本命令按钮并设置可访问名称。 */
+  function createArtifactAction(label: string, title: string): HTMLButtonElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'secondary-button'
+    button.textContent = label
+    button.title = title
+    button.setAttribute('aria-label', title)
+    return button
+  }
+
+  /** 调用 Main 原生保存流程，取消或失败时保留应用内 Artifact 供重试。 */
+  async function saveArtifact(
+    artifact: AssistantArtifactSummary,
+    status: HTMLElement,
+    button: HTMLButtonElement
+  ): Promise<void> {
+    button.disabled = true
+    status.textContent = '正在打开保存位置...'
+    try {
+      const result = await window.desktopPet.saveAssistantArtifact({
+        artifactId: artifact.id,
+        conversationId: artifact.conversationId
+      })
+      if (result.status === 'saved') {
+        renderArtifactCard(result.artifact)
+      } else if (result.status === 'cancelled') {
+        status.textContent = '已取消保存，应用内文件仍然保留'
+      } else {
+        status.textContent = '保存失败，可以重试'
+        showError(result.error || '文件保存失败。')
+      }
+    } catch (error) {
+      status.textContent = '保存失败，可以重试'
+      showError(error)
+    } finally {
+      button.disabled = false
+    }
+  }
+
+  /** 删除应用内 Artifact，已另存到外部的副本不受影响。 */
+  async function deleteArtifact(artifact: AssistantArtifactSummary, card: HTMLElement): Promise<void> {
+    if (!window.confirm(`删除应用内生成文件“${artifact.name}”？`)) {
+      return
+    }
+    try {
+      const deleted = await window.desktopPet.deleteAssistantArtifact({
+        artifactId: artifact.id,
+        conversationId: artifact.conversationId
+      })
+      if (!deleted) {
+        showError('生成文件不存在或已经被删除。')
+        return
+      }
+      if (artifactPreviewState?.artifactId === artifact.id) {
+        closeArtifactPreview()
+      }
+      artifactCards.delete(artifact.id)
+      card.remove()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 以一条明确用户消息要求模型修正上次失败的 Artifact 参数。 */
+  async function retryArtifact(artifact: AssistantArtifactSummary): Promise<void> {
+    if (busy) {
+      showError('请等待当前回复完成后再重试。')
+      return
+    }
+    input.value = `请修正参数并重新生成刚才失败的文件“${artifact.name}”。`
+    resizeInput()
+    await sendMessage()
+  }
+
+  /** 打开 Artifact 预览并加载第一页；完整内容仍由 Runtime 按 ID 返回。 */
+  async function openArtifactPreview(artifact: AssistantArtifactSummary): Promise<void> {
+    artifactPreviewState = {
+      artifactId: artifact.id,
+      conversationId: artifact.conversationId,
+      nextOffset: 0,
+      loadedCharacters: 0,
+      previewKind: artifact.previewKind
+    }
+    artifactPreviewTitle.textContent = artifact.name
+    artifactPreviewMeta.textContent = `${formatAttachmentSize(artifact.sizeBytes)} · ${artifact.detectedMime}`
+    artifactPreviewContent.replaceChildren()
+    artifactPreviewStatus.textContent = '正在加载...'
+    artifactPreviewMore.hidden = true
+    if (!artifactPreview.open) {
+      artifactPreview.showModal()
+    }
+    await loadNextArtifactPreviewPage()
+  }
+
+  /** 分页加载文本 Artifact；表格只渲染前 50 行、每行前 12 列。 */
+  async function loadNextArtifactPreviewPage(): Promise<void> {
+    const state = artifactPreviewState
+    if (!state || state.nextOffset === null) {
+      return
+    }
+    const requestedOffset = state.nextOffset
+    artifactPreviewMore.disabled = true
+    artifactPreviewStatus.textContent = requestedOffset === 0 ? '正在加载...' : '正在加载更多...'
+    try {
+      const preview = await window.desktopPet.previewAssistantArtifact({
+        artifactId: state.artifactId,
+        conversationId: state.conversationId,
+        offset: requestedOffset
+      })
+      if (artifactPreviewState !== state || !artifactPreview.open) {
+        return
+      }
+      if (preview.status === 'error') {
+        artifactPreviewContent.textContent = artifactErrorText(preview.error)
+        artifactPreviewStatus.textContent = '无法预览'
+        state.nextOffset = null
+        return
+      }
+      if (state.previewKind === 'table') {
+        renderArtifactTable(preview.content, preview.detectedMime)
+        state.nextOffset = null
+        artifactPreviewMore.hidden = true
+        artifactPreviewStatus.textContent = '最多展示前 50 行、每行前 12 列'
+        return
+      }
+      let content = artifactPreviewContent.querySelector('pre')
+      if (!content) {
+        content = document.createElement('pre')
+        artifactPreviewContent.append(content)
+      }
+      content.textContent = requestedOffset === 0
+        ? preview.content || '文件没有可预览文本。'
+        : `${content.textContent || ''}${preview.content}`
+      state.nextOffset = preview.nextOffset
+      state.loadedCharacters = preview.nextOffset ?? preview.totalCharacters
+      artifactPreviewStatus.textContent = preview.truncated
+        ? `已加载 ${state.loadedCharacters} / ${preview.totalCharacters} 字符`
+        : `共 ${preview.totalCharacters} 字符`
+      artifactPreviewMore.hidden = !preview.truncated
+    } catch (error) {
+      if (artifactPreviewState === state) {
+        artifactPreviewStatus.textContent = '预览加载失败'
+        artifactPreviewContent.textContent = error instanceof Error ? error.message : String(error)
+        artifactPreviewMore.hidden = true
+      }
+    } finally {
+      artifactPreviewMore.disabled = false
+    }
+  }
+
+  /** 解析 CSV/TSV 的有限预览，支持引号包裹和双引号转义。 */
+  function renderArtifactTable(content: string, mime: string): void {
+    const delimiter = mime === 'text/tab-separated-values' ? '\t' : ','
+    const rows = parseDelimitedRows(content, delimiter, 50, 12)
+    const scroll = document.createElement('div')
+    scroll.className = 'artifact-table-scroll'
+    const table = document.createElement('table')
+    const body = document.createElement('tbody')
+    rows.forEach((row) => {
+      const tr = document.createElement('tr')
+      row.forEach((value) => {
+        const td = document.createElement('td')
+        td.textContent = value
+        td.title = value
+        tr.append(td)
+      })
+      body.append(tr)
+    })
+    table.append(body)
+    scroll.append(table)
+    artifactPreviewContent.replaceChildren(scroll)
+  }
+
+  /** 在限定行列内解析分隔文本，避免超大表格撑开窗口。 */
+  function parseDelimitedRows(
+    content: string,
+    delimiter: string,
+    maxRows: number,
+    maxColumns: number
+  ): string[][] {
+    const rows: string[][] = []
+    let row: string[] = []
+    let field = ''
+    let quoted = false
+    for (let index = 0; index < content.length && rows.length < maxRows; index += 1) {
+      const character = content[index]
+      if (character === '"') {
+        if (quoted && content[index + 1] === '"') {
+          field += '"'
+          index += 1
+        } else {
+          quoted = !quoted
+        }
+      } else if (!quoted && character === delimiter) {
+        if (row.length < maxColumns) row.push(field)
+        field = ''
+      } else if (!quoted && (character === '\n' || character === '\r')) {
+        if (character === '\r' && content[index + 1] === '\n') index += 1
+        if (row.length < maxColumns) row.push(field)
+        rows.push(row)
+        row = []
+        field = ''
+      } else {
+        field += character
+      }
+    }
+    if (rows.length < maxRows && (field || row.length > 0)) {
+      if (row.length < maxColumns) row.push(field)
+      rows.push(row)
+    }
+    return rows
+  }
+
+  /** 关闭 Artifact 预览并丢弃分页状态。 */
+  function closeArtifactPreview(): void {
+    artifactPreviewState = null
+    if (artifactPreview.open) {
+      artifactPreview.close()
+    }
+  }
+
+  /** 将 Artifact 内部状态映射为卡片短文案。 */
+  function artifactStatusText(artifact: AssistantArtifactSummary): string {
+    if (artifact.status === 'error') {
+      return `生成失败：${artifactErrorText(artifact.error)}`
+    }
+    if (artifact.saved) {
+      return '已另存，应用内文件仍然保留'
+    }
+    return artifact.status === 'generating' ? '正在生成...' : '已生成，尚未另存'
+  }
+
+  /** 将 Runtime Artifact 错误码转换为用户可理解的中文。 */
+  function artifactErrorText(error: string | null): string {
+    const messages: Record<string, string> = {
+      artifact_format_unsupported: '不支持该输出格式',
+      artifact_too_large: '文件超过 25 MB 上限',
+      artifact_content_invalid: '文件内容无效',
+      artifact_write_failed: '应用内文件写入失败'
+    }
+    return messages[error || ''] || '生成文件不可用'
   }
 
   /** 合并新暂存附件并限制当前草稿最多十个，多余项立即回收。 */
@@ -2194,6 +2539,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       closeSkillView()
     }
     closeAttachmentPreview()
+    closeArtifactPreview()
     closing = true
     void clearPendingAttachments()
     composer.classList.add('is-closing')

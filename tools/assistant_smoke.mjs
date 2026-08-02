@@ -23,6 +23,7 @@ const rightScreenshotPath = join(
   `${screenshotParts.name}-right${screenshotParts.ext}`
 )
 const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' ? 'langchain' : 'mock'
+const c2Only = process.env.PETDOCK_SMOKE_C2_ONLY === '1'
 const expectedResponse = backend === 'langchain' ? '本地模型适配测试通过' : '离线模式回应'
 const assistantThemes = ['quiet', 'note', 'glass', 'pixel', 'apple']
 const attachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-attachment.md')
@@ -104,6 +105,11 @@ async function main() {
     )
     await waitForExpandedWindow(petClient)
     await assertAssistantLayout(petClient, 'left')
+    if (c2Only) {
+      await assertArtifactWorkflow(petClient)
+      process.stdout.write(`ASSISTANT_C2_SMOKE_OK\n`)
+      return
+    }
     await assertAssistantThemes(petClient, originalSettings.assistantTheme)
     await assertSkillSelectionFeedback(petClient)
     await submitMessage(petClient, '阶段一冒烟测试')
@@ -319,6 +325,7 @@ async function main() {
 
     if (backend === 'mock') {
       await assertCollapsedPetAttachmentDrop(petClient)
+      await assertArtifactWorkflow(petClient)
       await evaluate(petClient, `document.querySelector('#close-button').click()`)
       await waitForEvaluation(
         petClient,
@@ -439,6 +446,62 @@ async function assertCollapsedPetAttachmentDrop(client) {
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png' })
   const attachmentScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-attachment$1')
   await writeFile(attachmentScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+}
+
+/** 验证 Artifact 生成、预览和删除卡片闭环。 */
+async function assertArtifactWorkflow(client) {
+  await evaluate(client, `document.querySelector('#new-conversation').click()`)
+  await submitMessage(
+    client,
+    '生成文件 | 文件名=assistant-smoke-artifact.md | 格式=md | 内容=# C2 Artifact\n\n生成测试口令：紫色罗盘。'
+  )
+  const cardState = await waitForEvaluation(
+    client,
+    `(() => {
+      const card = document.querySelector('.artifact-card')
+      return card ? {
+        status: card.dataset.status,
+        name: card.querySelector('.artifact-card-title strong')?.textContent,
+        actionCount: card.querySelectorAll('.artifact-card-actions button').length
+      } : null
+    })()`,
+    (value) => value?.status === 'ready' && value?.name === 'assistant-smoke-artifact.md',
+    15_000
+  )
+  if (cardState.actionCount < 3) {
+    throw new Error(`Artifact card actions are incomplete: ${JSON.stringify(cardState)}`)
+  }
+
+  await evaluate(client, `document.querySelector('.artifact-card-actions button').click()`)
+  await waitForEvaluation(
+    client,
+    `(() => ({
+      open: document.querySelector('#artifact-preview').open,
+      text: document.querySelector('#artifact-preview-content').textContent
+    }))()`,
+    (value) => value?.open === true && value?.text?.includes('紫色罗盘'),
+    10_000
+  )
+  const previewScreenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const previewScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-artifact-preview$1')
+  await writeFile(previewScreenshotPath, Buffer.from(previewScreenshot.data, 'base64'))
+  await evaluate(client, `document.querySelector('#artifact-preview-close').click()`)
+  await waitForEvaluation(
+    client,
+    `document.querySelector('#send-button').getAttribute('aria-label')`,
+    (value) => value === '发送',
+    5_000
+  )
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const artifactScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-artifact$1')
+  await writeFile(artifactScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  await evaluate(client, `window.confirm = () => true; document.querySelector('.artifact-card-actions button[aria-label^="删除"]').click()`)
+  await waitForEvaluation(
+    client,
+    `document.querySelector('.artifact-card') === null`,
+    (value) => value === true,
+    10_000
+  )
 }
 
 /** 使用 CDP 向当前收起桌宠投放一个真实文件。 */

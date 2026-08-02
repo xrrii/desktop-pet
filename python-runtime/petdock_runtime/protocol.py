@@ -83,6 +83,21 @@ class AttachmentPreviewRequest(BaseModel):
     limit: int = Field(default=65_536, ge=1, le=100_000)
 
 
+class ArtifactAccessRequest(BaseModel):
+    """校验 Artifact 访问必须携带所属会话 ID。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversationId: str = Field(min_length=1, max_length=128)
+
+
+class ArtifactPreviewRequest(ArtifactAccessRequest):
+    """请求读取指定会话 Artifact 的一段纯文本。"""
+
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=65_536, ge=1, le=100_000)
+
+
 class KnowledgeLibraryCreateRequest(BaseModel):
     """创建一个由 Electron 原生目录选择器明确授权的知识库。"""
 
