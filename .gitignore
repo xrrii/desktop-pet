@@ -34,6 +34,11 @@ python-runtime/knowledge.db*
 skills.db*
 /skills/
 
+# Runtime 以仓库为工作目录启动时产生的受控会话资源
+/assistant/
+/attachments/
+/artifacts/
+
 # Downloaded model weights
 *.onnx
 *.safetensors
