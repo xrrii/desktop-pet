@@ -37,4 +37,18 @@ describe('consumeSseBuffer', () => {
       'invalid assistant event'
     )
   })
+
+  it('接受结构化网页来源事件', () => {
+    const events: AssistantEvent[] = []
+    const event = JSON.stringify({
+      protocolVersion: 1,
+      taskId: 'task-1',
+      sequence: 2,
+      type: 'web_sources',
+      payload: { sources: [] }
+    })
+
+    expect(consumeSseBuffer(`data: ${event}\n\n`, 'task-1', (value) => events.push(value))).toBe('')
+    expect(events[0].type).toBe('web_sources')
+  })
 })

@@ -15,6 +15,9 @@ import type {
   AssistantSkillInstallPreview,
   AssistantSkillSnapshot,
   AssistantSkillSummary,
+  AssistantWebProvider,
+  AssistantWebSettingsSnapshot,
+  AssistantWebSource,
   AssistantWindowLayout,
   MemoryClearScope,
   MemoryItemKind,
@@ -47,6 +50,24 @@ interface ArtifactPreviewState {
   previewKind: AssistantArtifactSummary['previewKind']
 }
 
+const VOLCENGINE_API_KEY_MANAGEMENT_URL = 'https://console.volcengine.com/search-infinity/api-key'
+const CONFIGURED_API_KEY_PLACEHOLDER = '••••••••••••'
+const EMPTY_API_KEY_PLACEHOLDER = '输入 API Key'
+
+const WEB_PROVIDER_INFO: Record<AssistantWebProvider, {
+  label: string
+  apiKeyManagementUrl: string | null
+}> = {
+  volcengine: {
+    label: '火山引擎豆包搜索',
+    apiKeyManagementUrl: VOLCENGINE_API_KEY_MANAGEMENT_URL
+  },
+  brave: {
+    label: 'Brave Search',
+    apiKeyManagementUrl: null
+  }
+}
+
 export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): void {
   const panel = requireElement<HTMLElement>('#assistant-panel')
   const petRoot = requireElement<HTMLElement>('#pet-root')
@@ -54,6 +75,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const memoryView = requireElement<HTMLElement>('#memory-view')
   const knowledgeView = requireElement<HTMLElement>('#knowledge-view')
   const skillView = requireElement<HTMLElement>('#skill-view')
+  const webView = requireElement<HTMLElement>('#web-view')
   const skillContent = requireElement<HTMLElement>('#skill-content')
   const skillAddLocal = requireElement<HTMLButtonElement>('#skill-add-local')
   const skillRefresh = requireElement<HTMLButtonElement>('#skill-refresh')
@@ -97,6 +119,23 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const memoryButton = requireElement<HTMLButtonElement>('#memory-button')
   const knowledgeButton = requireElement<HTMLButtonElement>('#knowledge-button')
   const skillButton = requireElement<HTMLButtonElement>('#skill-button')
+  const webButton = requireElement<HTMLButtonElement>('#web-button')
+  const webBack = requireElement<HTMLButtonElement>('#web-back')
+  const webSettingsForm = requireElement<HTMLFormElement>('#web-settings-form')
+  const webEnabled = requireElement<HTMLInputElement>('#web-enabled')
+  const webProvider = requireElement<HTMLSelectElement>('#web-provider')
+  const webApiKey = requireElement<HTMLInputElement>('#web-api-key')
+  const webApiKeyPage = requireElement<HTMLButtonElement>('#web-api-key-page')
+  const webConfiguredStatus = requireElement<HTMLElement>('#web-configured-status')
+  const webClearKey = requireElement<HTMLButtonElement>('#web-clear-key')
+  const webTest = requireElement<HTMLButtonElement>('#web-test')
+  const webSave = requireElement<HTMLButtonElement>('#web-save')
+  const webTestStatus = requireElement<HTMLElement>('#web-test-status')
+  const webPrivacyNote = requireElement<HTMLElement>('#web-privacy-note')
+  const webEnableConfirm = requireElement<HTMLDialogElement>('#web-enable-confirm')
+  const webEnableConfirmTitle = requireElement<HTMLElement>('#web-enable-confirm-title')
+  const webEnableCancel = requireElement<HTMLButtonElement>('#web-enable-cancel')
+  const webEnableSubmit = requireElement<HTMLButtonElement>('#web-enable-submit')
   const activeSkillChip = requireElement<HTMLButtonElement>('#active-skill-chip')
   const composer = requireElement<HTMLFormElement>('#composer')
   const attachmentList = requireElement<HTMLElement>('#attachment-list')
@@ -139,7 +178,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let memoryMode = false
   let knowledgeMode = false
   let skillMode = false
+  let webMode = false
   let skillSnapshot: AssistantSkillSnapshot | null = null
+  let webSnapshot: AssistantWebSettingsSnapshot | null = null
+  let webBusy = false
+  let webEnableConfirmed = false
   let pendingSkillPreview: AssistantSkillInstallPreview | null = null
   let pendingSkillUninstall: AssistantSkillSummary | null = null
   let selectedSkillId: string | null = null
@@ -183,6 +226,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         if (skillMode) {
           closeSkillView()
         }
+        if (webMode) {
+          closeWebView()
+        }
         void openMemoryView()
       }
     }
@@ -207,7 +253,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
 
   document.addEventListener('keydown', (event) => {
-    if (attachmentPreview.open || artifactPreview.open) {
+    if (attachmentPreview.open || artifactPreview.open || webEnableConfirm.open) {
       return
     }
     if (event.key === 'Escape' && expanded) {
@@ -298,6 +344,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         if (skillMode) {
           closeSkillView()
         }
+        if (webMode) {
+          closeWebView()
+        }
         void openMemoryView()
       }
     }
@@ -312,6 +361,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         }
         if (skillMode) {
           closeSkillView()
+        }
+        if (webMode) {
+          closeWebView()
         }
         void openKnowledgeView()
       }
@@ -328,10 +380,67 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         if (knowledgeMode) {
           closeKnowledgeView()
         }
+        if (webMode) {
+          closeWebView()
+        }
         void openSkillView()
       }
     }
   })
+  webButton.addEventListener('click', () => {
+    if (busy) {
+      return
+    }
+    if (webMode) {
+      closeWebView()
+      return
+    }
+    if (memoryMode) {
+      closeMemoryView()
+    }
+    if (knowledgeMode) {
+      closeKnowledgeView()
+    }
+    if (skillMode) {
+      closeSkillView()
+    }
+    void openWebView()
+  })
+  webBack.addEventListener('click', closeWebView)
+  webSettingsForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    void saveWebSettings()
+  })
+  webEnabled.addEventListener('change', () => {
+    const provider = selectedWebProvider()
+    const active = webSnapshot?.enabled && webSnapshot.provider === provider
+    if (webEnabled.checked && !active && !webEnableConfirmed) {
+      webEnableConfirm.showModal()
+    }
+  })
+  webProvider.addEventListener('change', () => {
+    webApiKey.value = ''
+    webTestStatus.textContent = ''
+    webEnabled.checked = Boolean(
+      webSnapshot?.enabled && webSnapshot.provider === selectedWebProvider()
+    )
+    webEnableConfirmed = Boolean(
+      webSnapshot?.enabled && webSnapshot.provider === selectedWebProvider()
+    )
+    renderWebProviderDetails()
+  })
+  webApiKey.addEventListener('input', () => {
+    renderWebProviderDetails()
+  })
+  webApiKeyPage.addEventListener('click', () => void openWebApiKeyManagementPage())
+  webEnableCancel.addEventListener('click', cancelWebEnable)
+  webEnableSubmit.addEventListener('click', confirmWebEnable)
+  webEnableConfirm.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    cancelWebEnable()
+  })
+  webClearKey.addEventListener('click', () => void clearWebApiKey())
+  webTest.addEventListener('click', () => void testWebSearch())
   skillBack.addEventListener('click', closeSkillView)
   skillRefresh.addEventListener('click', () => void refreshSkills())
   skillAddLocal.addEventListener('click', () => void previewLocalSkills())
@@ -385,11 +494,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     window.desktopPet.getAssistantKnowledge(),
     window.desktopPet.getAssistantEmbeddingModels(),
     window.desktopPet.getAssistantSkills(),
+    window.desktopPet.getAssistantWebSettings(),
     window.desktopPet.getSettings()
-  ]).then(([snapshot, models, skills, settings]) => {
+  ]).then(([snapshot, models, skills, webSettings, settings]) => {
     knowledgeSnapshot = snapshot
     embeddingSnapshot = models
     skillSnapshot = skills
+    webSnapshot = webSettings
     const existing = new Set(snapshot.libraries.map((library) => library.id))
     settings.assistantKnowledgeLibraryIds
       .filter((id) => existing.has(id))
@@ -571,6 +682,209 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     skillButton.setAttribute('aria-pressed', 'false')
     document.body.dataset.assistantMode = 'chat'
     input.focus()
+  }
+
+  /** 打开联网设置，只读取是否启用和是否已配置等脱敏状态。 */
+  async function openWebView(): Promise<void> {
+    clearError()
+    try {
+      webSnapshot = await window.desktopPet.getAssistantWebSettings()
+      webMode = true
+      webEnableConfirmed = webSnapshot.enabled
+      conversation.hidden = true
+      webView.hidden = false
+      input.disabled = true
+      sendButton.disabled = true
+      newConversationButton.disabled = true
+      webButton.setAttribute('aria-pressed', 'true')
+      document.body.dataset.assistantMode = 'web'
+      renderWebSettings()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 退出联网设置并恢复聊天输入状态。 */
+  function closeWebView(): void {
+    webMode = false
+    webEnableConfirmed = false
+    if (webEnableConfirm.open) {
+      webEnableConfirm.close()
+    }
+    webView.hidden = true
+    conversation.hidden = false
+    input.disabled = busy
+    sendButton.disabled = false
+    newConversationButton.disabled = busy
+    webButton.setAttribute('aria-pressed', 'false')
+    document.body.dataset.assistantMode = 'chat'
+    input.focus()
+  }
+
+  /** 根据 Main 返回的脱敏快照渲染设置，不回填 API Key。 */
+  function renderWebSettings(): void {
+    const snapshot = webSnapshot
+    webEnabled.checked = snapshot?.enabled ?? false
+    webProvider.value = snapshot?.provider ?? 'volcengine'
+    webApiKey.value = ''
+    webSave.disabled = webBusy
+    webEnabled.disabled = webBusy
+    webProvider.disabled = webBusy
+    webApiKey.disabled = webBusy
+    renderWebProviderDetails()
+  }
+
+  /** 根据当前选择更新脱敏密钥状态、隐私文案和外链入口。 */
+  function renderWebProviderDetails(): void {
+    const provider = selectedWebProvider()
+    const info = WEB_PROVIDER_INFO[provider]
+    const configured = isWebProviderConfigured(provider)
+    webConfiguredStatus.textContent = configured ? '密钥已安全保存' : '尚未配置密钥'
+    webApiKey.placeholder = configured
+      ? CONFIGURED_API_KEY_PLACEHOLDER
+      : EMPTY_API_KEY_PLACEHOLDER
+    webClearKey.disabled = webBusy || !configured
+    webTest.disabled = webBusy || (!configured && !webApiKey.value.trim())
+    webApiKey.setAttribute('aria-label', `${info.label} API Key`)
+    webPrivacyNote.textContent = `联网后，搜索关键词会发送给${info.label}；网页正文仅在当前任务期间处理。`
+    webEnableConfirmTitle.textContent = `启用后，搜索关键词将发送给${info.label}，选中的公开网页正文会在当前任务期间交给模型处理。`
+    webApiKeyPage.hidden = info.apiKeyManagementUrl === null
+    webApiKeyPage.title = info.apiKeyManagementUrl
+      ? `打开${info.label} API Key 管理页面`
+      : ''
+  }
+
+  /** 首次启用必须确认第三方查询和当前任务网页处理范围。 */
+  function cancelWebEnable(): void {
+    webEnableConfirmed = false
+    webEnabled.checked = Boolean(
+      webSnapshot?.enabled && webSnapshot.provider === selectedWebProvider()
+    )
+    webEnableConfirm.close()
+  }
+
+  function confirmWebEnable(): void {
+    webEnableConfirmed = true
+    webEnabled.checked = true
+    webEnableConfirm.close()
+    webApiKey.focus()
+  }
+
+  /** 保存联网设置；空白 API Key 会保留 Main 中已有密钥。 */
+  async function saveWebSettings(showSuccess = true): Promise<boolean> {
+    const provider = selectedWebProvider()
+    const active = webSnapshot?.enabled && webSnapshot.provider === provider
+    if (webEnabled.checked && !active && !webEnableConfirmed) {
+      webEnableConfirm.showModal()
+      return false
+    }
+    const apiKey = webApiKey.value.trim()
+    if (webEnabled.checked && !isWebProviderConfigured(provider) && !apiKey) {
+      showError(`启用联网搜索前需要填写${WEB_PROVIDER_INFO[provider].label} API Key。`)
+      webApiKey.focus()
+      return false
+    }
+    setWebBusy(true)
+    try {
+      webSnapshot = await window.desktopPet.setAssistantWebSettings({
+        enabled: webEnabled.checked,
+        provider,
+        ...(apiKey ? { apiKey } : {})
+      })
+      webEnableConfirmed = webSnapshot.enabled && webSnapshot.provider === provider
+      renderWebSettings()
+      webTestStatus.textContent = showSuccess ? '设置已保存。' : ''
+      clearError()
+      return true
+    } catch (error) {
+      showError(error)
+      return false
+    } finally {
+      setWebBusy(false)
+    }
+  }
+
+  /** 删除加密密钥时同时关闭联网，避免留下不可执行的启用状态。 */
+  async function clearWebApiKey(): Promise<void> {
+    const provider = selectedWebProvider()
+    const providerLabel = WEB_PROVIDER_INFO[provider].label
+    if (!isWebProviderConfigured(provider) || !window.confirm(`确认删除已保存的${providerLabel} API Key？`)) {
+      return
+    }
+    setWebBusy(true)
+    try {
+      webSnapshot = await window.desktopPet.setAssistantWebSettings({
+        enabled: false,
+        provider,
+        clearApiKey: true
+      })
+      webEnableConfirmed = false
+      renderWebSettings()
+      webTestStatus.textContent = '密钥已删除，联网搜索已关闭。'
+      clearError()
+    } catch (error) {
+      showError(error)
+    } finally {
+      setWebBusy(false)
+    }
+  }
+
+  /** 测试前先保存表单中的新密钥，再由 Main 发起固定查询。 */
+  async function testWebSearch(): Promise<void> {
+    const provider = selectedWebProvider()
+    if (!(await saveWebSettings(false))) {
+      return
+    }
+    if (!isWebProviderConfigured(provider)) {
+      showError(`请先保存${WEB_PROVIDER_INFO[provider].label} API Key。`)
+      return
+    }
+    setWebBusy(true)
+    webTestStatus.textContent = '正在测试连接…'
+    try {
+      const count = await window.desktopPet.testAssistantWebSearch()
+      webTestStatus.textContent = `连接成功，收到 ${count} 条测试结果。`
+      clearError()
+    } catch (error) {
+      webTestStatus.textContent = '连接测试失败。'
+      showError(error)
+    } finally {
+      setWebBusy(false)
+    }
+  }
+
+  /** 统一锁定联网设置控件，防止并发保存和测试。 */
+  function setWebBusy(value: boolean): void {
+    webBusy = value
+    webEnabled.disabled = value
+    webProvider.disabled = value
+    webApiKey.disabled = value
+    webClearKey.disabled = value || !isWebProviderConfigured(selectedWebProvider())
+    webTest.disabled = value || (
+      !isWebProviderConfigured(selectedWebProvider()) && !webApiKey.value.trim()
+    )
+    webSave.disabled = value
+  }
+
+  function selectedWebProvider(): AssistantWebProvider {
+    return webProvider.value === 'brave' ? 'brave' : 'volcengine'
+  }
+
+  function isWebProviderConfigured(provider: AssistantWebProvider): boolean {
+    const configuredProviders = webSnapshot?.configuredProviders
+    if (Array.isArray(configuredProviders)) return configuredProviders.includes(provider)
+    return Boolean(webSnapshot?.configured && webSnapshot.provider === provider)
+  }
+
+  /** 只打开代码中登记的 Provider 控制台地址，不接受表单传入任意 URL。 */
+  async function openWebApiKeyManagementPage(): Promise<void> {
+    const url = WEB_PROVIDER_INFO[selectedWebProvider()].apiKeyManagementUrl
+    if (!url) return
+    try {
+      await window.desktopPet.openAssistantExternalUrl(url)
+    } catch (error) {
+      showError(error)
+    }
   }
 
   /** 渲染 Skill 启停、来源、兼容性和卸载控制。 */
@@ -1397,7 +1711,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     lastSequence = 0
     try {
       const messages = await window.desktopPet.getAssistantConversationMessages(id)
-      messages.forEach((message) => addMessage(message.role, message.content, message.attachments, message.artifacts))
+      messages.forEach((message) => addMessage(
+        message.role,
+        message.content,
+        message.attachments,
+        message.artifacts,
+        message.webSources
+      ))
     } catch (error) {
       showError(error)
     }
@@ -1497,6 +1817,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
     if (event.type === 'attachment_sources') {
       renderAttachmentSources(event.payload.sources)
+      return
+    }
+
+    if (event.type === 'web_sources') {
+      renderWebSources(event.payload.sources)
       return
     }
 
@@ -1673,7 +1998,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     role: 'user' | 'assistant',
     content: string,
     attachments: AssistantAttachmentMessageRef[] = [],
-    artifacts: AssistantArtifactSummary[] = []
+    artifacts: AssistantArtifactSummary[] = [],
+    webSources: AssistantWebSource[] = []
   ): HTMLElement {
     const article = document.createElement('article')
     article.className = `message ${role}`
@@ -1695,6 +2021,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     artifacts.forEach((artifact) => article.append(createArtifactCard(artifact)))
     if (artifacts.length > 0) {
       article.classList.add('has-artifact')
+    }
+    if (role === 'assistant' && webSources.length > 0) {
+      article.append(createWebSourcesDetails(webSources))
     }
     conversation.append(article)
     scrollConversation()
@@ -1745,7 +2074,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 通过受控 IPC 打开助手回复中的 HTTP(S) 链接。 */
   function handleConversationClick(event: MouseEvent): void {
     const target = event.target instanceof Element ? event.target : null
-    const anchor = target?.closest<HTMLAnchorElement>('.message.assistant .message-body a[href]')
+    const anchor = target?.closest<HTMLAnchorElement>('.message.assistant a[href]')
     const url = anchor?.getAttribute('href')
     if (!anchor || !url) {
       return
@@ -1760,9 +2089,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (!article || sources.length === 0) {
       return
     }
-    article.querySelector('.retrieval-sources')?.remove()
+    article.querySelector('.knowledge-sources')?.remove()
     const details = document.createElement('details')
-    details.className = 'retrieval-sources'
+    details.className = 'retrieval-sources knowledge-sources'
     const summary = document.createElement('summary')
     summary.textContent = `参考资料 ${sources.length}`
     details.append(summary)
@@ -1808,6 +2137,44 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     })
     article.append(details)
     scrollConversation()
+  }
+
+  /** 展示最终回答实际引用的网页，并标明是否读取过正文。 */
+  function renderWebSources(sources: AssistantWebSource[]): void {
+    const article = activeAssistantMessage?.closest('article')
+    if (!article || sources.length === 0) {
+      return
+    }
+    article.querySelector('.web-sources')?.remove()
+    article.append(createWebSourcesDetails(sources))
+    scrollConversation()
+  }
+
+  /** 创建可用于实时事件和历史恢复的网页来源列表。 */
+  function createWebSourcesDetails(sources: AssistantWebSource[]): HTMLElement {
+    const details = document.createElement('details')
+    details.className = 'retrieval-sources web-sources'
+    const summary = document.createElement('summary')
+    summary.textContent = `网页来源 ${sources.length}`
+    details.append(summary)
+    sources.forEach((source) => {
+      const item = document.createElement('div')
+      item.className = 'retrieval-source web-source'
+      const title = document.createElement('a')
+      title.className = 'web-source-link'
+      title.href = source.url
+      title.textContent = `[网页${source.citationIndex}] ${source.title}`
+      title.title = source.url
+      const meta = document.createElement('span')
+      meta.className = 'web-source-meta'
+      const kind = source.kind === 'fetched-page' ? '已读取正文' : '搜索摘要'
+      meta.textContent = `${source.domain} · ${kind}${source.publishedAt ? ` · ${source.publishedAt}` : ''}`
+      const excerpt = document.createElement('p')
+      excerpt.textContent = source.excerpt || '没有可展示的摘要。'
+      item.append(title, meta, excerpt)
+      details.append(item)
+    })
+    return details
   }
 
   /** 将实时 Artifact 事件挂到当前助手消息，并按 ID 更新已有状态。 */
@@ -2317,6 +2684,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     knowledgeButton.disabled = value
     memoryButton.disabled = value
     skillButton.disabled = value
+    webButton.disabled = value
     attachmentButton.disabled = value
     renderPendingAttachments()
   }
@@ -2502,6 +2870,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (skillMode) {
         closeSkillView()
       }
+      if (webMode) {
+        closeWebView()
+      }
       closing = false
       composer.classList.remove('is-open', 'is-closing')
       panel.hidden = true
@@ -2538,6 +2909,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (skillMode) {
       closeSkillView()
     }
+    if (webMode) {
+      closeWebView()
+    }
     closeAttachmentPreview()
     closeArtifactPreview()
     closing = true
@@ -2568,7 +2942,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   function showError(error: unknown): void {
-    errorBanner.textContent = error instanceof Error ? error.message : String(error)
+    const message = error instanceof Error ? error.message : String(error)
+    errorBanner.textContent = message
+      .replace(/^Error invoking remote method '[^']+':\s*Error:\s*/i, '')
+      .replace(/^Error:\s*/i, '')
     errorBanner.hidden = false
   }
 

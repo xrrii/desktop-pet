@@ -536,7 +536,7 @@ npm.cmd run pack
 
 AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、文件输出、联网搜索、复杂文档和多文件修改必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
-对话资源能力当前进度：C1、C1.1 已完成，C2 已完成实现并处于验收收尾，C3 至 C5 未开始。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送和来源展示验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可用 `$env:PETDOCK_SMOKE_DEV='1'; $env:PETDOCK_SMOKE_C2_ONLY='1'; node tools\assistant_smoke.mjs` 聚焦验证 Artifact 生成、卡片、预览和删除。C2 已实现原生“另存为”、原子写入、审计和清理；独立 Runtime 打包形态测试已通过，但 Windows 原生保存对话框自动化和完整 Electron 打包版闭环尚未稳定通过，因此当前不能把 C2 视为已完成验收。
+对话资源能力当前进度：C1、C1.1 已完成，C2、C3 已完成实现并处于验收收尾，C4、C5 未开始。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送、来源展示和联网设置脱敏状态验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可用 `$env:PETDOCK_SMOKE_DEV='1'; $env:PETDOCK_SMOKE_C2_ONLY='1'; node tools\assistant_smoke.mjs` 聚焦验证 Artifact 生成、卡片、预览和删除。C3 默认使用火山引擎豆包搜索，Brave Search 作为兼容 Provider；可用 `$env:PETDOCK_SMOKE_REAL_WEB='1'; $env:PETDOCK_SMOKE_EXECUTABLE='release\win-unpacked\PetDock.exe'; node tools\assistant_smoke.mjs` 复验当前脱敏配置的真实连接。真实火山连接和解包版设置 E2E 已通过，本地可控 Provider 的开发版/打包版完整搜索、抓取和引用 E2E 仍待验收，因此 C2、C3 暂不标记为 Done。
 
 ## 15. AI Assistant Runtime
 

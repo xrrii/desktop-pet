@@ -23,6 +23,8 @@ import type {
   AssistantRuntimeStatus,
   AssistantSkillInstallPreview,
   AssistantSkillSnapshot,
+  AssistantWebSettingsInput,
+  AssistantWebSettingsSnapshot,
   AssistantWindowLayout,
   MemoryClearScope,
   MemoryItemKind
@@ -76,6 +78,13 @@ const api = {
     ipcRenderer.invoke('assistant:open-external-url', url),
   getAssistantStatus: (): Promise<AssistantRuntimeStatus> =>
     ipcRenderer.invoke('assistant:get-status'),
+  getAssistantWebSettings: (): Promise<AssistantWebSettingsSnapshot> =>
+    ipcRenderer.invoke('assistant:get-web-settings'),
+  setAssistantWebSettings: (
+    input: AssistantWebSettingsInput
+  ): Promise<AssistantWebSettingsSnapshot> => ipcRenderer.invoke('assistant:set-web-settings', input),
+  testAssistantWebSearch: (): Promise<number> =>
+    ipcRenderer.invoke('assistant:test-web-search'),
   getAssistantLayout: (): Promise<AssistantWindowLayout> =>
     ipcRenderer.invoke('assistant:get-layout'),
   setAssistantTheme: (theme: AssistantThemeId): Promise<AssistantThemeId> =>

@@ -104,6 +104,45 @@
         </section>
       </section>
 
+      <section id="web-view" class="web-view" aria-label="联网搜索设置" hidden>
+        <header class="memory-header">
+          <h2>联网搜索</h2>
+          <div class="memory-header-actions">
+            <button id="web-back" class="icon-button" type="button" title="返回聊天" aria-label="返回聊天">←</button>
+          </div>
+        </header>
+        <form id="web-settings-form" class="web-settings-form">
+          <label class="web-setting-row" for="web-enabled">
+            <span>
+              <strong>联网搜索</strong>
+              <small id="web-configured-status">尚未配置</small>
+            </span>
+            <input id="web-enabled" type="checkbox" aria-label="启用联网搜索" />
+          </label>
+          <label class="web-field" for="web-provider">
+            <span>搜索服务</span>
+            <select id="web-provider" aria-label="搜索服务">
+              <option value="volcengine">火山引擎豆包搜索</option>
+              <option value="brave">Brave Search</option>
+            </select>
+          </label>
+          <div class="web-field">
+            <div class="web-field-heading">
+              <label for="web-api-key">API Key</label>
+              <button id="web-api-key-page" class="web-key-link" type="button" title="打开火山引擎 API Key 管理页面">API Key 管理 ↗</button>
+            </div>
+            <input id="web-api-key" type="password" maxlength="1000" placeholder="输入 API Key" aria-label="火山引擎豆包搜索 API Key" autocomplete="off" />
+          </div>
+          <p id="web-privacy-note" class="web-privacy-note">联网后，搜索关键词会发送给火山引擎豆包搜索；网页正文仅在当前任务期间处理。</p>
+          <div class="web-settings-actions">
+            <button id="web-clear-key" class="secondary-button" type="button">删除密钥</button>
+            <button id="web-test" class="secondary-button" type="button">测试连接</button>
+            <button id="web-save" class="primary-button" type="submit">保存</button>
+          </div>
+          <small id="web-test-status" class="web-test-status" role="status"></small>
+        </form>
+      </section>
+
       <div id="error-banner" class="error-banner" role="alert" hidden></div>
 
       <div
@@ -136,6 +175,7 @@
           <button id="attachment-button" class="icon-button" type="button" title="添加附件" aria-label="添加附件">⊕</button>
           <button id="knowledge-button" class="icon-button knowledge-button" type="button" title="知识库" aria-label="知识库" aria-pressed="false">▤</button>
           <button id="skill-button" class="icon-button skill-button" type="button" title="技能" aria-label="技能" aria-pressed="false">$</button>
+          <button id="web-button" class="icon-button web-button" type="button" title="联网搜索" aria-label="联网搜索设置" aria-pressed="false">⌁</button>
           <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">◈</button>
           <button id="send-button" class="primary-button icon-action-button" type="submit" title="发送" aria-label="发送">↑</button>
           <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>
@@ -170,6 +210,14 @@
           <span id="artifact-preview-status" role="status"></span>
           <button id="artifact-preview-more" class="secondary-button" type="button" hidden>加载更多</button>
         </footer>
+      </dialog>
+
+      <dialog id="web-enable-confirm" class="embedding-confirm" aria-labelledby="web-enable-confirm-title">
+        <p id="web-enable-confirm-title">启用后，搜索关键词将发送给火山引擎豆包搜索，选中的公开网页正文会在当前任务期间交给模型处理。</p>
+        <div class="embedding-confirm-actions">
+          <button id="web-enable-cancel" class="secondary-button" type="button">取消</button>
+          <button id="web-enable-submit" class="primary-button" type="button">同意启用</button>
+        </div>
       </dialog>
     </section>
 

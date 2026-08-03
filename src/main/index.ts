@@ -9,6 +9,7 @@ import type {
   AssistantArtifactSaveResult,
   AssistantEmbeddingOnlineInput,
   AssistantLayoutTrace,
+  AssistantWebSettingsInput,
   MemoryClearScope,
   MemoryItemKind,
   AssistantPermissionResolution
@@ -205,6 +206,21 @@ function registerIpc(): void {
   ipcMain.handle('assistant:get-status', (event) => {
     requirePetSender(event)
     return assistantManager.getStatus()
+  })
+
+  ipcMain.handle('assistant:get-web-settings', (event) => {
+    requirePetSender(event)
+    return assistantManager.getWebSettings()
+  })
+
+  ipcMain.handle('assistant:set-web-settings', (event, input: AssistantWebSettingsInput) => {
+    requirePetSender(event)
+    return assistantManager.configureWebSettings(input)
+  })
+
+  ipcMain.handle('assistant:test-web-search', (event) => {
+    requirePetSender(event)
+    return assistantManager.testWebSearch()
   })
 
   ipcMain.handle('assistant:get-layout', (event) => {

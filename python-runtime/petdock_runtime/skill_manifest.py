@@ -20,6 +20,7 @@ SUPPORTED_PERMISSIONS = {
     "knowledge.read",
     "memory.read",
     "memory.write",
+    "network.read",
     "tool.open_url",
     "tool.open_app",
     "tool.open_path",

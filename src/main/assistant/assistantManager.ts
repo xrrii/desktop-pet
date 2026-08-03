@@ -24,6 +24,8 @@ import type {
   AssistantSkillInstallPreview,
   AssistantSkillSnapshot,
   AssistantToolResultRequest,
+  AssistantWebSettingsInput,
+  AssistantWebSettingsSnapshot,
   ToolCall
 } from '../../shared/assistant'
 import { ASSISTANT_PROTOCOL_VERSION } from '../../shared/assistant'
@@ -32,8 +34,10 @@ import { logError, logInfo } from '../logger'
 import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess } from './runtimeProcess'
 import { EmbeddingModelManager } from './embeddingModelManager'
-import { AssistantToolHost } from './toolHost'
+import { AssistantToolHost, webToolErrorMessage } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
+import { WebSearchService } from './webSearchService'
+import { WebSettingsManager } from './webSettingsManager'
 import {
   AssistantAttachmentManager,
   isAttachmentSummary,
@@ -60,8 +64,10 @@ interface PendingPermission extends PendingToolContext {
 
 export class AssistantManager {
   private readonly embeddingModels = new EmbeddingModelManager()
+  private readonly webSettings = new WebSettingsManager()
+  private readonly webSearch = new WebSearchService(this.webSettings)
   private readonly runtime: AssistantRuntimeProcess
-  private readonly toolHost = new AssistantToolHost()
+  private readonly toolHost = new AssistantToolHost(this.webSearch)
   private readonly activeTasks = new Map<string, ActiveTask>()
   private readonly pendingPermissions = new Map<string, PendingPermission>()
   private readonly draftAttachments = new Map<string, AssistantAttachmentSummary>()
@@ -82,6 +88,22 @@ export class AssistantManager {
 
   async start(): Promise<void> {
     await this.runtime.start()
+  }
+
+  getWebSettings(): AssistantWebSettingsSnapshot {
+    return this.webSettings.snapshot()
+  }
+
+  async configureWebSettings(input: AssistantWebSettingsInput): Promise<AssistantWebSettingsSnapshot> {
+    return this.webSettings.configure(input)
+  }
+
+  async testWebSearch(): Promise<number> {
+    try {
+      return await this.webSearch.testConnection()
+    } catch (error) {
+      throw new Error(webToolErrorMessage(error))
+    }
   }
 
   /** 暂存并解析用户明确添加的文件，任何失败都会清理本批次受控副本。 */
@@ -221,6 +243,7 @@ export class AssistantManager {
     const knowledgeLibraryIds = validateKnowledgeLibraryIds(loadSettings().assistantKnowledgeLibraryIds)
     const taskId = randomUUID()
     const skillId = input.skillId === undefined ? undefined : validateSkillId(input.skillId)
+    const webSnapshot = this.webSettings.snapshot()
     const request: AssistantRequest = {
       protocolVersion: ASSISTANT_PROTOCOL_VERSION,
       taskId,
@@ -230,7 +253,9 @@ export class AssistantManager {
       context: {
         activePetId: loadSettings().petId,
         locale: app.getLocale() || 'zh-CN',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        webSearchEnabled: webSnapshot.enabled,
+        webSearchProvider: webSnapshot.enabled ? webSnapshot.provider : null
       },
       knowledgeLibraryIds,
       attachmentIds,
@@ -243,11 +268,13 @@ export class AssistantManager {
       openToolCalls: new Set()
     }
     this.activeTasks.set(taskId, state)
+    this.webSearch.beginTask(taskId, message)
     try {
       await client.createTask(request)
       attachmentIds.forEach((attachmentId) => this.draftAttachments.delete(attachmentId))
     } catch (error) {
       this.activeTasks.delete(taskId)
+      this.webSearch.finishTask(taskId)
       throw error
     }
 
@@ -298,7 +325,7 @@ export class AssistantManager {
       taskId: pending.taskId,
       toolCallId: pending.call.id,
       toolName: pending.call.name,
-      args: pending.policy.args,
+      args: sanitizeToolAuditArgs(pending.call.name, pending.policy.args),
       risk: pending.policy.risk,
       policyDecision: pending.policy.action,
       userDecision: input.decision
@@ -314,7 +341,7 @@ export class AssistantManager {
     }
 
     const startedAt = Date.now()
-    const execution = await this.toolHost.execute(pending.policy)
+    const execution = await this.toolHost.execute(pending.policy, pending.taskId)
     await this.completeToolCall(pending, {
       decision: 'approved',
       ...execution,
@@ -329,6 +356,7 @@ export class AssistantManager {
       return false
     }
     this.clearPendingPermissions(taskId)
+    this.webSearch.cancelTask(taskId)
     const client = await this.runtime.start()
     return client.cancel(taskId)
   }
@@ -339,6 +367,7 @@ export class AssistantManager {
       return
     }
     taskIds.forEach((taskId) => this.clearPendingPermissions(taskId))
+    taskIds.forEach((taskId) => this.webSearch.cancelTask(taskId))
     const client = await this.runtime.start()
     await Promise.allSettled(taskIds.map((taskId) => client.cancel(taskId)))
   }
@@ -346,6 +375,7 @@ export class AssistantManager {
   async stop(): Promise<void> {
     for (const taskId of this.activeTasks.keys()) {
       this.clearPendingPermissions(taskId)
+      this.webSearch.finishTask(taskId)
     }
     this.activeTasks.clear()
     this.draftAttachments.clear()
@@ -541,6 +571,14 @@ export class AssistantManager {
       )
     }
 
+    if (event.type === 'web_sources') {
+      this.emit(event.taskId, {
+        ...event,
+        payload: { sources: this.webSearch.resolveSources(event.taskId, event.payload.sources) }
+      })
+      return
+    }
+
     this.emit(event.taskId, event)
     if (event.type === 'done') {
       this.cleanupTask(event.taskId)
@@ -558,7 +596,7 @@ export class AssistantManager {
     const call: ToolCall = {
       id: runtimeCall.id,
       name: runtimeCall.name,
-      args: policy.args,
+      args: sanitizeToolAuditArgs(runtimeCall.name, policy.args),
       risk: policy.risk,
       preview: policy.preview
     }
@@ -575,7 +613,7 @@ export class AssistantManager {
       taskId,
       toolCallId: call.id,
       toolName: call.name,
-      args: policy.args,
+      args: sanitizeToolAuditArgs(call.name, policy.args),
       risk: policy.risk,
       policyDecision: policy.action
     })
@@ -590,7 +628,7 @@ export class AssistantManager {
 
     if (policy.action === 'execute') {
       const startedAt = Date.now()
-      const execution = await this.toolHost.execute(policy)
+      const execution = await this.toolHost.execute(policy, taskId)
       await this.completeToolCall(
         pendingBase,
         {
@@ -660,7 +698,7 @@ export class AssistantManager {
         payload: {
           toolCallId: pending.call.id,
           ok: result.ok,
-          result: result.result,
+          ...(isWebTool(pending.call.name) ? {} : { result: result.result }),
           error: result.error
         }
       })
@@ -671,7 +709,7 @@ export class AssistantManager {
       taskId: pending.taskId,
       toolCallId: pending.call.id,
       toolName: pending.call.name,
-      args: pending.policy.args,
+      args: sanitizeToolAuditArgs(pending.call.name, pending.policy.args, result.result),
       risk: pending.policy.risk,
       policyDecision: pending.policy.action,
       userDecision: result.decision,
@@ -703,6 +741,7 @@ export class AssistantManager {
   private cleanupTask(taskId: string): void {
     this.clearPendingPermissions(taskId)
     this.activeTasks.delete(taskId)
+    this.webSearch.finishTask(taskId)
   }
 
   /** 同时保留现有脱敏 JSONL 审计，并异步写入 SQLite。 */
@@ -771,6 +810,36 @@ function validateArtifactAccess(value: unknown): AssistantArtifactAccessInput {
 /** 识别 Node 文件系统错误，避免把包含真实路径的原始消息返回 Renderer。 */
 function isNodeFileSystemError(value: unknown): value is NodeJS.ErrnoException {
   return value instanceof Error && typeof (value as NodeJS.ErrnoException).code === 'string'
+}
+
+function isWebTool(name: string): boolean {
+  return name === 'search_web' || name === 'fetch_web_page'
+}
+
+/** 审计联网调用时隐藏查询正文、网页路径和查询参数。 */
+function sanitizeToolAuditArgs(
+  name: string,
+  args: Record<string, unknown>,
+  result?: unknown
+): Record<string, unknown> {
+  if (name === 'search_web') {
+    const value = result && typeof result === 'object' && !Array.isArray(result)
+      ? result as Record<string, unknown>
+      : null
+    return {
+      queryLength: typeof args.query === 'string' ? args.query.length : 0,
+      maxResults: args.maxResults,
+      ...(Array.isArray(value?.results) ? { resultCount: value.results.length } : {})
+    }
+  }
+  if (name === 'fetch_web_page') {
+    try {
+      return { domain: new URL(String(args.url)).hostname }
+    } catch {
+      return { domain: 'invalid' }
+    }
+  }
+  return args
 }
 
 function validateKnowledgeLibraryIds(value: unknown): string[] {

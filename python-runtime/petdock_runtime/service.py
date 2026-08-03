@@ -11,6 +11,7 @@ from .backends import (
     RetrievalContext,
     SkillLifecycleEvent,
     ToolCallRequest,
+    WebSourcesContext,
 )
 from .memory_extractor import MemoryExtractor
 from .protocol import AssistantRequest, ToolResultRequest
@@ -122,6 +123,9 @@ class AssistantService:
                     if isinstance(output, AttachmentContext):
                         await emit("attachment_sources", {"sources": output.sources})
                         continue
+                    if isinstance(output, WebSourcesContext):
+                        await emit("web_sources", {"sources": output.sources})
+                        continue
                     if isinstance(output, ArtifactCreatedEvent):
                         await emit("artifact_created", {"artifact": output.artifact.summary()})
                         continue
@@ -174,6 +178,7 @@ class AssistantService:
             await emit("done", {"finishReason": "stop"})
             completed = True
         finally:
+            self._backend.finish_task(request.taskId)
             if completed and self._extractor:
                 self._extractor.schedule(request, "".join(assistant_text_parts))
             if session.pending_tool_result and not session.pending_tool_result.done():

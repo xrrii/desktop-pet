@@ -24,6 +24,7 @@ const rightScreenshotPath = join(
 )
 const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' ? 'langchain' : 'mock'
 const c2Only = process.env.PETDOCK_SMOKE_C2_ONLY === '1'
+const realWebSearch = process.env.PETDOCK_SMOKE_REAL_WEB === '1'
 const expectedResponse = backend === 'langchain' ? '本地模型适配测试通过' : '离线模式回应'
 const assistantThemes = ['quiet', 'note', 'glass', 'pixel', 'apple']
 const attachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-attachment.md')
@@ -105,6 +106,31 @@ async function main() {
     )
     await waitForExpandedWindow(petClient)
     await assertAssistantLayout(petClient, 'left')
+    if (realWebSearch) {
+      const connectionResult = await evaluate(
+        petClient,
+        `(async () => {
+          const snapshot = await window.desktopPet.getAssistantWebSettings()
+          if (!snapshot.configured) {
+            return { ok: false, error: '当前 Provider 尚未配置 API Key。' }
+          }
+          try {
+            const count = await window.desktopPet.testAssistantWebSearch()
+            return { ok: true, provider: snapshot.provider, count }
+          } catch (error) {
+            return { ok: false, provider: snapshot.provider, error: String(error) }
+          }
+        })()`,
+        true
+      )
+      if (!connectionResult.ok) {
+        throw new Error(`Real web search connection failed: ${JSON.stringify(connectionResult)}`)
+      }
+      process.stdout.write(
+        `REAL_WEB_SEARCH_OK provider=${connectionResult.provider} count=${connectionResult.count}\n`
+      )
+      return
+    }
     if (c2Only) {
       await assertArtifactWorkflow(petClient)
       process.stdout.write(`ASSISTANT_C2_SMOKE_OK\n`)
@@ -259,6 +285,138 @@ async function main() {
     await waitForEvaluation(
       petClient,
       `document.querySelector('#skill-view').hidden`,
+      (value) => value === true,
+      5_000
+    )
+
+    await evaluate(petClient, `document.querySelector('#web-button').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#web-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
+    const webState = await evaluate(
+      petClient,
+      `(async () => {
+        const snapshot = await window.desktopPet.getAssistantWebSettings()
+        const provider = document.querySelector('#web-provider').value
+        const keyInput = document.querySelector('#web-api-key')
+        const configuredProviders = snapshot.configuredProviders ||
+          (snapshot.configured ? [snapshot.provider] : [])
+        return {
+          conversationHidden: document.querySelector('#conversation').hidden,
+          provider,
+          expectedProvider: snapshot.provider,
+          keyValue: keyInput.value,
+          keyPlaceholder: keyInput.placeholder,
+          keyConfigured: configuredProviders.includes(provider),
+          hasPrivacyText: document.querySelector('.web-privacy-note').textContent.includes(
+            provider === 'volcengine' ? '火山引擎豆包搜索' : 'Brave Search'
+          ),
+          hasApiKeyPage: provider === 'volcengine'
+            ? !document.querySelector('#web-api-key-page').hidden &&
+              document.querySelector('#web-api-key-page').title.includes('火山引擎')
+            : document.querySelector('#web-api-key-page').hidden
+        }
+      })()`,
+      true
+    )
+    if (
+      webState.conversationHidden !== true ||
+      webState.provider !== webState.expectedProvider ||
+      webState.keyValue !== '' ||
+      (webState.keyConfigured
+        ? webState.keyPlaceholder !== '••••••••••••'
+        : webState.keyPlaceholder !== '输入 API Key') ||
+      !webState.hasPrivacyText ||
+      !webState.hasApiKeyPage
+    ) {
+      throw new Error(`Web settings view exposed invalid state: ${JSON.stringify(webState)}`)
+    }
+    const webStorageState = await evaluate(
+      petClient,
+      `(async () => {
+        const original = await window.desktopPet.getAssistantWebSettings()
+        const configuredProviders = original.configuredProviders ||
+          (original.configured ? [original.provider] : [])
+        if (configuredProviders.includes('volcengine')) return { skipped: true }
+        let saved
+        try {
+          saved = await window.desktopPet.setAssistantWebSettings({
+            enabled: false,
+            provider: 'volcengine',
+            apiKey: 'petdock-smoke-temporary-key'
+          })
+          return {
+            skipped: false,
+            configured: saved.configured,
+            configuredProviders: saved.configuredProviders,
+            exposed: JSON.stringify(saved).includes('petdock-smoke-temporary-key')
+          }
+        } finally {
+          await window.desktopPet.setAssistantWebSettings({
+            enabled: false,
+            provider: 'volcengine',
+            clearApiKey: true
+          })
+          await window.desktopPet.setAssistantWebSettings({
+            enabled: original.enabled,
+            provider: original.provider
+          })
+        }
+      })()`,
+      true
+    )
+    if (
+      !webStorageState.skipped &&
+      (
+        !webStorageState.configured ||
+        !webStorageState.configuredProviders.includes('volcengine') ||
+        webStorageState.exposed
+      )
+    ) {
+      throw new Error(`Web API Key storage is invalid: ${JSON.stringify(webStorageState)}`)
+    }
+    const volcengineViewState = await evaluate(
+      petClient,
+      `(() => {
+        const provider = document.querySelector('#web-provider')
+        const panel = document.querySelector('#assistant-panel')
+        provider.value = 'volcengine'
+        provider.dispatchEvent(new Event('change', { bubbles: true }))
+        const panelRect = panel.getBoundingClientRect()
+        return {
+          provider: provider.value,
+          panelHidden: panel.hidden,
+          panelWidth: panelRect.width,
+          panelHeight: panelRect.height,
+          hasPrivacyText: document.querySelector('.web-privacy-note').textContent.includes('火山引擎豆包搜索'),
+          apiKeyLabel: document.querySelector('#web-api-key').getAttribute('aria-label'),
+          apiKeyPageVisible: !document.querySelector('#web-api-key-page').hidden,
+          apiKeyPageTitle: document.querySelector('#web-api-key-page').title
+        }
+      })()`
+    )
+    if (
+      volcengineViewState.provider !== 'volcengine' ||
+      volcengineViewState.panelHidden ||
+      volcengineViewState.panelWidth <= 0 ||
+      volcengineViewState.panelHeight <= 0 ||
+      !volcengineViewState.hasPrivacyText ||
+      !volcengineViewState.apiKeyLabel.includes('火山引擎豆包搜索') ||
+      !volcengineViewState.apiKeyPageVisible ||
+      !volcengineViewState.apiKeyPageTitle.includes('火山引擎')
+    ) {
+      throw new Error(`Volcengine web settings state is invalid: ${JSON.stringify(volcengineViewState)}`)
+    }
+    const webScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
+    const webScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-web$1')
+    await writeFile(webScreenshotPath, Buffer.from(webScreenshot.data, 'base64'))
+    await evaluate(petClient, `document.querySelector('#web-back').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#web-view').hidden`,
       (value) => value === true,
       5_000
     )

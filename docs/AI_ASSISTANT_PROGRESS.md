@@ -20,11 +20,11 @@ Deferred     延后
 
 ## 1. 当前总览
 
-更新时间：2026-07-28
+更新时间：2026-08-02
 
 ```text
 AI 助手核心功能状态：Done（阶段 1 至阶段 5）
-后续增强状态：In Progress（C1、C1.1 已完成，C2 实现完成并处于验收收尾，C3 至 C5 未开始）
+后续增强状态：In Progress（C1、C1.1 已完成，C2、C3 实现完成并处于验收收尾，C4、C5 未开始）
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
@@ -32,7 +32,7 @@ Python LangChain Runtime：Done（阶段 5）
 RAG 文档管理：Done（阶段 4）
 RAG 检索优化：In Progress（R0/R3/R4 部分完成、R1 完成、R2 主体已实现但未完成正式验收）
 Skill 系统：Done（阶段 5）
-对话资源能力：In Progress（C1、C1.1 Done，C2 In Progress，C3 至 C5 Not Started）
+对话资源能力：In Progress（C1、C1.1 Done，C2、C3 In Progress，C4、C5 Not Started）
 ```
 
 ## 2. 已完成事项
@@ -225,12 +225,12 @@ Skill 系统：Done（阶段 5）
 
 ### 对话资源能力
 
-状态：In Progress（C1、C1.1 已完成，C2 实现完成并处于验收收尾）
+状态：In Progress（C1、C1.1 已完成，C2、C3 实现完成并处于验收收尾）
 
 - [x] C1：拖拽附件与文本解析。
 - [x] C1.1：草稿/历史附件文本预览与失败投放提示。
 - [ ] C2：基础 Artifact 文件输出（实现完成，原生保存对话框与打包版 E2E 待收尾）。
-- [ ] C3：联网搜索与网页引用。
+- [ ] C3：联网搜索与网页引用（实现完成，真实火山连接与打包版设置 E2E 已通过，完整搜索/抓取/引用 E2E 待收尾）。
 - [ ] C4：PDF、Office 和图片输入输出。
 - [ ] C5：多文件分析、临时索引和受控修改。
 
@@ -424,3 +424,17 @@ C2 已实现：
 - 完成 Main 原生“另存为”、按 ID 读取、原子新建/覆盖、替换失败保留原目标和脱敏审计；Renderer 与 Preload 不接触 Artifact 真实路径。
 - `npm.cmd run typecheck`、26 个 TypeScript 测试和 35 个 Python Runtime 测试通过。
 - 开发版 E2E 已验证生成、卡片、预览和删除，独立 Runtime 打包形态测试通过；Windows 原生保存对话框自动化与完整 Electron 打包版保存闭环尚未稳定通过，C2 保持 In Progress，待验收收尾后再标记 Done。
+
+### 2026-08-02（C3 联网搜索与网页引用）
+
+- 默认 Search Provider 调整为火山引擎豆包搜索 Custom 版，固定使用官方 `web_search` POST API 和 Bearer 鉴权；Brave Search 作为兼容 Provider 保留。
+- 联网默认关闭，API Key 由 Electron `safeStorage` 按 Provider 隔离加密；旧版 Brave 配置和密钥继续按 Brave 读取，Renderer 只读取启用和脱敏配置状态。
+- 完成 `search_web`、`fetch_web_page`、任务配额、取消、SSRF/DNS 重绑定防护、逐次重定向校验、正文大小/超时/MIME 限制及 DOM 清洗。
+- Runtime 将网页正文限制在当前任务内，持久化工具摘要时脱敏查询和 URL；最终回答只按实际 `[网页N]` 引用发出 `web_sources` 并保存短来源。
+- 完成联网设置、火山引擎 API Key 管理页入口、首次启用隐私确认、连接测试、搜索摘要/已读取正文来源卡片和历史恢复；Skill 联网新增 `network.read` 权限。
+- 当前 TypeScript 类型检查、60 项 TypeScript 全量测试（其中 32 项 C3 联网测试）和 37 项 Python Runtime 测试通过；生产构建、开发版/解包版联网设置与 `safeStorage` 脱敏 E2E、独立 Runtime 冒烟通过，生产依赖审计为 0 个漏洞。
+- 修复 Node 22 以 `lookupOptions.all = true` 建立 HTTPS 连接时固定 DNS 回调返回单地址导致的 `Invalid IP address: undefined`；同步 Runtime 协议的 `volcengine` Provider 字面量，避免启用火山搜索后创建对话返回 422。
+- 修复应用在 PyInstaller Runtime 冷启动期间退出时只终止外层进程、遗留内层 Runtime 的竞态，并增加“启动中退出”回归测试。
+- 修复模型在单次响应中生成多个联网调用时任务直接失败的问题；Runtime 现在最多接收 6 个外部调用并逐项串行派发，每项仍独立经过 Main 策略、配额、审计和确认流程。
+- 联网设置在 Provider 已保存密钥时显示固定掩码占位符，真实输入值仍为空；未配置状态显示输入提示，重新保存不会把掩码写成密钥。
+- 有效火山引擎 Key 在最新解包版的真实搜索连接已返回 1 条结果，进程能够正常退出且无 Runtime 遗留；本地可控 Provider 的开发版/打包版完整搜索、抓取和引用 E2E 仍待验收。

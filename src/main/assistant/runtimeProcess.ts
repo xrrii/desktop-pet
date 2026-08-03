@@ -46,14 +46,21 @@ export class AssistantRuntimeProcess {
     return this.startPromise
   }
 
+  /** 停止 Runtime；若冷启动仍在进行，先等待 client 就绪以便关闭 PyInstaller 内层进程。 */
   async stop(): Promise<void> {
+    this.stopping = true
+    if (this.startPromise) {
+      await this.startPromise.catch(() => undefined)
+    }
+
     const child = this.child
     if (!child) {
+      this.client = null
+      this.stopping = false
       this.setStatus({ state: 'stopped', backend: null, error: null })
       return
     }
 
-    this.stopping = true
     this.setStatus({ ...this.status, state: 'stopping', error: null })
     await this.client?.shutdown().catch(() => undefined)
 

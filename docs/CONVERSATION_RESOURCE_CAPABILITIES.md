@@ -430,7 +430,7 @@ Main 只能通过 Artifact ID 获取内容，不接受 Renderer 提交源文件�
 
 ## 9. C3：联网搜索与网页引用
 
-状态：Not Started
+状态：In Progress（实现完成，验收收尾中）
 
 ### 9.1 工具拆分
 
@@ -450,14 +450,15 @@ fetch_web_page
 
 ### 9.2 Provider 与配置
 
-Search Provider 使用统一接口，具体服务商当前不锁定。要求：
+Search Provider 使用统一接口，默认 Provider 为火山引擎豆包搜索 Custom 版，Brave Search 作为兼容 Provider 保留。火山引擎固定调用 `POST https://open.feedcoopapi.com/search_api/web_search`，使用 `Authorization: Bearer <API_KEY>` 鉴权，只读取 `Result.WebResults` 中可引用的网页结果。要求：
 
 - 默认未配置、未启用。
-- Provider API Key 使用 Electron `safeStorage` 加密保存。
-- Renderer 只能看到是否配置、服务名称和脱敏状态。
+- Provider API Key 使用 Electron `safeStorage` 按 Provider 隔离加密保存；旧版 Brave 密钥只迁移为 Brave 配置。
+- Renderer 只能看到是否配置、服务名称、已配置 Provider 列表和脱敏状态。
 - 首次启用前明确说明搜索查询会发送给第三方。
 - 切换 Provider 不改变 Agent 工具名称和结果协议。
 - Provider 不可用时明确降级为离线状态，不伪造搜索结果。
+- 火山引擎设置提供固定的 API Key 管理页入口 `https://console.volcengine.com/search-infinity/api-key`，不允许 Renderer 提交任意控制台地址。
 
 ### 9.3 网络安全策略
 
@@ -489,7 +490,7 @@ Renderer 使用 `web_sources` 事件展示：
 
 - 页面标题。
 - 可见域名。
-- 可点击 HTTPS URL。
+- 可点击且由 Main 再次校验的 HTTP(S) URL。
 - 被回答使用的短摘录。
 - 搜索摘要或已抓取正文的来源类型。
 
@@ -503,6 +504,19 @@ Renderer 使用 `web_sources` 事件展示：
 - 网页提示注入不能扩大工具权限。
 - API Key 不进入 Renderer、普通日志或截图。
 - 开发版和打包版均通过本地可控搜索服务 E2E，不依赖真实第三方服务稳定性。
+
+当前验收记录：
+
+- [x] Main 已实现默认火山引擎 Provider、兼容 Brave Provider、按 Provider 隔离的 `safeStorage` 密钥、旧 Brave 配置迁移、默认关闭状态和脱敏设置 IPC；Renderer 无法读取已保存密钥。
+- [x] `search_web`、`fetch_web_page` 已接入 Main/Runtime 工具循环；Skill 使用联网工具必须声明 `network.read`。
+- [x] URL、端口、凭据、DNS 公网地址、固定解析地址、逐次重定向、MIME、2 MB 响应、15 秒超时和任务取消策略已实现。
+- [x] 网页清洗使用 DOM 解析；完整正文只保留在 Runtime 当前任务内，SQLite 只保存短工具摘要和最终实际引用来源。
+- [x] Renderer 已提供联网设置、火山引擎 API Key 管理页入口、首次启用隐私确认、连接测试和网页来源卡片，并区分搜索摘要与已读取正文。
+- [x] 32 项 TypeScript 联网策略、Provider、配置迁移和网页服务单测及 Python 工具循环测试覆盖默认关闭、SSRF、Node 地址列表回调、正文清洗、Main 来源复核、实际引用筛选及正文不落库。
+- [x] 开发版与解包版 E2E 已验证联网设置、临时密钥加密写入、脱敏快照和清理；解包版 `app.asar` 已确认包含 `jsdom`。
+- [x] 使用有效火山引擎 API Key 完成开发版真实搜索连接验收，Provider 返回 1 条结果；完整搜索、网页读取和回答引用闭环继续随可控 Provider E2E 验收。
+- [x] Node 22 单地址/地址列表 DNS lookup 回调和 Main/Runtime `volcengine` Provider 协议保持一致，启用火山搜索后的普通对话 E2E 通过。
+- [ ] 完成本地可控 Provider 的开发版与打包版完整搜索、抓取和引用 E2E。
 
 ## 10. C4：PDF、Office 和图片
 
@@ -743,6 +757,8 @@ source_changed_before_write
 完成门槛：第 8.5 节全部通过。
 
 ### C3：联网搜索
+
+状态：In Progress（实现完成，验收收尾中）
 
 - Provider 接口和加密配置。
 - `search_web`、`fetch_web_page`、网络策略和网页清洗。

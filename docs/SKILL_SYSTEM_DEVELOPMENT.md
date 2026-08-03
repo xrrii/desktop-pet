@@ -176,6 +176,7 @@ frontmatter 必须位于文件开头，使用 `---` 包围。首版只读取 `na
 knowledge.read
 memory.read
 memory.write
+network.read
 tool.open_url
 tool.open_app
 tool.open_path

@@ -139,6 +139,34 @@ export interface AssistantArtifactSaveResult {
   error: string | null
 }
 
+export type AssistantWebProvider = 'volcengine' | 'brave'
+export type AssistantWebSourceKind = 'search-summary' | 'fetched-page'
+
+export interface AssistantWebSettingsSnapshot {
+  enabled: boolean
+  provider: AssistantWebProvider
+  configured: boolean
+  configuredProviders: AssistantWebProvider[]
+}
+
+export interface AssistantWebSettingsInput {
+  enabled: boolean
+  provider: AssistantWebProvider
+  apiKey?: string
+  clearApiKey?: boolean
+}
+
+export interface AssistantWebSource {
+  id: string
+  citationIndex: number
+  title: string
+  url: string
+  domain: string
+  excerpt: string
+  kind: AssistantWebSourceKind
+  publishedAt: string | null
+}
+
 export type KnowledgeLibraryStatus = 'pending' | 'indexing' | 'paused' | 'ready' | 'error'
 
 export interface AssistantKnowledgeSnapshot {
@@ -239,6 +267,7 @@ export interface AssistantConversationMessage {
   createdAt: string
   attachments?: AssistantAttachmentMessageRef[]
   artifacts?: AssistantArtifactSummary[]
+  webSources?: AssistantWebSource[]
 }
 
 export interface AssistantMemorySummary {
@@ -300,6 +329,8 @@ export interface AssistantRequest {
     activePetId: string
     locale: string
     timezone: string
+    webSearchEnabled: boolean
+    webSearchProvider: AssistantWebProvider | null
   }
   knowledgeLibraryIds: string[]
   attachmentIds: string[]
@@ -383,6 +414,7 @@ export type AssistantEvent =
   | AssistantAttachmentSourcesEvent
   | AssistantArtifactCreatedEvent
   | AssistantArtifactStatusEvent
+  | AssistantWebSourcesEvent
   | AssistantSkillStartedEvent
   | AssistantSkillCompletedEvent
   | AssistantSkillErrorEvent
@@ -462,6 +494,13 @@ export interface AssistantArtifactStatusEvent extends AssistantEventBase {
   type: 'artifact_status'
   payload: {
     artifact: AssistantArtifactSummary
+  }
+}
+
+export interface AssistantWebSourcesEvent extends AssistantEventBase {
+  type: 'web_sources'
+  payload: {
+    sources: AssistantWebSource[]
   }
 }
 

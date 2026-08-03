@@ -380,7 +380,7 @@ function isAssistantEvent(value: unknown): value is AssistantEvent {
     typeof event.taskId === 'string' &&
     Number.isInteger(event.sequence) &&
     typeof event.type === 'string' &&
-    ['message_delta', 'retrieval_sources', 'attachment_sources', 'artifact_created', 'artifact_status', 'skill_started', 'skill_completed', 'skill_error', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
+    ['message_delta', 'retrieval_sources', 'attachment_sources', 'web_sources', 'artifact_created', 'artifact_status', 'skill_started', 'skill_completed', 'skill_error', 'tool_call', 'permission_required', 'tool_result', 'done', 'error'].includes(
       event.type
     ) &&
     !!event.payload &&
@@ -395,7 +395,20 @@ async function responseError(response: Response, fallback: string): Promise<stri
   }
   try {
     const payload = JSON.parse(body) as { detail?: unknown }
-    return typeof payload.detail === 'string' ? payload.detail : fallback
+    if (typeof payload.detail === 'string') return payload.detail
+    if (Array.isArray(payload.detail)) {
+      const issues = payload.detail.slice(0, 3).flatMap((item): string[] => {
+        if (!item || typeof item !== 'object') return []
+        const issue = item as { loc?: unknown; msg?: unknown }
+        if (typeof issue.msg !== 'string') return []
+        const location = Array.isArray(issue.loc)
+          ? issue.loc.filter((value) => typeof value === 'string' || typeof value === 'number').join('.')
+          : ''
+        return [`${location ? `${location}: ` : ''}${issue.msg}`]
+      })
+      if (issues.length > 0) return `Runtime 请求参数无效：${issues.join('；')}`
+    }
+    return fallback
   } catch {
     return fallback
   }

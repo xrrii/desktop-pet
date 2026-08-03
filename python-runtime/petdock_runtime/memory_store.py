@@ -193,7 +193,8 @@ class MemoryStore:
                 metadata = {}
             attachments = metadata.get("attachments", []) if isinstance(metadata, dict) else []
             artifacts = metadata.get("artifacts", []) if isinstance(metadata, dict) else []
-            if not row["content"] and not attachments and not artifacts:
+            web_sources = metadata.get("webSources", []) if isinstance(metadata, dict) else []
+            if not row["content"] and not attachments and not artifacts and not web_sources:
                 continue
             message: dict[str, Any] = {
                 "role": row["role"],
@@ -204,6 +205,8 @@ class MemoryStore:
                 message["attachments"] = attachments
             if isinstance(artifacts, list) and artifacts:
                 message["artifacts"] = artifacts
+            if isinstance(web_sources, list) and web_sources:
+                message["webSources"] = web_sources
             messages.append(message)
         return messages
 

@@ -18,6 +18,8 @@ class AssistantContext(BaseModel):
     activePetId: str = Field(min_length=1, max_length=128)
     locale: str = Field(min_length=1, max_length=64)
     timezone: str = Field(min_length=1, max_length=128)
+    webSearchEnabled: bool = False
+    webSearchProvider: Literal["volcengine", "brave"] | None = None
 
 
 class AssistantSkillInvocation(BaseModel):
