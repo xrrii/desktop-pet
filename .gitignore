@@ -50,6 +50,7 @@ dist/
 release/
 release-*/
 temp/
+tmp/
 
 # Logs
 *.log
