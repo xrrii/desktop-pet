@@ -534,9 +534,9 @@ npm.cmd run pack
 - IPC handler 必须校验调用窗口身份并验证外部输入。
 - 密钥和用户隐私数据不得写入仓库、普通配置文件或日志。
 
-AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、文件输出、联网搜索、复杂文档和多文件修改必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
+AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、基础文件输出、联网搜索、复杂文档输入、多文件只读分析以及后续受控执行与复杂输出必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
-对话资源能力当前进度：C1、C1.1 已完成，C2、C3 已完成实现并处于验收收尾，C4、C5 未开始。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送、来源展示和联网设置脱敏状态验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可用 `$env:PETDOCK_SMOKE_DEV='1'; $env:PETDOCK_SMOKE_C2_ONLY='1'; node tools\assistant_smoke.mjs` 聚焦验证 Artifact 生成、卡片、预览和删除。C3 默认使用火山引擎豆包搜索，Brave Search 作为兼容 Provider；可用 `$env:PETDOCK_SMOKE_REAL_WEB='1'; $env:PETDOCK_SMOKE_EXECUTABLE='release\win-unpacked\PetDock.exe'; node tools\assistant_smoke.mjs` 复验当前脱敏配置的真实连接。真实火山连接和解包版设置 E2E 已通过，本地可控 Provider 的开发版/打包版完整搜索、抓取和引用 E2E 仍待验收，因此 C2、C3 暂不标记为 Done。
+对话资源能力当前进度：C1、C1.1 已完成，C2、C3 已完成实现并处于验收收尾；C4 重新规划为复杂文档输入与条件式图片理解，C5 重新规划为多文件只读分析和临时索引，二者未开始；C6 规划受控 Python 执行和复杂文档输出/修改，状态为 Deferred。C4 不新增 PDF、Office 或图片 Artifact 输出，也不执行本地 OCR；图片只在独立 Vision Analyzer 的能力探测通过后启用，默认继承主模型配置但不共享主 Agent 的工具、记忆或 Skill 上下文。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送、来源展示和联网设置脱敏状态验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可用 `$env:PETDOCK_SMOKE_DEV='1'; $env:PETDOCK_SMOKE_C2_ONLY='1'; node tools\assistant_smoke.mjs` 聚焦验证 Artifact 生成、卡片、预览和删除。C3 默认使用火山引擎豆包搜索，Brave Search 作为兼容 Provider；可用 `$env:PETDOCK_SMOKE_REAL_WEB='1'; $env:PETDOCK_SMOKE_EXECUTABLE='release\win-unpacked\PetDock.exe'; node tools\assistant_smoke.mjs` 复验当前脱敏配置的真实连接。真实火山连接和解包版设置 E2E 已通过，本地可控 Provider 的开发版/打包版完整搜索、抓取和引用 E2E 仍待验收，因此 C2、C3 暂不标记为 Done。
 
 ## 15. AI Assistant Runtime
 

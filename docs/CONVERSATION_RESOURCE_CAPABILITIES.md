@@ -3,10 +3,10 @@
 ## 1. 文档状态
 
 ```text
-文档版本：1.0
-状态：Approved（未实现）
-适用范围：附件对话、文件输出、联网搜索、复杂文档、多文件分析与受控修改
-更新时间：2026-07-28
+文档版本：1.1
+状态：Approved（C4-C6 范围已调整）
+适用范围：附件对话、基础文件输出、联网搜索、复杂文档输入、多文件只读分析、受控执行与复杂输出
+更新时间：2026-08-04
 ```
 
 本文档是 PetDock 后续对话资源能力的开发基线。共享协议、存储、Electron Main、Preload、Renderer、Python Runtime、测试和打包实现均应遵循本文档。
@@ -30,13 +30,14 @@ PetDock 已经具备普通聊天、受控工具、记忆、本地知识库和 Sk
 联网资料获取 ----/
 ```
 
-本阶段包含五项能力：
+本阶段包含六项能力：
 
 1. 用户将文件拖入对话框，或直接拖到收起状态的桌宠身上进行附件对话。
 2. 助手生成可预览、可保存的文件 Artifact。
 3. 助手通过受控工具搜索互联网并读取网页。
-4. 附件和 Artifact 扩展到 PDF、Office 和图片格式。
-5. 助手对多个文件进行联合分析，并以新文件形式提供受控修改结果。
+4. 附件和知识库扩展到 PDF、Office 和条件式图片理解，不在该阶段增加复杂格式输出。
+5. 助手对多个文件进行只读联合分析，并使用已有基础 Artifact 格式交付提取结果。
+6. 后续在独立安全阶段引入受控 Python 执行、复杂文档输出和修改能力。
 
 核心目标：
 
@@ -59,9 +60,10 @@ PetDock 已经具备普通聊天、受控工具、记忆、本地知识库和 Sk
 - Markdown、TXT、JSON、CSV 和代码文件输出。
 - 可配置的 Web Search Provider 和网页正文读取。
 - PDF、DOCX、XLSX、PPTX 和图片解析。
-- DOCX、XLSX、PDF 等复杂 Artifact 生成。
 - 多文件会话级临时检索和来源定位。
-- 读取已有文件后生成修改稿、差异预览和另存/确认覆盖。
+- 多文件分析结果通过 C2 已有 TXT、Markdown、CSV、JSON 等基础 Artifact 交付。
+- 独立 Vision Analyzer 对安全派生图生成结构化摘要。
+- 后续阶段中的受控 Python 执行、复杂文档输出、重新读取验证和受控修改。
 
 ### 3.2 当前非目标
 
@@ -75,6 +77,10 @@ PetDock 已经具备普通聊天、受控工具、记忆、本地知识库和 Sk
 - 不做浏览器自动化、登录态网页抓取或验证码绕过。
 - 不对原始文件进行静默原地修改。
 - 不在没有评测数据前引入复杂 Agentic 文档工作流。
+- C4 不生成 PDF、DOCX、XLSX、PPTX、PNG 或 JPEG Artifact。
+- C4 不执行本地 OCR，也不把扫描 PDF 静默当作已完整读取。
+- C5 不修改原文件，不生成复杂 Office 修改稿。
+- 未建立固定依赖、资源配额和文件权限沙箱前，不执行 Agent 生成的 Python。
 
 ## 4. 不可偏离的架构原则
 
@@ -136,6 +142,20 @@ export type AssistantAttachmentStatus =
   | 'ready'
   | 'error'
 
+export interface AssistantDocumentIssue {
+  code: string
+  retryable: boolean
+  safeDetails: Record<string, string | number>
+}
+
+export type AssistantDocumentLocation =
+  | { kind: 'text'; blockIndex: number; lineStart?: number; lineEnd?: number }
+  | { kind: 'pdf'; page: number; blockIndex?: number }
+  | { kind: 'docx'; paragraph?: number; headingPath: string[]; table?: string }
+  | { kind: 'xlsx'; sheet: string; range: string }
+  | { kind: 'pptx'; slide: number; section: 'title' | 'body' | 'notes' }
+  | { kind: 'image'; imageIndex: number }
+
 export interface AssistantAttachmentSummary {
   id: string
   conversationId: string | null
@@ -145,8 +165,8 @@ export interface AssistantAttachmentSummary {
   sizeBytes: number
   status: AssistantAttachmentStatus
   parserId: string | null
-  warning: string | null
-  error: string | null
+  warnings: AssistantDocumentIssue[]
+  error: AssistantDocumentIssue | null
 }
 
 export interface AssistantArtifactSummary {
@@ -156,7 +176,7 @@ export interface AssistantArtifactSummary {
   name: string
   detectedMime: string
   sizeBytes: number
-  previewKind: 'text' | 'table' | 'document' | 'image' | 'none'
+  previewKind: 'text' | 'table' | 'none'
   status: 'generating' | 'ready' | 'error'
   error: string | null
 }
@@ -179,7 +199,7 @@ attachmentIds?: string[]
 
 每轮最多接受 10 个不同附件 ID。Main 必须重新查询附件状态、所属草稿/会话和调用窗口，不能信任 Renderer 提交的附件元数据。
 
-现有 `retrieval_sources` 事件保持兼容；附件和网页分别新增 `attachment_sources` 与 `web_sources` 事件。Renderer 可以在展示层统一为“参考资料”，Runtime 协议不强行把三种来源混成同一种存储对象。
+现有 `retrieval_sources` 事件保持兼容；附件和网页分别使用 `attachment_sources` 与 `web_sources` 事件。C4 为附件和知识库来源增加可选 `AssistantDocumentLocation`，Renderer 可以在展示层统一为“参考资料”，Runtime 协议不强行把三种来源混成同一种存储对象。现有附件字符串 `warning/error` 在 C4 协议迁移中统一升级为结构化问题对象，TypeScript 与 Python 必须同时更新并用固定 fixture 验证兼容性。
 
 ## 7. C1：附件对话
 
@@ -518,7 +538,7 @@ Renderer 使用 `web_sources` 事件展示：
 - [x] Node 22 单地址/地址列表 DNS lookup 回调和 Main/Runtime `volcengine` Provider 协议保持一致，启用火山搜索后的普通对话 E2E 通过。
 - [ ] 完成本地可控 Provider 的开发版与打包版完整搜索、抓取和引用 E2E。
 
-## 10. C4：PDF、Office 和图片
+## 10. C4：复杂文档输入与图片理解
 
 状态：Not Started
 
@@ -534,39 +554,55 @@ maxInputBytes
 parse(path) -> ParsedDocument
 ```
 
-Parser 输出统一的文本块、位置、元数据和警告。附件对话可以立即使用解析结果，知识库可以继续将结构块交给 Chunk 管线。
+`ParsedDocument` 统一包含标题、规范化文本、结构块、位置、脱敏技术元数据、警告和错误。Registry 负责文件签名探测和解析结果规范化，附件和知识库不得复制格式解析逻辑。
+
+图片使用两层结构：本地 `ImageMetadataParser` 负责安全解码、尺寸和隐私净化；条件启用的 `Vision Analyzer` 只接收安全派生图并返回结构化摘要。Vision Analyzer 不是具备工具、Skill、记忆或任意联网权限的通用 Agent，只允许调用已配置并通过探测的固定模型端点。
 
 ### 10.2 格式要求
 
-| 格式 | 输入解析要求 | 输出要求 | 首版限制 |
-| --- | --- | --- | --- |
-| PDF | 文本层、页码、标题 | 文本型 PDF | 扫描件 OCR 后置 |
-| DOCX | 标题、段落、列表、表格 | 段落、标题、基础表格 | 不保真编辑复杂排版 |
-| XLSX | 工作表、有效区域、单元格位置、公式文本 | 单元格值、公式、基础样式 | 不执行宏、不重算外部数据 |
-| PPTX | 幻灯片标题、正文、备注 | 标题、正文、基础布局 | 不执行动画和嵌入对象 |
-| 图片 | 尺寸、格式、视觉模型或 OCR 结果 | PNG/JPEG 等安全图片 | 不读取隐式定位信息作为上下文 |
+| 格式 | C4 输入解析要求 | C4 首版限制 |
+| --- | --- | --- |
+| PDF | 文本层、页码、标题 | 扫描件返回 `document_ocr_required`，不执行本地 OCR |
+| DOCX | 标题、段落、列表、表格 | 不保真编辑，不读取主动内容 |
+| XLSX | 工作表、有效区域、单元格位置、公式文本 | 不执行公式，不刷新外部数据 |
+| PPTX | 幻灯片标题、正文、备注 | 不执行动画、宏或嵌入对象 |
+| 图片 | 尺寸、格式、安全派生图和 Vision Analyzer 摘要 | Vision 配置不可用时拒绝图片输入 |
 
-解析依赖的具体库在实现前通过打包体积、许可证和 Windows x64 验证后确定。候选可以包括 `pypdf`、`python-docx`、`openpyxl` 和 `python-pptx`，但本文档不提前锁定依赖版本。
+C4 不生成 PDF、DOCX、XLSX、PPTX、PNG 或 JPEG Artifact。复杂格式输出、修改和重新读取验证移动到 C6；C2 既有文本 Artifact 行为不变。
 
-### 10.3 主动内容和压缩安全
+输入依赖在 C4.0 通过许可证、Windows x64、PyInstaller 体积、冷启动和损坏样本实验后锁定。候选只包括 `pypdf`、`python-docx`、`openpyxl`、`python-pptx`、Pillow 及必要的安全辅助库；`reportlab`、中文输出字体、OCR 模型和复杂生成依赖不进入 C4。
+
+### 10.3 Vision Analyzer 配置
+
+视觉配置默认继承主模型的 `base_url`、凭据引用和模型名，但必须通过本地随机验证码图片主动探测后才标记为 `supported`。主模型不支持时，可以配置同一地址/密钥下的其他模型，或独立的地址和密钥。Renderer 只能看到配置状态和测试结果，密钥继续由 Main 使用 `safeStorage` 管理。
+
+能力状态固定为 `unconfigured`、`untested`、`supported`、`unsupported`、`unavailable` 和 `invalid-credentials`。只有随机图片内容被正确识别时才能标记 `supported`；401/403、模型不存在、429、超时和 5xx 必须分别归类，不能把临时故障缓存为不支持。探测结果绑定地址来源、模型名、凭据引用版本和视觉协议版本，配置变化后回到 `untested`。
+
+图片发送前必须限制尺寸、像素和帧数，移除全部 EXIF/GPS 并重新编码为安全派生图。模型返回的摘要、可见文字、观察和局限始终是不可信资料；不承诺传统 OCR 的逐字准确率或精确视觉坐标。知识库图片索引默认关闭，用户明确启用 Vision Analyzer 后才允许上传摘要请求。
+
+### 10.4 主动内容和压缩安全
 
 - 拒绝或忽略 VBA、宏、OLE、嵌入可执行对象和远程模板。
-- ZIP 容器类格式限制文件数量、总解压大小和压缩比。
+- ZIP 容器类格式限制文件数量、总解压大小、单项大小、重复名称和压缩比。
 - 加密文件返回明确错误，不尝试破解密码。
-- 公式按文本和缓存值处理，不执行公式引擎。
+- 公式只按公式文本读取，不执行公式引擎或刷新外部数据。
 - 外部链接、外部数据源和远程图片不自动访问。
-- 图片 EXIF 中的精确位置等隐私字段默认不进入模型上下文。
+- PDF 脚本、自动动作、嵌入文件和危险对象拒绝或告警。
+- XML DTD/ENTITY、路径穿越、符号链接和危险关系在第三方库解析前拦截。
+- 图片 EXIF 中的精确位置等隐私字段不进入模型上下文。
 
-### 10.4 C4 完成门槛
+### 10.5 C4 完成门槛
 
 - PDF、DOCX、XLSX、PPTX 各有正常、损坏、加密和超限测试样本。
-- 页码、工作表、单元格和幻灯片位置可以用于引用。
+- 图片覆盖正常、损坏、超大、视觉配置未测试、不支持、暂时不可用和探测成功样本。
+- 页码、标题路径/段落、工作表/单元格和幻灯片位置可以用于引用。
 - Parser 同时服务附件和知识库，不复制两套解析逻辑。
-- Office 宏和外部链接不会被执行或访问。
-- 打包 Runtime 含所需依赖并通过冷启动、解析和退出测试。
-- 每种输出格式均通过重新读取验证，而不只检查文件存在。
+- Vision Analyzer 配置不可用时，图片输入明确失败，不伪造摘要。
+- Office 宏、OLE、外部关系和 PDF 主动内容不会被执行或访问。
+- 打包 Runtime 含所需输入依赖并通过冷启动、解析和退出测试。
+- 不增加复杂格式 Artifact 输出，也不改变 C2/C3 既有行为。
 
-## 11. C5：多文件分析与受控修改
+## 11. C5：多文件只读分析与临时索引
 
 状态：Not Started
 
@@ -579,93 +615,79 @@ Parser 输出统一的文本块、位置、元数据和警告。附件对话可�
 
 临时索引必须与长期知识库使用不同 collection 和目录，不能因为附件内容相同就自动并入知识库。索引签名继续包含 Embedding Profile 和 Chunk 策略版本。
 
-回答需要标记来源文件及位置：
-
-- 文本/源码：行号或块编号。
-- PDF：页码。
-- DOCX：标题路径或段落编号。
-- XLSX：工作表和单元格范围。
-- PPTX：幻灯片编号。
+回答需要标记来源文件及位置：文本/源码行号或块编号、PDF 页码、DOCX 标题路径或段落编号、XLSX 工作表和单元格范围、PPTX 幻灯片编号及图片摘要来源。
 
 ### 11.2 联合分析
 
-首版联合分析至少支持：
+首版联合分析支持多文件总结、比较、字段提取、代码/配置交叉核对，并使用 C2 已支持的 TXT、Markdown、CSV、JSON 等基础 Artifact 交付结果。模型不能在没有引用命中的情况下声称某个文件包含特定内容；解析不完整或文件失败时必须显示缺失范围。
 
-- 多文件总结和差异比较。
-- 从多个文件提取统一字段并生成 CSV/JSON。
-- 基于模板和来源文件生成报告。
-- 对代码、配置和说明文档进行交叉核对。
+### 11.3 C5 非目标
 
-模型不能在没有引用命中的情况下声称某个文件包含特定内容。解析不完整或文件失败时，回答必须显示缺失范围。
-
-### 11.3 文件修改
-
-修改流程固定为：
-
-```text
-用户授权读取原文件
-  -> Runtime 生成修改后的新 Artifact
-  -> Renderer 显示修改摘要或差异
-  -> 用户选择另存为，或明确确认覆盖
-  -> Main 执行最终写入
-```
-
-默认“另存为”。覆盖原文件属于高风险操作，必须满足：
-
-- 原文件仍是用户本轮明确授权的同一文件。
-- 写入前重新检查文件标识、大小和修改时间，避免覆盖外部并发修改。
-- 显示目标路径的脱敏名称和修改摘要。
-- 用户在当前任务中二次确认。
-- 先写临时文件并验证，再使用可恢复替换策略。
-- 失败时保留原文件，不留下半文件。
-
-文本文件提供行级差异。结构化 Office 文件提供工作表、幻灯片、段落和表格级修改摘要；未实现可靠差异时不得显示虚假的逐字 diff。
+- 不生成或修改 DOCX、XLSX、PPTX、PDF、PNG、JPEG。
+- 不覆盖原文件，不执行 Agent 生成的 Python。
+- 不提供复杂 Office 逐字 diff。
 
 ### 11.4 C5 完成门槛
 
 - 多文件资料集可以稳定选择直接上下文或临时索引。
 - 回答引用能定位到具体文件和结构位置。
 - 临时索引随会话删除，不污染正式知识库。
-- 所有修改先生成 Artifact，默认不覆盖原文件。
-- 并发修改检测、另存、覆盖确认和失败回滚测试通过。
-- 至少覆盖文本、CSV、DOCX 和 XLSX 的读取到输出闭环。
+- 至少覆盖文本、CSV、PDF、DOCX 和 XLSX 的只读分析闭环。
 
-## 12. IPC 与 Runtime API 草案
+## 12. C6：受控执行与复杂文档输出
+
+状态：Deferred（依赖 C4/C5，未排期）
+
+- 固定依赖和资源配额的 Python 执行沙箱。
+- Agent 生成代码只读取本轮授权资源，只写入受控 Artifact 目录。
+- PDF、DOCX、XLSX、PPTX、PNG/JPEG 复杂输出与重新读取验证。
+- 修改默认生成新 Artifact，不静默覆盖原文件。
+- 另存、覆盖确认、并发修改检测和失败回滚继续由 Main 负责。
+- 执行、依赖、输入输出和验证结果写入脱敏审计日志。
+
+## 13. IPC 与 Runtime API 草案
 
 以下名称用于统一开发方向，具体参数必须在 `src/shared/assistant.ts` 中定义共享类型，禁止 Main、Preload 和 Renderer 各自复制结构。
 
-### 12.1 Electron IPC
+### 13.1 Electron IPC
 
 ```text
 assistant:stage-dropped-files       Preload 内部提交系统 File 路径
 assistant:pick-attachments          打开原生文件选择器
 assistant:get-attachments           获取当前草稿/会话附件摘要
 assistant:remove-attachment         删除未发送附件或解除草稿绑定
+assistant:preview-attachment        获取经过归属校验的结构化附件预览
 assistant:preview-artifact          获取应用内 Artifact 分页预览
 assistant:save-artifact             通过原生保存对话框保存 Artifact
 assistant:delete-artifact           删除应用内 Artifact
 assistant:get-web-settings          获取脱敏联网配置
 assistant:set-web-settings          加密保存 Provider 配置
+assistant:get-vision-settings       获取脱敏视觉模型配置和探测状态
+assistant:set-vision-settings       保存主模型继承或独立视觉配置
+assistant:test-vision-model         使用随机测试图片主动探测能力
 ```
 
 所有 handler 必须复用当前助手窗口身份校验，并验证 ID、数量、字符串长度、枚举和对象结构。
 
-### 12.2 Runtime API
+### 13.2 Runtime API
 
 ```text
 POST   /v1/attachments              注册并解析 Main 已暂存的附件
 GET    /v1/attachments              查询附件状态
 DELETE /v1/attachments/:id          清理附件和解析结果
+POST   /v1/attachments/:id/preview  获取经过草稿/会话归属校验的结构化预览
+GET    /v1/document-capabilities    获取 Parser 与图片输入能力声明
 GET    /v1/artifacts/:id            获取 Artifact 元数据
 POST   /v1/artifacts/:id/preview    获取经过会话归属校验的分页预览
 GET    /v1/artifacts/:id/content    由 Main 读取 Artifact 完整内容
 POST   /v1/artifacts/:id/saved      标记用户已完成外部另存
 DELETE /v1/artifacts/:id            清理 Artifact
+POST   /v1/vision/test              由 Main 触发无用户数据的视觉能力探测
 ```
 
 所有接口继续使用单次启动令牌、loopback 监听、协议版本和请求大小限制。Runtime 不接受浏览器直接请求。
 
-### 12.3 AssistantEvent 扩展
+### 13.3 AssistantEvent 扩展
 
 ```text
 attachment_status
@@ -677,7 +699,7 @@ artifact_status
 
 事件继续使用 `taskId` 和单调递增 `sequence`。任务取消后不得再发送新的 Artifact、网页或附件来源事件；已经生成的资源可以保留，但必须标记所属任务已取消。
 
-## 13. 日志、审计与隐私
+## 14. 日志、审计与隐私
 
 普通日志允许记录：
 
@@ -699,9 +721,9 @@ artifact_status
 - 文件从哪个入口获得授权：drop-pet、drop-conversation 或 file-picker。
 - 联网查询是否已启用、使用哪个 Provider、访问哪些公开域名。
 - Artifact 何时生成、保存、覆盖或删除。
-- 原文件修改时的授权、并发检查、用户确认和结果。
+- C6 原文件修改时的授权、并发检查、用户确认和结果。
 
-## 14. 错误码基线
+## 15. 错误码基线
 
 新增错误码应稳定、可测试，并由 Renderer 映射为简短中文提示：
 
@@ -728,12 +750,21 @@ web_response_too_large
 web_fetch_timeout
 document_encrypted
 document_archive_limit_exceeded
+document_ocr_required
+image_decode_failed
+image_too_large
+vision_not_configured
+vision_capability_untested
+vision_model_unsupported
+vision_invalid_credentials
+vision_provider_unavailable
+vision_summary_failed
 source_changed_before_write
 ```
 
 错误消息不得包含真实路径、密钥或正文片段。未知内部异常写脱敏日志，Renderer 只显示通用错误和可重试状态。
 
-## 15. 分阶段实施顺序
+## 16. 分阶段实施顺序
 
 ### C1：拖拽附件与文本解析
 
@@ -766,27 +797,40 @@ source_changed_before_write
 
 完成门槛：第 9.6 节全部通过。
 
-### C4：复杂文档与复杂 Artifact
+### C4：复杂文档输入与图片理解
 
-- 统一 Parser Registry。
-- PDF、DOCX、XLSX、PPTX 和图片输入。
-- 复杂格式输出和重新读取验证。
+- C4.0：统一协议、安全边界和输入依赖打包实验。
+- C4.1：Office ZIP/XML、PDF 主动内容和图片解码安全层。
+- C4.2：PDF、DOCX、XLSX、PPTX Parser 和结构位置。
+- C4.3：图片净化、Vision Analyzer 配置、主动探测、取消和缓存。
+- C4.4：附件登记、预览、上下文和结构化来源引用接入。
+- C4.5：知识库索引、Chunk 位置和检索来源接入。
+- C4.6：开发版、独立 Runtime 和解包版解析/退出验收。
+- 全阶段不执行本地 OCR，不生成复杂格式 Artifact。
 
-完成门槛：第 10.4 节全部通过。
+完成门槛：第 10.5 节全部通过。
 
-### C5：多文件分析与修改
+### C5：多文件只读分析
 
 - 会话资料集和临时索引。
-- 多文件引用、比较和提取。
-- 修改稿、差异、另存、覆盖确认和回滚。
+- 多文件引用、比较和字段提取。
+- 使用现有 TXT、Markdown、CSV、JSON Artifact 交付结果。
 
 完成门槛：第 11.4 节全部通过。
 
-C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶段只有在其完成门槛通过后才能在进度文档中标记为 Done。
+### C6：受控执行与复杂文档输出
 
-## 16. 测试要求
+- 固定依赖和资源配额的 Python 执行沙箱。
+- PDF、DOCX、XLSX、PPTX、PNG/JPEG 生成、重新读取验证和受控修改。
+- 复杂输出默认另存，不静默覆盖原文件。
 
-### 16.1 TypeScript 单元测试
+完成门槛：第 12 节和后续独立验收标准全部通过。
+
+C1 至 C6 是依赖顺序，不代表已经确定具体开发日期。每个阶段只有在其完成门槛通过后才能在进度文档中标记为 Done。
+
+## 17. 测试要求
+
+### 17.1 TypeScript 单元测试
 
 - Attachment/Artifact/Web 共享协议校验。
 - 文件数量、大小、扩展名、MIME 和 ID 校验。
@@ -795,16 +839,16 @@ C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 - Web URL、重定向、私网地址和协议策略。
 - Renderer 附件标签、Artifact 卡片和来源渲染。
 
-### 16.2 Python Runtime 测试
+### 17.2 Python Runtime 测试
 
 - 附件数据库迁移、解析、绑定、删除和孤立清理。
 - Parser 正常、损坏、超限、加密和主动内容样本。
 - 附件上下文预算和不完整读取提示。
 - Artifact 生成、格式校验、内容读取和生命周期。
 - 会话临时索引隔离、检索和删除。
-- 多文件来源定位和修改摘要。
+- 多文件来源定位、结构摘要和基础 Artifact 提取结果。
 
-### 16.3 集成与安全测试
+### 17.3 集成与安全测试
 
 - Renderer 不能提交任意字符串路径。
 - Runtime 不能越出附件和 Artifact 根目录。
@@ -814,7 +858,7 @@ C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 - 网页与附件提示注入不能绕过工具确认。
 - 任务取消后网络、解析和生成任务正确停止。
 
-### 16.4 E2E 与打包测试
+### 17.4 E2E 与打包测试
 
 - 将单个和多个文件拖到展开对话区。
 - 将文件拖到收起桌宠，成功后自动展开且布局不跳动。
@@ -822,12 +866,13 @@ C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 - 文本附件提问、来源引用、移除和会话删除。
 - Artifact 生成、预览、取消保存、另存和覆盖。
 - 本地可控 Search Provider 的搜索、抓取、引用、取消和错误。
-- PDF、Office、图片和多文件的开发版/打包版行为一致。
+- PDF、Office、图片和多文件只读分析的开发版/打包版行为一致。
+- C6 复杂输出和受控执行必须另行通过沙箱、重新读取验证和打包验收。
 - 应用退出后不遗留 Runtime、锁文件、未登记草稿附件或未完成网络请求。
 
 当前 C2 开发版 E2E 已执行并验证到生成、卡片、预览和删除，独立 Runtime 打包形态启动测试通过。原生“另存为”属于 Windows 系统对话框，现有 UI Automation 对取消、填写目标和确认保存仍不稳定；完整 Electron unpacked 包在本机构建阶段无进展。在原生保存和完整打包版闭环稳定通过前，不得把 C2 记为完成验收。原子新建/覆盖及应用内 Artifact 保留规则继续由 Main 单元测试和 Runtime 集成测试兜底，但不能替代原生对话框 E2E。
 
-## 17. 已决策事项
+## 18. 已决策事项
 
 - 文件可以拖到对话区，也可以拖到收起桌宠；拖到桌宠成功后自动展开助手。
 - 文件投放后不自动发送。
@@ -839,25 +884,32 @@ C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 - 联网搜索默认关闭，Provider 密钥由 `safeStorage` 保存。
 - 搜索、抓取、文件解析和知识库资料均是不可信上下文。
 - 复杂 Office 主动内容不执行。
-- 文件修改默认生成新文件，覆盖需要重新校验和二次确认。
+- C6 文件修改默认生成新文件，覆盖需要重新校验和二次确认。
 - 点击穿透模式下不使用全局钩子强行接收拖放。
+- C4 只实现复杂文档输入，不实现复杂格式输出。
+- 图片默认由独立 Vision Analyzer 处理；主模型配置只作为默认继承来源，必须主动探测能力。
+- 主模型和 Vision Analyzer 即使复用同一 API Key，也必须使用隔离的模型调用、固定提示和无工具权限边界。
+- 扫描 PDF OCR、传统本地 OCR 和 Agent 生成 Python 执行不属于 C4。
+- C5 只做多文件只读分析；复杂 Office 输出和修改延后到 C6。
 
-## 18. 待实现时确认事项
+## 19. 待实现时确认事项
 
 以下事项尚未锁定，进入对应阶段前根据本机打包实验、许可证和评测结果确定：
 
 - Search Provider 的首个适配对象和配置界面字段。
-- PDF/Office Parser 与生成库的最终选择和固定版本。
-- 图片使用多模态模型、OCR 或二者组合的策略。
+- PDF/Office 输入 Parser 的最终选择和固定版本。
+- Vision Analyzer 的主模型继承、独立模型、能力探测和缓存协议。
+- Vision Analyzer 是否允许知识库图片索引，默认关闭。
 - 复杂格式和大文件的分级大小限制。
 - 不同模型上下文窗口下的直接注入预算。
 - 会话附件临时索引是否复用当前活动 Embedding Profile。
 - Artifact 保留时长是否增加独立自动清理配置。
-- 覆盖原文件是否在 C5 首版开放，或继续只允许另存为。
+- C6 是否允许覆盖原文件，或继续只允许另存为。
+- C6 Python 沙箱的解释器、依赖、网络和资源配额。
 
 这些待确认事项不能改变第 4 节安全原则。无法满足安全原则时，应缩小功能范围，而不是绕过 Main 权限边界。
 
-## 19. 完成定义
+## 20. 完成定义
 
 整个对话资源能力只有在以下事项全部完成后才能标记为 Done：
 
@@ -866,8 +918,9 @@ C1 至 C5 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 [x] C1.1 草稿/历史附件文本预览和失败投放提示通过验收
 [ ] C2 Artifact 生成、预览和受控保存通过验收（实现完成，原生保存对话框与打包版 E2E 待收尾）
 [ ] C3 联网搜索、网页引用和网络安全通过验收
-[ ] C4 PDF、Office 和图片输入输出通过验收
-[ ] C5 多文件临时索引和受控修改通过验收
+[ ] C4 PDF、Office 和条件式图片输入通过验收
+[ ] C5 多文件临时索引和只读分析通过验收
+[ ] C6 受控 Python 执行和复杂文档输出/修改通过验收
 [ ] 附件、网页和 Artifact 不扩大既有工具权限
 [ ] 数据清理、审计和隐私测试通过
 [ ] 开发版与打包版行为一致
