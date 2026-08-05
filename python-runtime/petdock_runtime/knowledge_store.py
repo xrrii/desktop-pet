@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import sqlite3
@@ -96,6 +97,7 @@ class KnowledgeStore:
                     chunk_index INTEGER NOT NULL,
                     content TEXT NOT NULL,
                     token_count INTEGER NOT NULL,
+                    location_json TEXT NOT NULL DEFAULT '{}',
                     UNIQUE(document_id, chunk_index)
                 );
                 CREATE INDEX IF NOT EXISTS chunks_library_idx ON document_chunks(library_id, document_id);
@@ -113,6 +115,7 @@ class KnowledgeStore:
                 """
             )
             self._ensure_document_columns()
+            self._ensure_chunk_columns()
             self._ensure_fts_v2()
 
     def _ensure_document_columns(self) -> None:
@@ -126,6 +129,17 @@ class KnowledgeStore:
         if "chunk_strategy_version" not in columns:
             self._connection.execute(
                 "ALTER TABLE documents ADD COLUMN chunk_strategy_version TEXT NOT NULL DEFAULT 'v1'"
+            )
+
+    def _ensure_chunk_columns(self) -> None:
+        """为旧知识库 Chunk 增加可选结构位置，旧记录保持可检索。"""
+        columns = {
+            str(row["name"])
+            for row in self._connection.execute("PRAGMA table_info(document_chunks)").fetchall()
+        }
+        if "location_json" not in columns:
+            self._connection.execute(
+                "ALTER TABLE document_chunks ADD COLUMN location_json TEXT NOT NULL DEFAULT '{}'"
             )
 
     def _ensure_fts_v2(self) -> None:
@@ -269,8 +283,9 @@ class KnowledgeStore:
         modified_ns: int,
         size_bytes: int,
         content_hash: str,
-        chunks: list[tuple[str, int]],
+        chunks: list[tuple[str, int] | tuple[str, int, dict[str, object]]],
         chunk_strategy_version: str,
+        title: str | None = None,
     ) -> tuple[list[str], list[dict[str, Any]], str]:
         """原子替换文档分块，并把 embedding 状态标记为待写入 Chroma。"""
         document_id = _stable_id(library_id, relative_path)
@@ -306,7 +321,7 @@ class KnowledgeStore:
                     document_id,
                     library_id,
                     relative_path,
-                    Path(relative_path).stem[:200],
+                    (title or Path(relative_path).stem)[:200],
                     content_hash,
                     modified_ns,
                     size_bytes,
@@ -315,16 +330,19 @@ class KnowledgeStore:
                 ),
             )
             records: list[dict[str, Any]] = []
-            for index, (content, token_count) in enumerate(chunks):
+            for index, chunk in enumerate(chunks):
+                content, token_count = chunk[0], chunk[1]
+                location = chunk[2] if len(chunk) > 2 else {}
                 chunk_id = _stable_id(document_id, str(index), content_hash)
                 self._connection.execute(
                     """
-                    INSERT INTO document_chunks(id, document_id, library_id, chunk_index, content, token_count)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO document_chunks(
+                        id, document_id, library_id, chunk_index, content, token_count, location_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (chunk_id, document_id, library_id, index, content, token_count),
+                    (chunk_id, document_id, library_id, index, content, token_count, json.dumps(location, ensure_ascii=False)),
                 )
-                title = Path(relative_path).stem[:200]
+                chunk_title = (title or Path(relative_path).stem)[:200]
                 self._connection.execute(
                     """
                     INSERT INTO document_chunks_fts(
@@ -334,7 +352,7 @@ class KnowledgeStore:
                     (
                         chunk_id,
                         library_id,
-                        title,
+                        chunk_title,
                         relative_path,
                         content,
                         " ".join(retrieval_terms(content, max_terms=256)),
@@ -346,8 +364,9 @@ class KnowledgeStore:
                         "libraryId": library_id,
                         "documentId": document_id,
                         "relativePath": relative_path,
-                        "title": Path(relative_path).stem[:200],
+                        "title": chunk_title,
                         "content": content,
+                        "location": location,
                     }
                 )
         return old_ids, records, document_id
@@ -357,7 +376,8 @@ class KnowledgeStore:
         with self._lock:
             rows = self._connection.execute(
                 """
-                SELECT c.id, c.library_id, c.document_id, c.content, d.relative_path, d.title
+                SELECT c.id, c.library_id, c.document_id, c.content, c.location_json,
+                       d.relative_path, d.title
                 FROM document_chunks c JOIN documents d ON d.id=c.document_id
                 WHERE c.document_id=? ORDER BY c.chunk_index
                 """,
@@ -371,6 +391,7 @@ class KnowledgeStore:
                 "relativePath": row["relative_path"],
                 "title": row["title"],
                 "content": row["content"],
+                "location": _load_json_object(row["location_json"]),
             }
             for row in rows
         ]
@@ -445,7 +466,7 @@ class KnowledgeStore:
             rows = self._connection.execute(
                 f"""
                 SELECT c.id, c.library_id, c.document_id, c.chunk_index, c.token_count,
-                       c.content, d.relative_path, d.title, l.name AS library_name
+                       c.content, c.location_json, d.relative_path, d.title, l.name AS library_name
                 FROM document_chunks c
                 JOIN documents d ON d.id=c.document_id
                 JOIN knowledge_libraries l ON l.id=c.library_id
@@ -464,6 +485,7 @@ class KnowledgeStore:
                 "title": row["title"],
                 "relativePath": row["relative_path"],
                 "content": row["content"],
+                "location": _load_json_object(row["location_json"]),
             }
             for row in rows
         }
@@ -508,6 +530,15 @@ class KnowledgeStore:
                 "SELECT id FROM knowledge_libraries WHERE status IN ('ready','paused','error')"
             ).fetchall()
         return [str(row["id"]) for row in rows]
+
+
+def _load_json_object(value: object) -> dict[str, object]:
+    """读取 Chunk 结构位置，兼容旧库默认空对象。"""
+    try:
+        parsed = json.loads(str(value))
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError):
+        return {}
 
 
 def _stable_id(*parts: str) -> str:

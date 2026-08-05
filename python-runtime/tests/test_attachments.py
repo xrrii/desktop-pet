@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from PIL import Image
 
 from petdock_runtime.attachment_store import AttachmentStore
 from petdock_runtime.config import RuntimeConfig
@@ -175,3 +176,43 @@ def test_attachment_api_emits_sources_and_cleans_conversation(tmp_path: Path) ->
     assert history["messages"][0]["attachments"][0]["name"] == "brief.md"
     assert deleted
     assert not (attachment_root / str(item["id"])).exists()
+
+
+def test_image_register_does_not_call_vision_before_chat_send(tmp_path: Path) -> None:
+    """HTTP 图片登记只返回本地元数据，视觉模型调用必须延迟到聊天任务。"""
+    attachment_root = tmp_path / "attachments"
+    config = RuntimeConfig(
+        token=TOKEN,
+        resolved_backend="mock",
+        api_key=None,
+        base_url=None,
+        model="unused",
+        memory_db_path=str(tmp_path / "assistant.db"),
+        knowledge_db_path=str(tmp_path / "knowledge.db"),
+        chroma_path=str(tmp_path / "chroma"),
+        skills_db_path=str(tmp_path / "skills.db"),
+        skills_root=str(tmp_path / "skills"),
+        attachment_root=str(attachment_root),
+    )
+    app = create_app(config)
+    item = _write_managed_file(
+        attachment_root,
+        "7" * 32,
+        "photo.png",
+        b"placeholder",
+    )
+    image_path = attachment_root / ("7" * 32) / "photo.png"
+    Image.new("RGB", (16, 16), "white").save(image_path)
+    item["sizeBytes"] = image_path.stat().st_size
+
+    async def scenario() -> dict[str, object]:
+        transport = ASGITransport(app=app)
+        headers = {"Authorization": f"Bearer {TOKEN}"}
+        async with AsyncClient(transport=transport, base_url="http://runtime.test") as client:
+            response = await client.post("/v1/attachments", headers=headers, json={"attachments": [item]})
+            assert response.status_code == 200
+            return response.json()["attachments"][0]
+
+    summary = asyncio.run(scenario())
+    assert summary["status"] == "ready"
+    assert summary["parserId"] == "image-metadata-v1"

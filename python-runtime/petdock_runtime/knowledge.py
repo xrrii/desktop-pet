@@ -16,6 +16,7 @@ import chromadb
 from chromadb.config import Settings
 
 from .embeddings import EmbeddingProvider, LocalHashEmbedding
+from .document_parser import DocumentParseError, DocumentParserRegistry
 from .knowledge_store import KnowledgeStore
 from .retrieval import retrieval_query_terms, retrieval_terms
 
@@ -26,6 +27,7 @@ SUPPORTED_EXTENSIONS = {
     ".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".toml", ".ini",
     ".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".kt", ".kts", ".xml",
     ".html", ".css", ".scss", ".sql", ".ps1", ".sh",
+    ".pdf", ".docx", ".xlsx", ".pptx",
 }
 EXCLUDED_DIRECTORIES = {
     ".git", ".svn", ".hg", ".idea", ".vscode", ".venv", "venv", "node_modules",
@@ -60,11 +62,12 @@ class RetrievalSource:
     relative_path: str
     content: str
     score: float
+    location: dict[str, object] = field(default_factory=dict)
 
     def public(self) -> dict[str, Any]:
         """返回不含绝对路径的引用摘要。"""
         compact = re.sub(r"\s+", " ", self.content).strip()
-        return {
+        result = {
             "id": self.id,
             "libraryId": self.library_id,
             "libraryName": self.library_name,
@@ -73,6 +76,9 @@ class RetrievalSource:
             "excerpt": compact[:360],
             "score": round(self.score, 6),
         }
+        if self.location:
+            result["location"] = dict(self.location)
+        return result
 
 
 @dataclass(frozen=True)
@@ -247,11 +253,13 @@ class KnowledgeService:
         store: KnowledgeStore,
         vectors: ChromaVectorStore,
         fallback_vectors: ChromaVectorStore | None = None,
+        parser_registry: DocumentParserRegistry | None = None,
     ) -> None:
-        """绑定 SQLite 主存储、活动向量索引和可选 Hash 影子索引。"""
+        """绑定存储、向量索引和 Runtime 唯一 Parser Registry。"""
         self.store = store
         self.vectors = vectors
         self.fallback_vectors = fallback_vectors
+        self.registry = parser_registry or DocumentParserRegistry(vision_enabled=False)
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._controls: dict[str, _IndexControl] = {}
 
@@ -384,13 +392,37 @@ class KnowledgeService:
                     continue
 
                 try:
-                    content = path.read_text(encoding="utf-8-sig")
-                except UnicodeDecodeError:
-                    LOGGER.warning("跳过非 UTF-8 文件 library=%s path=%s", library_id, relative_path)
+                    # 知识库图片索引默认关闭，即使附件侧视觉模型已主动探测成功。
+                    parsed = self.registry.parse(path, name=path.name, vision_status="untested")
+                except DocumentParseError as error:
+                    LOGGER.warning(
+                        "跳过无法解析的知识库文件 library=%s extension=%s code=%s",
+                        library_id,
+                        path.suffix.lower(),
+                        error.problem.code,
+                    )
                     self.store.set_progress(library_id, "indexing", processed, len(files))
                     continue
+                if not parsed.ready:
+                    LOGGER.warning(
+                        "跳过未就绪知识库文件 library=%s extension=%s code=%s",
+                        library_id,
+                        path.suffix.lower(),
+                        parsed.errors[0].code,
+                    )
+                    self.store.set_progress(library_id, "indexing", processed, len(files))
+                    continue
+                content = parsed.plain_text
                 content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-                chunks = _split_document(content, self.vectors.embedding.count_tokens)
+                chunks: list[tuple[str, int, dict[str, object]]] = []
+                for block in parsed.blocks:
+                    chunks.extend(
+                        (chunk, token_count, block.location.as_dict())
+                        for chunk, token_count in _split_document(
+                            block.content,
+                            self.vectors.embedding.count_tokens,
+                        )
+                    )
                 old_ids, records, document_id = self.store.replace_document(
                     library_id,
                     relative_path,
@@ -399,6 +431,7 @@ class KnowledgeService:
                     content_hash,
                     chunks,
                     CHUNK_STRATEGY_VERSION,
+                    parsed.title,
                 )
                 self._delete_vector_ids(old_ids)
                 written_signature = self._upsert_vectors(records)
@@ -415,9 +448,9 @@ class KnowledgeService:
                 self.vectors.descriptor.signature,
             )
         except Exception as error:
-            LOGGER.exception("知识库索引失败 library=%s", library_id)
+            LOGGER.error("知识库索引失败 library=%s error=%s", library_id, error.__class__.__name__)
             try:
-                self.store.set_progress(library_id, "error", error=str(error) or error.__class__.__name__)
+                self.store.set_progress(library_id, "error", error=error.__class__.__name__)
             except Exception:
                 LOGGER.exception("知识库失败状态写入失败 library=%s", library_id)
 
@@ -589,6 +622,7 @@ class KnowledgeService:
                 relative_path=str(record["relativePath"]),
                 content=str(record["content"]),
                 score=candidate.final_score,
+                location=dict(record.get("location") or {}),
             )
             for candidate, record in selected
         ]

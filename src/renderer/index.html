@@ -13,6 +13,45 @@
     <section id="assistant-panel" class="assistant-shell" aria-label="AI 助手" data-assistant-drop-zone="conversation" hidden>
       <section id="conversation" class="conversation" aria-live="polite"></section>
 
+      <section id="settings-view" class="settings-view" aria-label="助手配置" hidden>
+        <header class="memory-header">
+          <h2>助手配置</h2>
+          <div class="memory-header-actions">
+            <button id="settings-back" class="icon-button" type="button" title="返回聊天" aria-label="返回聊天">←</button>
+          </div>
+        </header>
+        <div class="settings-content">
+          <form id="model-settings-form" class="model-settings-form">
+            <div class="settings-section-heading">
+              <strong>主模型</strong>
+              <small id="model-configured-status">使用环境配置</small>
+            </div>
+            <label class="web-field" for="model-base-url">
+              <span>Base URL（可选）</span>
+              <input id="model-base-url" type="url" maxlength="500" placeholder="例如 https://api.openai.com/v1" autocomplete="off" />
+            </label>
+            <label class="web-field" for="model-name">
+              <span>模型名称</span>
+              <input id="model-name" type="text" maxlength="200" placeholder="例如 gpt-4o-mini" required autocomplete="off" />
+            </label>
+            <label class="web-field" for="model-api-key">
+              <span>API Key</span>
+              <input id="model-api-key" type="password" maxlength="2000" placeholder="输入 API Key" autocomplete="off" />
+            </label>
+            <div class="settings-actions">
+              <button id="model-clear-key" class="secondary-button" type="button">删除密钥</button>
+              <button id="model-save" class="primary-button" type="submit">保存主模型</button>
+            </div>
+            <small id="model-save-status" class="web-test-status" role="status"></small>
+          </form>
+          <nav class="settings-links" aria-label="其他助手配置">
+            <button id="settings-open-web" class="settings-link" type="button"><strong>联网与图片理解</strong><small>搜索服务、视觉模型与主动探测</small><span aria-hidden="true">›</span></button>
+            <button id="settings-open-knowledge" class="settings-link" type="button"><strong>知识库</strong><small>索引目录与 Embedding 模型</small><span aria-hidden="true">›</span></button>
+            <button id="settings-open-skill" class="settings-link" type="button"><strong>Skill</strong><small>安装、启停和更新 Skill</small><span aria-hidden="true">›</span></button>
+          </nav>
+        </div>
+      </section>
+
       <section id="memory-view" class="memory-view" aria-label="记忆管理" hidden>
         <header class="memory-header">
           <h2>记忆管理</h2>
@@ -104,14 +143,15 @@
         </section>
       </section>
 
-      <section id="web-view" class="web-view" aria-label="联网搜索设置" hidden>
+      <section id="web-view" class="web-view" aria-label="联网与图片理解设置" hidden>
         <header class="memory-header">
-          <h2>联网搜索</h2>
+          <h2>联网与图片理解</h2>
           <div class="memory-header-actions">
             <button id="web-back" class="icon-button" type="button" title="返回聊天" aria-label="返回聊天">←</button>
           </div>
         </header>
-        <form id="web-settings-form" class="web-settings-form">
+        <div id="web-settings-scroll" class="web-settings-scroll">
+          <form id="web-settings-form" class="web-settings-form">
           <label class="web-setting-row" for="web-enabled">
             <span>
               <strong>联网搜索</strong>
@@ -140,7 +180,53 @@
             <button id="web-save" class="primary-button" type="submit">保存</button>
           </div>
           <small id="web-test-status" class="web-test-status" role="status"></small>
-        </form>
+          </form>
+          <section class="vision-settings-panel" aria-labelledby="vision-settings-title">
+          <header class="vision-settings-header">
+            <div>
+              <h3 id="vision-settings-title">图片理解</h3>
+              <small id="vision-configured-status">尚未主动探测</small>
+            </div>
+            <span id="vision-status" class="vision-status" data-status="untested">未测试</span>
+          </header>
+          <form id="vision-settings-form" class="vision-settings-form">
+            <label class="web-field" for="vision-mode">
+              <span>视觉模型配置</span>
+              <select id="vision-mode" aria-label="视觉模型配置">
+                <option value="inherit">继承主模型地址、密钥和模型</option>
+                <option value="custom">单独指定视觉模型</option>
+              </select>
+            </label>
+            <div id="vision-custom-fields" class="vision-custom-fields" hidden>
+              <label class="web-field" for="vision-base-url">
+                <span>视觉模型 Base URL（可选）</span>
+                <input id="vision-base-url" type="url" maxlength="500" placeholder="留空则继承主模型地址" aria-label="视觉模型 Base URL" autocomplete="off" />
+              </label>
+              <label class="web-field" for="vision-model">
+                <span>视觉模型名称</span>
+                <input id="vision-model" type="text" maxlength="200" placeholder="例如 gpt-4o-mini" aria-label="视觉模型名称" autocomplete="off" />
+              </label>
+              <label class="web-setting-row vision-independent-row" for="vision-independent-credentials">
+                <span>
+                  <strong>使用独立凭据</strong>
+                  <small>关闭时沿用主模型 API Key</small>
+                </span>
+                <input id="vision-independent-credentials" type="checkbox" aria-label="使用独立视觉模型凭据" />
+              </label>
+              <label id="vision-api-key-field" class="web-field" for="vision-api-key" hidden>
+                <span>视觉模型 API Key</span>
+                <input id="vision-api-key" type="password" maxlength="2000" placeholder="输入视觉模型 API Key" aria-label="视觉模型 API Key" autocomplete="off" />
+              </label>
+            </div>
+            <p class="web-privacy-note">图片发送前会移除 EXIF/GPS 并生成受限安全派生图；只有随机验证码主动探测成功后，图片才会进入附件支持列表。图片摘要仍是不可信资料。</p>
+            <div class="web-settings-actions">
+              <button id="vision-test" class="secondary-button" type="button">主动探测</button>
+              <button id="vision-save" class="primary-button" type="submit">保存配置</button>
+            </div>
+            <small id="vision-test-status" class="web-test-status" role="status"></small>
+          </form>
+          </section>
+        </div>
       </section>
 
       <div id="error-banner" class="error-banner" role="alert" hidden></div>
@@ -173,9 +259,10 @@
         <div class="composer-actions">
           <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">+</button>
           <button id="attachment-button" class="icon-button" type="button" title="添加附件" aria-label="添加附件">⊕</button>
-          <button id="knowledge-button" class="icon-button knowledge-button" type="button" title="知识库" aria-label="知识库" aria-pressed="false">▤</button>
-          <button id="skill-button" class="icon-button skill-button" type="button" title="技能" aria-label="技能" aria-pressed="false">$</button>
-          <button id="web-button" class="icon-button web-button" type="button" title="联网搜索" aria-label="联网搜索设置" aria-pressed="false">⌁</button>
+          <button id="settings-button" class="icon-button settings-button" type="button" title="助手配置" aria-label="助手配置" aria-pressed="false">⚙</button>
+          <button id="knowledge-button" class="icon-button knowledge-button" type="button" title="知识库" aria-label="知识库" aria-pressed="false" hidden>▤</button>
+          <button id="skill-button" class="icon-button skill-button" type="button" title="技能" aria-label="技能" aria-pressed="false" hidden>$</button>
+          <button id="web-button" class="icon-button web-button" type="button" title="联网与图片理解设置" aria-label="联网与图片理解设置" aria-pressed="false" hidden>⌁</button>
           <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">◈</button>
           <button id="send-button" class="primary-button icon-action-button" type="submit" title="发送" aria-label="发送">↑</button>
           <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>

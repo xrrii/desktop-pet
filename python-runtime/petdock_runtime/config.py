@@ -32,6 +32,10 @@ class RuntimeConfig:
     embedding_dimensions: int | None = None
     attachment_root: str = "attachments"
     artifact_root: str = "artifacts"
+    vision_api_key: str | None = None
+    vision_base_url: str | None = None
+    vision_model: str | None = None
+    vision_source: Literal["inherited", "custom"] = "inherited"
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -77,6 +81,17 @@ class RuntimeConfig:
         embedding_model = os.environ.get("PETDOCK_EMBEDDING_MODEL", "").strip() or None
         raw_dimensions = os.environ.get("PETDOCK_EMBEDDING_DIMENSIONS", "").strip()
         embedding_dimensions = int(raw_dimensions) if raw_dimensions else None
+        custom_vision = any(
+            os.environ.get(name, "").strip()
+            for name in ("PETDOCK_VISION_API_KEY", "PETDOCK_VISION_BASE_URL", "PETDOCK_VISION_MODEL")
+        )
+        vision_api_key = os.environ.get("PETDOCK_VISION_API_KEY", "").strip() or api_key
+        vision_base_url = (
+            os.environ.get("PETDOCK_VISION_BASE_URL", "").strip()
+            or base_url
+            or ("https://api.openai.com/v1" if api_key else None)
+        )
+        vision_model = os.environ.get("PETDOCK_VISION_MODEL", "").strip() or model
 
         if embedding_provider == "local" and not (
             embedding_model_dir and embedding_descriptor_json
@@ -119,4 +134,8 @@ class RuntimeConfig:
             embedding_base_url=embedding_base_url,
             embedding_model=embedding_model,
             embedding_dimensions=embedding_dimensions,
+            vision_api_key=vision_api_key,
+            vision_base_url=vision_base_url,
+            vision_model=vision_model,
+            vision_source="custom" if custom_vision else "inherited",
         )

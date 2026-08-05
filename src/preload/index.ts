@@ -12,6 +12,7 @@ import type {
   AssistantAskInput,
   AssistantAskResult,
   AssistantConversationMessage,
+  AssistantDocumentCapabilities,
   AssistantEvent,
   AssistantEmbeddingOnlineInput,
   AssistantEmbeddingSnapshot,
@@ -19,6 +20,8 @@ import type {
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
   AssistantMemorySnapshot,
+  AssistantModelSettingsInput,
+  AssistantModelSettingsSnapshot,
   AssistantPermissionResolution,
   AssistantRuntimeStatus,
   AssistantSkillInstallPreview,
@@ -26,6 +29,9 @@ import type {
   AssistantWebSettingsInput,
   AssistantWebSettingsSnapshot,
   AssistantWindowLayout,
+  AssistantVisionSnapshot,
+  AssistantVisionSettingsInput,
+  AssistantVisionSettingsSnapshot,
   MemoryClearScope,
   MemoryItemKind
 } from '../shared/assistant'
@@ -85,6 +91,20 @@ const api = {
   ): Promise<AssistantWebSettingsSnapshot> => ipcRenderer.invoke('assistant:set-web-settings', input),
   testAssistantWebSearch: (): Promise<number> =>
     ipcRenderer.invoke('assistant:test-web-search'),
+  getAssistantDocumentCapabilities: (): Promise<AssistantDocumentCapabilities> =>
+    ipcRenderer.invoke('assistant:get-document-capabilities'),
+  testAssistantVision: (): Promise<AssistantVisionSnapshot> =>
+    ipcRenderer.invoke('assistant:test-vision'),
+  getAssistantVisionSettings: (): Promise<AssistantVisionSettingsSnapshot> =>
+    ipcRenderer.invoke('assistant:get-vision-settings'),
+  setAssistantVisionSettings: (
+    input: AssistantVisionSettingsInput
+  ): Promise<AssistantVisionSettingsSnapshot> => ipcRenderer.invoke('assistant:set-vision-settings', input),
+  getAssistantModelSettings: (): Promise<AssistantModelSettingsSnapshot> =>
+    ipcRenderer.invoke('assistant:get-model-settings'),
+  setAssistantModelSettings: (
+    input: AssistantModelSettingsInput
+  ): Promise<AssistantModelSettingsSnapshot> => ipcRenderer.invoke('assistant:set-model-settings', input),
   getAssistantLayout: (): Promise<AssistantWindowLayout> =>
     ipcRenderer.invoke('assistant:get-layout'),
   setAssistantTheme: (theme: AssistantThemeId): Promise<AssistantThemeId> =>

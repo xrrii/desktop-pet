@@ -39,6 +39,8 @@ from .protocol import (
     SkillLocalPreviewRequest,
 )
 from .service import AssistantService
+from .vision import VisionAnalyzer, VisionConfiguration, VisionRequestError
+from .document_parser import DocumentParserRegistry
 
 """FastAPI 路由层，只负责鉴权、协议校验和 Runtime 服务编排。"""
 
@@ -49,7 +51,17 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     """创建带本地 SQLite、聊天、工具和记忆接口的 FastAPI 应用。"""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     store = MemoryStore(config.memory_db_path)
-    attachments = AttachmentStore(config.memory_db_path, config.attachment_root)
+    parser_registry = DocumentParserRegistry()
+    attachments = AttachmentStore(config.memory_db_path, config.attachment_root, parser_registry)
+    vision = VisionAnalyzer(
+        VisionConfiguration(
+            config.vision_base_url,
+            config.vision_api_key,
+            config.vision_model,
+            config.vision_source,
+        ),
+        config.memory_db_path,
+    )
     artifacts = ArtifactStore(config.memory_db_path, config.artifact_root)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
     embedding = create_embedding_provider(config)
@@ -62,13 +74,27 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         knowledge_store,
         ChromaVectorStore(config.chroma_path, embedding),
         fallback_vectors,
+        parser_registry,
     )
     skill_store = SkillStore(config.skills_db_path)
     skills = SkillRegistry(config.skills_root, skill_store)
     skill_installer = SkillInstaller(config.skills_root, skills)
+    async def prepare_attachments(request: AssistantRequest) -> None:
+        """发送任务开始后才生成图片视觉摘要，登记阶段不调用外部视觉端点。"""
+        records = attachments.validate_for_request(request.attachmentIds, request.conversationId)
+        for record in records:
+            if record.parser_id != "image-metadata-v1":
+                continue
+            if vision.status != "supported":
+                raise VisionRequestError(vision.status, _vision_status_code(vision.status))
+            source, derived = attachments.vision_source(record.id)
+            summary = await vision.analyze(f"{request.taskId}:{record.id}", source, derived)
+            attachments.apply_vision_summary(record.id, summary.as_dict())
+
     service = AssistantService(
         create_backend(config, store, knowledge, skills, attachments, artifacts),
         create_memory_extractor(config, store),
+        prepare_attachments,
     )
 
     def authorize(authorization: str | None) -> None:
@@ -107,14 +133,43 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         request: AttachmentRegisterRequest,
         authorization: str | None = Header(default=None),
     ) -> dict[str, object]:
-        """登记 Main 已复制到受控目录的附件并执行 UTF-8 解析。"""
+        """登记 Main 已复制到受控目录的附件并执行统一文档解析。"""
         authorize(authorization)
         try:
-            return {"attachments": attachments.register_many(request.model_dump()["attachments"])}
+            attachments.registry.vision_status = vision.status
+            registered = attachments.register_many(request.model_dump()["attachments"])
+            return {"attachments": registered}
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         except OSError as error:
             raise HTTPException(status_code=400, detail="附件读取失败。") from error
+
+    @app.get("/v1/document-capabilities")
+    async def document_capabilities(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回统一 Parser 与当前图片输入能力，不包含路径或模型密钥。"""
+        authorize(authorization)
+        attachments.registry.vision_status = vision.status
+        return {"parsers": attachments.registry.capabilities(), "vision": vision.snapshot()}
+
+    @app.get("/v1/vision")
+    async def vision_snapshot(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回视觉配置和主动探测状态。"""
+        authorize(authorization)
+        return vision.snapshot()
+
+    @app.post("/v1/vision/test")
+    async def vision_test(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """以本地随机验证码图片主动探测固定视觉模型端点。"""
+        authorize(authorization)
+        result = await vision.probe()
+        attachments.registry.vision_status = vision.status
+        return result
 
     @app.delete("/v1/attachments/{attachment_id}")
     async def attachment_delete(
@@ -125,6 +180,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         authorize(authorization)
         if len(attachment_id) != 32 or any(character not in "0123456789abcdef" for character in attachment_id):
             raise HTTPException(status_code=400, detail="Invalid attachment id")
+        vision.cancel(attachment_id)
         return {"deleted": attachments.delete_draft(attachment_id)}
 
     @app.post("/v1/attachments/{attachment_id}/preview")
@@ -529,6 +585,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         """关闭 Runtime 服务并释放 SQLite 连接。"""
         authorize(authorization)
         await knowledge.close()
+        vision.close()
         skills.close()
         attachments.cleanup_drafts()
         attachments.close()
@@ -539,6 +596,17 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         return {"accepted": True}
 
     return app
+
+
+def _vision_status_code(status: str) -> str:
+    """把发送阶段的视觉状态转换为稳定错误码，临时故障不改写为不支持。"""
+    return {
+        "unconfigured": "vision_not_configured",
+        "untested": "vision_capability_untested",
+        "unsupported": "vision_model_unsupported",
+        "unavailable": "vision_provider_unavailable",
+        "invalid-credentials": "vision_invalid_credentials",
+    }.get(status, "vision_summary_failed")
 
 
 def _validate_resource_id(value: str, label: str) -> None:

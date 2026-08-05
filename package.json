@@ -29,6 +29,7 @@
   "build": {
     "appId": "com.local.petdock",
     "productName": "PetDock",
+    "npmRebuild": false,
     "asar": true,
     "directories": {
       "output": "release"

@@ -12,12 +12,15 @@ import type {
   AssistantAskInput,
   AssistantAskResult,
   AssistantConversationMessage,
+  AssistantDocumentCapabilities,
   AssistantEvent,
   AssistantEmbeddingOnlineInput,
   AssistantEmbeddingSnapshot,
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
   AssistantMemorySnapshot,
+  AssistantModelSettingsInput,
+  AssistantModelSettingsSnapshot,
   AssistantPermissionResolution,
   AssistantRequest,
   AssistantRuntimeStatus,
@@ -26,6 +29,9 @@ import type {
   AssistantToolResultRequest,
   AssistantWebSettingsInput,
   AssistantWebSettingsSnapshot,
+  AssistantVisionSnapshot,
+  AssistantVisionSettingsInput,
+  AssistantVisionSettingsSnapshot,
   ToolCall
 } from '../../shared/assistant'
 import { ASSISTANT_PROTOCOL_VERSION } from '../../shared/assistant'
@@ -38,6 +44,8 @@ import { AssistantToolHost, webToolErrorMessage } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
 import { WebSearchService } from './webSearchService'
 import { WebSettingsManager } from './webSettingsManager'
+import { VisionSettingsManager } from './visionSettingsManager'
+import { ModelSettingsManager } from './modelSettingsManager'
 import {
   AssistantAttachmentManager,
   isAttachmentSummary,
@@ -66,6 +74,8 @@ export class AssistantManager {
   private readonly embeddingModels = new EmbeddingModelManager()
   private readonly webSettings = new WebSettingsManager()
   private readonly webSearch = new WebSearchService(this.webSettings)
+  private readonly visionSettings = new VisionSettingsManager()
+  private readonly modelSettings = new ModelSettingsManager()
   private readonly runtime: AssistantRuntimeProcess
   private readonly toolHost = new AssistantToolHost(this.webSearch)
   private readonly activeTasks = new Map<string, ActiveTask>()
@@ -78,7 +88,11 @@ export class AssistantManager {
   ) {
     this.runtime = new AssistantRuntimeProcess(
       onStatus,
-      () => this.embeddingModels.runtimeEnvironment()
+      () => ({
+        ...this.modelSettings.runtimeEnvironment(),
+        ...this.embeddingModels.runtimeEnvironment(),
+        ...this.visionSettings.runtimeEnvironment()
+      })
     )
   }
 
@@ -104,6 +118,48 @@ export class AssistantManager {
     } catch (error) {
       throw new Error(webToolErrorMessage(error))
     }
+  }
+
+  /** 获取 Runtime 唯一文档 Parser Registry 的脱敏能力声明。 */
+  async getDocumentCapabilities(): Promise<AssistantDocumentCapabilities> {
+    return (await this.runtime.start()).getDocumentCapabilities()
+  }
+
+  /** 使用本地随机验证码图片主动探测当前视觉配置。 */
+  async testVision(): Promise<AssistantVisionSnapshot> {
+    return (await this.runtime.start()).testVision()
+  }
+
+  /** 返回不含密钥的视觉设置。 */
+  getVisionSettings(): AssistantVisionSettingsSnapshot {
+    return this.visionSettings.snapshot()
+  }
+
+  /** 返回主模型脱敏配置，供统一设置页展示。 */
+  getModelSettings(): AssistantModelSettingsSnapshot {
+    return this.modelSettings.snapshot()
+  }
+
+  /** 保存主模型配置；只有实际变化时才重启 Runtime。 */
+  async configureModelSettings(input: AssistantModelSettingsInput): Promise<AssistantModelSettingsSnapshot> {
+    const changed = await this.modelSettings.configure(input)
+    logInfo('assistant model settings configured', { changed, model: input.model.trim().slice(0, 80) })
+    if (changed) {
+      await this.cancelAll()
+      await this.runtime.restart()
+    }
+    return this.modelSettings.snapshot()
+  }
+
+  /** 保存视觉设置；仅在配置实际变化时重启 Runtime，避免重复保存清空已探测状态。 */
+  async configureVisionSettings(input: AssistantVisionSettingsInput): Promise<AssistantVisionSettingsSnapshot> {
+    const changed = await this.visionSettings.configure(input)
+    logInfo('assistant vision settings configured', { changed, mode: input.mode })
+    if (changed) {
+      await this.cancelAll()
+      await this.runtime.restart()
+    }
+    return this.visionSettings.snapshot()
   }
 
   /** 暂存并解析用户明确添加的文件，任何失败都会清理本批次受控副本。 */

@@ -55,6 +55,30 @@ export interface AssistantAskResult {
 export type AssistantAttachmentStatus = 'staging' | 'parsing' | 'ready' | 'error'
 export type AssistantAttachmentDropZone = 'pet' | 'conversation'
 
+export interface AssistantDocumentProblem {
+  code: string
+  message: string
+  retryable: boolean
+}
+
+export interface AssistantDocumentLocation {
+  kind: string
+  value: string
+  page: number | null
+  headingPath: string[]
+  paragraph: number | null
+  sheet: string | null
+  cellRange: string | null
+  slide: number | null
+}
+
+export interface AssistantDocumentBlock {
+  kind: string
+  content: string
+  location: AssistantDocumentLocation
+  metadata: Record<string, unknown>
+}
+
 export interface AssistantAttachmentSummary {
   id: string
   conversationId: string | null
@@ -66,6 +90,11 @@ export interface AssistantAttachmentSummary {
   parserId: string | null
   warning: string | null
   error: string | null
+  title?: string
+  blocks?: AssistantDocumentBlock[]
+  metadata?: Record<string, unknown>
+  warnings?: AssistantDocumentProblem[]
+  errors?: AssistantDocumentProblem[]
 }
 
 export interface AssistantAttachmentDropResult {
@@ -98,6 +127,73 @@ export interface AssistantAttachmentPreview {
   nextOffset: number | null
   totalCharacters: number
   truncated: boolean
+  title?: string
+  blocks?: AssistantDocumentBlock[]
+  warnings?: AssistantDocumentProblem[]
+  errors?: AssistantDocumentProblem[]
+}
+
+export type AssistantVisionStatus =
+  | 'unconfigured'
+  | 'untested'
+  | 'supported'
+  | 'unsupported'
+  | 'unavailable'
+  | 'invalid-credentials'
+
+export interface AssistantVisionSnapshot {
+  status: AssistantVisionStatus
+  source: 'inherited' | 'custom'
+  model: string
+  configured: boolean
+  lastError: string | null
+  protocolVersion: string
+}
+
+export interface AssistantVisionSettingsInput {
+  mode: 'inherit' | 'custom'
+  baseUrl?: string
+  model?: string
+  independentCredentials?: boolean
+  apiKey?: string
+  clearApiKey?: boolean
+}
+
+/** 主模型设置的脱敏快照，Renderer 不会接触 API Key 明文。 */
+export interface AssistantModelSettingsSnapshot {
+  baseUrl: string
+  model: string
+  configuredKey: boolean
+  source: 'environment' | 'saved'
+}
+
+/** 主模型设置输入；空白 API Key 表示沿用已保存密钥。 */
+export interface AssistantModelSettingsInput {
+  baseUrl?: string
+  model: string
+  apiKey?: string
+  clearApiKey?: boolean
+}
+
+export interface AssistantVisionSettingsSnapshot {
+  mode: 'inherit' | 'custom'
+  baseUrl: string
+  model: string
+  independentCredentials: boolean
+  configuredKey: boolean
+}
+
+export interface AssistantDocumentCapability {
+  parserId: string
+  extensions: string[]
+  maxInputBytes?: number
+  visionRequired?: boolean
+  visionEnabled?: boolean
+}
+
+export interface AssistantDocumentCapabilities {
+  parsers: AssistantDocumentCapability[]
+  vision: AssistantVisionSnapshot
 }
 
 export type AssistantArtifactPreviewKind = 'text' | 'table' | 'none'
@@ -229,6 +325,7 @@ export interface AssistantRetrievalSource {
   relativePath: string
   excerpt: string
   score: number
+  location?: AssistantDocumentLocation
 }
 
 export type MemoryClearScope = 'all' | 'conversations' | 'memories' | 'tool_logs'
@@ -479,6 +576,7 @@ export interface AssistantAttachmentSourcesEvent extends AssistantEventBase {
       name: string
       excerpt: string
       truncated: boolean
+      location?: AssistantDocumentLocation | null
     }>
   }
 }

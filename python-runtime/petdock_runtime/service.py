@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from typing import Any
+from collections.abc import Awaitable, Callable
 
 from .backends import (
     AssistantBackend,
@@ -32,10 +33,16 @@ class TaskSession:
 class AssistantService:
     """编排后端流式输出，并在外部工具调用时暂停等待 Main。"""
 
-    def __init__(self, backend: AssistantBackend, extractor: MemoryExtractor | None = None) -> None:
+    def __init__(
+        self,
+        backend: AssistantBackend,
+        extractor: MemoryExtractor | None = None,
+        prepare_attachments: Callable[[AssistantRequest], Awaitable[None]] | None = None,
+    ) -> None:
         """绑定模型后端和可选的异步记忆分析器。"""
         self._backend = backend
         self._extractor = extractor
+        self._prepare_attachments = prepare_attachments
         self._sessions: dict[str, TaskSession] = {}
 
     def start(self, request: AssistantRequest) -> None:
@@ -105,6 +112,8 @@ class AssistantService:
             )
 
         try:
+            if self._prepare_attachments:
+                await self._prepare_attachments(request)
             while True:
                 waiting_for_tool = False
                 async for output in self._backend.stream(request, tool_result):

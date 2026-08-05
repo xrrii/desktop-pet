@@ -8,8 +8,10 @@ import type {
   AssistantArtifactPreviewInput,
   AssistantArtifactSaveResult,
   AssistantEmbeddingOnlineInput,
+  AssistantModelSettingsInput,
   AssistantLayoutTrace,
   AssistantWebSettingsInput,
+  AssistantVisionSettingsInput,
   MemoryClearScope,
   MemoryItemKind,
   AssistantPermissionResolution
@@ -44,6 +46,13 @@ import {
   setClickThrough,
   setTransparentAreaClickThrough
 } from './window'
+
+// 仅供自动化测试在无可用 GPU 的受限环境中启用软件渲染。
+if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+}
 
 let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
@@ -242,6 +251,36 @@ function registerIpc(): void {
     return assistantManager.ask(request)
   })
 
+  ipcMain.handle('assistant:get-document-capabilities', (event) => {
+    requirePetSender(event)
+    return assistantManager.getDocumentCapabilities()
+  })
+
+  ipcMain.handle('assistant:test-vision', (event) => {
+    requirePetSender(event)
+    return assistantManager.testVision()
+  })
+
+  ipcMain.handle('assistant:get-vision-settings', (event) => {
+    requirePetSender(event)
+    return assistantManager.getVisionSettings()
+  })
+
+  ipcMain.handle('assistant:set-vision-settings', (event, input: AssistantVisionSettingsInput) => {
+    requirePetSender(event)
+    return assistantManager.configureVisionSettings(input)
+  })
+
+  ipcMain.handle('assistant:get-model-settings', (event) => {
+    requirePetSender(event)
+    return assistantManager.getModelSettings()
+  })
+
+  ipcMain.handle('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {
+    requirePetSender(event)
+    return assistantManager.configureModelSettings(input)
+  })
+
   ipcMain.handle(
     'assistant:stage-dropped-files',
     async (event, paths: unknown, dropZone: unknown) => {
@@ -259,7 +298,7 @@ function registerIpc(): void {
   ipcMain.handle('assistant:pick-attachments', async (event) => {
     const window = requirePetSender(event)
     const selection = await dialog.showOpenDialog(window, {
-      title: '选择要添加到对话的文本文件',
+      title: '选择要添加到对话的文件',
       properties: ['openFile', 'multiSelections']
     })
     if (selection.canceled || selection.filePaths.length === 0) {

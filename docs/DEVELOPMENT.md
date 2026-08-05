@@ -536,7 +536,7 @@ npm.cmd run pack
 
 AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、基础文件输出、联网搜索、复杂文档输入、多文件只读分析以及后续受控执行与复杂输出必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
-对话资源能力当前进度：C1、C1.1 已完成，C2、C3 已完成实现并处于验收收尾；C4 重新规划为复杂文档输入与条件式图片理解，C5 重新规划为多文件只读分析和临时索引，二者未开始；C6 规划受控 Python 执行和复杂文档输出/修改，状态为 Deferred。C4 不新增 PDF、Office 或图片 Artifact 输出，也不执行本地 OCR；图片只在独立 Vision Analyzer 的能力探测通过后启用，默认继承主模型配置但不共享主 Agent 的工具、记忆或 Skill 上下文。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送、来源展示和联网设置脱敏状态验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可用 `$env:PETDOCK_SMOKE_DEV='1'; $env:PETDOCK_SMOKE_C2_ONLY='1'; node tools\assistant_smoke.mjs` 聚焦验证 Artifact 生成、卡片、预览和删除。C3 默认使用火山引擎豆包搜索，Brave Search 作为兼容 Provider；可用 `$env:PETDOCK_SMOKE_REAL_WEB='1'; $env:PETDOCK_SMOKE_EXECUTABLE='release\win-unpacked\PetDock.exe'; node tools\assistant_smoke.mjs` 复验当前脱敏配置的真实连接。真实火山连接和解包版设置 E2E 已通过，本地可控 Provider 的开发版/打包版完整搜索、抓取和引用 E2E 仍待验收，因此 C2、C3 暂不标记为 Done。
+对话资源能力当前进度：C1、C1.1、C4 已完成，C2、C3 已完成实现并处于验收收尾；C5 多文件只读分析和临时索引未开始；C6 规划受控 Python 执行和复杂文档输出/修改，状态为 Deferred。C4 不新增 PDF、Office 或图片 Artifact 输出，也不执行本地 OCR；图片只在独立 Vision Analyzer 的能力探测通过后启用，默认继承主模型配置但不共享主 Agent 的工具、记忆或 Skill 上下文。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送、来源展示、联网设置脱敏状态以及视觉配置字段/状态验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可用 `$env:PETDOCK_SMOKE_DEV='1'; $env:PETDOCK_SMOKE_C2_ONLY='1'; node tools\assistant_smoke.mjs` 聚焦验证 Artifact 生成、卡片、预览和删除。C3 默认使用火山引擎豆包搜索，Brave Search 作为兼容 Provider；可用 `$env:PETDOCK_SMOKE_REAL_WEB='1'; $env:PETDOCK_SMOKE_EXECUTABLE='release\win-unpacked\PetDock.exe'; node tools\assistant_smoke.mjs` 复验当前脱敏配置的真实连接。真实火山连接和解包版设置 E2E 已通过，本地可控 Provider 的开发版/打包版完整搜索、抓取和引用 E2E 仍待验收，因此 C2、C3 暂不标记为 Done。
 
 ## 15. AI Assistant Runtime
 
@@ -547,7 +547,7 @@ python -m venv python-runtime\.venv
 python-runtime\.venv\Scripts\python.exe -m pip install -r python-runtime\requirements.lock
 ```
 
-默认未配置模型密钥时使用离线 mock backend。接入 OpenAI-compatible 模型时，在启动 PetDock 的同一 PowerShell 会话中设置：
+默认未配置模型密钥时使用离线 mock backend。也可以在助手输入框的“助手配置”页保存主模型地址、模型名和 API Key（密钥由 Electron `safeStorage` 保存，Renderer 只显示掩码）；联网搜索、图片理解、知识库和 Skill 入口均从该页面进入。接入 OpenAI-compatible 模型时，仍可在启动 PetDock 的同一 PowerShell 会话中设置：
 
 ```powershell
 $env:PETDOCK_ASSISTANT_BACKEND = 'auto'
@@ -602,6 +602,20 @@ Runtime 只在 Main 注入的 Artifact 根目录生成白名单 UTF-8 文本文�
 阶段 4 的知识库业务数据保存在用户数据目录的 `knowledge.db`，Chroma 向量索引保存在 `rag/chroma`。用户只能通过助手内“知识库”界面调用 Electron Main 原生目录选择器授权来源；Renderer 不接触真实路径。管理界面支持索引进度、暂停、继续、刷新和删除，删除索引不会删除来源文件。
 
 当前索引支持 UTF-8 文本、Markdown、JSON/YAML/TOML、常见源码和脚本文件。默认跳过隐藏目录、构建产物、依赖目录、符号链接、敏感凭据文件、超过 2 MB 的文件和非 UTF-8 内容。检索使用 SQLite FTS5 与 Chroma 向量结果的 Weighted RRF 和多信号准入；Hash Embedding 是零下载离线基线，用户也可以在知识库界面选择白名单本地 ONNX 模型或配置 OpenAI-compatible 在线 Embedding。不同 Provider 使用独立 Index Signature 和 Chroma collection，失败时只能降级到独立 Hash 影子索引及 FTS5。
+
+### C4 文档输入与图片理解
+
+C4 Parser 由附件和知识库共用的 `DocumentParserRegistry` 提供。依赖安装后可运行：
+
+```powershell
+python-runtime\.venv\Scripts\python.exe -m pytest -q python-runtime\tests
+npm.cmd run typecheck
+npm.cmd test -- --run
+npm.cmd run build:runtime
+node tools\runtime_smoke.mjs
+```
+
+`runtime_smoke.mjs` 会在受控目录生成并登记 PDF、DOCX、XLSX、PPTX 和 PNG 样本，验证结构块、位置、图片未主动探测时的拒绝和优雅退出。图片拖入或选择阶段只做本地格式、像素、帧数和安全解码校验；用户点击发送后，Runtime 才按顺序调用 Vision Analyzer，主模型等待视觉摘要完成。PyInstaller 读取用户级 Python site-packages 时若遇到 `WinError 5`，按既有说明在沙箱外或管理员 PowerShell 重试；不要把用户目录复制进仓库。助手的“联网与图片理解”设置支持继承主模型、仅覆盖视觉模型以及独立地址/密钥；Renderer 不回填已保存密钥。真实视觉服务只可通过随机验证码主动探测启用，普通日志不记录图片正文、Base64、EXIF/GPS、绝对路径或密钥。
 
 知识库前的复选框决定该库是否参与对话检索，默认不选；选择结果由 Electron Main 持久化到 `settings.json`，用户主动勾选后命中片段才可能进入当前模型上下文。Runtime 会通过独立 `retrieval_sources` 事件返回来源，Renderer 展示知识库、相对路径和片段。检索到的文档始终按不可信资料处理，其中的指令不能授权系统工具。
 

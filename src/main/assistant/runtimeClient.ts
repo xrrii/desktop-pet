@@ -5,11 +5,13 @@ import type {
   AssistantArtifactSummary,
   AssistantMemorySnapshot,
   AssistantConversationMessage,
+  AssistantDocumentCapabilities,
   AssistantEvent,
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
   AssistantRequest,
   AssistantRuntimeReady,
+  AssistantVisionSnapshot,
   AssistantSkillInstallPreview,
   AssistantSkillSnapshot,
   AssistantToolResultRequest,
@@ -56,6 +58,18 @@ export class AssistantRuntimeClient {
     return Array.isArray(payload.attachments)
       ? (payload.attachments as AssistantAttachmentSummary[])
       : []
+  }
+
+  /** 获取 Runtime 唯一 Parser Registry 和视觉能力声明。 */
+  async getDocumentCapabilities(): Promise<AssistantDocumentCapabilities> {
+    const response = await this.request('/v1/document-capabilities', { method: 'GET' })
+    return (await response.json()) as AssistantDocumentCapabilities
+  }
+
+  /** 使用无用户数据的本地随机验证码图片主动探测视觉模型。 */
+  async testVision(): Promise<AssistantVisionSnapshot> {
+    const response = await this.request('/v1/vision/test', { method: 'POST' })
+    return (await response.json()) as AssistantVisionSnapshot
   }
 
   /** 删除尚未绑定到会话的附件草稿。 */

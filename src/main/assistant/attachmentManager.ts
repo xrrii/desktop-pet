@@ -15,7 +15,8 @@ const SUPPORTED_EXTENSIONS = new Set([
   '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.py', '.pyi', '.java',
   '.kt', '.kts', '.go', '.rs', '.c', '.h', '.cc', '.cpp', '.hpp', '.cs', '.swift', '.dart',
   '.rb', '.php', '.sql', '.sh', '.bash', '.zsh', '.ps1', '.bat', '.cmd', '.properties',
-  '.gradle', '.dockerfile'
+  '.gradle', '.dockerfile', '.pdf', '.docx', '.xlsx', '.pptx', '.png', '.jpg', '.jpeg',
+  '.gif', '.webp', '.bmp', '.tif', '.tiff'
 ])
 
 const SUPPORTED_EXTENSIONLESS_NAMES = new Set([

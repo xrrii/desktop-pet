@@ -40,6 +40,9 @@ async function main() {
     : devMode
       ? [electronViteCli, 'dev', '--remoteDebuggingPort', String(port)]
       : [`--remote-debugging-port=${port}`, projectRoot]
+  if (configuredExecutable && process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
+    launchArgs.push('--disable-gpu')
+  }
   const environment = {
     ...process.env,
     PETDOCK_ASSISTANT_BACKEND: backend
@@ -106,6 +109,19 @@ async function main() {
     )
     await waitForExpandedWindow(petClient)
     await assertAssistantLayout(petClient, 'left')
+    const documentCapabilities = await evaluate(
+      petClient,
+      'window.desktopPet.getAssistantDocumentCapabilities()',
+      true
+    )
+    const parserIds = new Set(documentCapabilities.parsers?.map((item) => item.parserId))
+    if (!['pdf-text-v1', 'docx-ooxml-v1', 'xlsx-openpyxl-v1', 'pptx-python-v1', 'image-metadata-v1']
+      .every((parserId) => parserIds.has(parserId))) {
+      throw new Error(`C4 document capabilities are incomplete: ${JSON.stringify(documentCapabilities)}`)
+    }
+    if (!['unconfigured', 'untested'].includes(documentCapabilities.vision?.status)) {
+      throw new Error(`Unexpected Vision state: ${documentCapabilities.vision?.status}`)
+    }
     if (realWebSearch) {
       const connectionResult = await evaluate(
         petClient,
@@ -188,7 +204,31 @@ async function main() {
       5_000
     )
 
-    await evaluate(petClient, `document.querySelector('#knowledge-button').click()`)
+    await evaluate(petClient, `document.querySelector('#settings-button').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#settings-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
+    const settingsState = await evaluate(
+      petClient,
+      `(() => ({
+        composerKnowledgeHidden: document.querySelector('#knowledge-button').hidden,
+        composerSkillHidden: document.querySelector('#skill-button').hidden,
+        composerWebHidden: document.querySelector('#web-button').hidden,
+        hasModelForm: !!document.querySelector('#model-settings-form'),
+        modelName: document.querySelector('#model-name').value
+      }))()`
+    )
+    if (!settingsState.composerKnowledgeHidden || !settingsState.composerSkillHidden ||
+        !settingsState.composerWebHidden || !settingsState.hasModelForm || !settingsState.modelName) {
+      throw new Error(`Unified settings view is invalid: ${JSON.stringify(settingsState)}`)
+    }
+    const settingsScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
+    const settingsScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-settings$1')
+    await writeFile(settingsScreenshotPath, Buffer.from(settingsScreenshot.data, 'base64'))
+    await evaluate(petClient, `document.querySelector('#settings-open-knowledge').click()`)
     await waitForEvaluation(
       petClient,
       `document.querySelector('#knowledge-view').hidden`,
@@ -253,8 +293,14 @@ async function main() {
       (value) => value === true,
       5_000
     )
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#settings-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
 
-    await evaluate(petClient, `document.querySelector('#skill-button').click()`)
+    await evaluate(petClient, `document.querySelector('#settings-open-skill').click()`)
     await waitForEvaluation(
       petClient,
       `document.querySelector('#skill-view').hidden`,
@@ -288,8 +334,14 @@ async function main() {
       (value) => value === true,
       5_000
     )
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#settings-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
 
-    await evaluate(petClient, `document.querySelector('#web-button').click()`)
+    await evaluate(petClient, `document.querySelector('#settings-open-web').click()`)
     await waitForEvaluation(
       petClient,
       `document.querySelector('#web-view').hidden`,
@@ -300,12 +352,26 @@ async function main() {
       petClient,
       `(async () => {
         const snapshot = await window.desktopPet.getAssistantWebSettings()
+        const visionSettings = await window.desktopPet.getAssistantVisionSettings()
         const provider = document.querySelector('#web-provider').value
         const keyInput = document.querySelector('#web-api-key')
+        const visionKeyInput = document.querySelector('#vision-api-key')
+        const scroll = document.querySelector('#web-settings-scroll')
+        const scrollRect = scroll.getBoundingClientRect()
+        const webFormRect = document.querySelector('#web-settings-form').getBoundingClientRect()
+        const providerRect = document.querySelector('#web-provider').getBoundingClientRect()
+        const keyRect = keyInput.getBoundingClientRect()
+        const actionsRect = document.querySelector('#web-settings-form .web-settings-actions')
+          .getBoundingClientRect()
         const configuredProviders = snapshot.configuredProviders ||
           (snapshot.configured ? [snapshot.provider] : [])
         return {
           conversationHidden: document.querySelector('#conversation').hidden,
+          scrollTop: scroll.scrollTop,
+          webFormHeight: webFormRect.height,
+          providerVisible: providerRect.top >= scrollRect.top && providerRect.bottom <= scrollRect.bottom,
+          keyVisible: keyRect.top >= scrollRect.top && keyRect.bottom <= scrollRect.bottom,
+          actionsVisible: actionsRect.top >= scrollRect.top && actionsRect.bottom <= scrollRect.bottom,
           provider,
           expectedProvider: snapshot.provider,
           keyValue: keyInput.value,
@@ -317,22 +383,72 @@ async function main() {
           hasApiKeyPage: provider === 'volcengine'
             ? !document.querySelector('#web-api-key-page').hidden &&
               document.querySelector('#web-api-key-page').title.includes('火山引擎')
-            : document.querySelector('#web-api-key-page').hidden
+            : document.querySelector('#web-api-key-page').hidden,
+          visionMode: document.querySelector('#vision-mode').value,
+          expectedVisionMode: visionSettings.mode,
+          visionKeyValue: visionKeyInput.value,
+          visionCustomHidden: document.querySelector('#vision-custom-fields').hidden,
+          visionStatus: document.querySelector('#vision-status').dataset.status
         }
       })()`,
       true
     )
     if (
       webState.conversationHidden !== true ||
+      webState.scrollTop !== 0 ||
+      webState.webFormHeight < 240 ||
+      !webState.providerVisible ||
+      !webState.keyVisible ||
+      !webState.actionsVisible ||
       webState.provider !== webState.expectedProvider ||
       webState.keyValue !== '' ||
       (webState.keyConfigured
         ? webState.keyPlaceholder !== '••••••••••••'
         : webState.keyPlaceholder !== '输入 API Key') ||
       !webState.hasPrivacyText ||
-      !webState.hasApiKeyPage
+      !webState.hasApiKeyPage ||
+      webState.visionMode !== webState.expectedVisionMode ||
+      webState.visionKeyValue !== '' ||
+      webState.visionCustomHidden !== (webState.visionMode === 'inherit') ||
+      !['unconfigured', 'untested', 'supported', 'unsupported', 'unavailable', 'invalid-credentials']
+        .includes(webState.visionStatus)
     ) {
       throw new Error(`Web settings view exposed invalid state: ${JSON.stringify(webState)}`)
+    }
+    const webSearchScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
+    const webSearchScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-web-search$1')
+    await writeFile(webSearchScreenshotPath, Buffer.from(webSearchScreenshot.data, 'base64'))
+    const visionFormState = await evaluate(
+      petClient,
+      `(() => {
+        const mode = document.querySelector('#vision-mode')
+        const independent = document.querySelector('#vision-independent-credentials')
+        const originalMode = mode.value
+        mode.value = 'custom'
+        mode.dispatchEvent(new Event('change', { bubbles: true }))
+        independent.checked = true
+        independent.dispatchEvent(new Event('change', { bubbles: true }))
+        const state = {
+          customHidden: document.querySelector('#vision-custom-fields').hidden,
+          keyFieldHidden: document.querySelector('#vision-api-key-field').hidden,
+          keyValue: document.querySelector('#vision-api-key').value,
+          hasProbeButton: !!document.querySelector('#vision-test'),
+          hasPrivacyBoundary: document.querySelector('.vision-settings-panel .web-privacy-note')
+            .textContent.includes('EXIF/GPS')
+        }
+        mode.value = originalMode
+        mode.dispatchEvent(new Event('change', { bubbles: true }))
+        return state
+      })()`
+    )
+    if (
+      visionFormState.customHidden ||
+      visionFormState.keyFieldHidden ||
+      visionFormState.keyValue !== '' ||
+      !visionFormState.hasProbeButton ||
+      !visionFormState.hasPrivacyBoundary
+    ) {
+      throw new Error(`Vision settings form is invalid: ${JSON.stringify(visionFormState)}`)
     }
     const webStorageState = await evaluate(
       petClient,
@@ -410,6 +526,25 @@ async function main() {
     ) {
       throw new Error(`Volcengine web settings state is invalid: ${JSON.stringify(volcengineViewState)}`)
     }
+    const visionLayoutState = await evaluate(
+      petClient,
+      `(() => {
+        const scroll = document.querySelector('.web-settings-scroll')
+        scroll.scrollTop = scroll.scrollHeight
+        const panel = document.querySelector('.vision-settings-panel').getBoundingClientRect()
+        const webForm = document.querySelector('#web-settings-form').getBoundingClientRect()
+        const shell = document.querySelector('#assistant-panel').getBoundingClientRect()
+        return {
+          visible: panel.width > 0 && panel.height > 0,
+          insideShell: panel.left >= shell.left && panel.right <= shell.right && panel.bottom <= shell.bottom,
+          noOverlap: webForm.bottom <= panel.top
+        }
+      })()`
+    )
+    if (!visionLayoutState.visible || !visionLayoutState.insideShell || !visionLayoutState.noOverlap) {
+      throw new Error(`Vision settings layout is invalid: ${JSON.stringify(visionLayoutState)}`)
+    }
+    await delay(100)
     const webScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
     const webScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-web$1')
     await writeFile(webScreenshotPath, Buffer.from(webScreenshot.data, 'base64'))
@@ -420,6 +555,13 @@ async function main() {
       (value) => value === true,
       5_000
     )
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#settings-view').hidden`,
+      (value) => value === false,
+      5_000
+    )
+    await evaluate(petClient, `document.querySelector('#settings-back').click()`)
 
     if (backend === 'mock') {
       await evaluate(petClient, `document.querySelector('#new-conversation').click()`)

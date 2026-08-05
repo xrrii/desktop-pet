@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import mimetypes
 import shutil
 import sqlite3
 import time
@@ -10,7 +12,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-"""会话附件登记、UTF-8 文本解析、上下文构造和文件生命周期。"""
+from .document_parser import DocumentParseError, DocumentParserRegistry, ParsedDocument
+
+"""会话附件登记、统一文档解析、上下文构造和文件生命周期。"""
 
 MAX_ATTACHMENT_COUNT = 10
 MAX_CONTEXT_CHARACTERS = 40_000
@@ -23,7 +27,8 @@ SUPPORTED_EXTENSIONS = {
     ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".vue", ".svelte", ".py", ".pyi",
     ".java", ".kt", ".kts", ".go", ".rs", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs",
     ".swift", ".dart", ".rb", ".php", ".sql", ".sh", ".bash", ".zsh", ".ps1", ".bat",
-    ".cmd", ".properties", ".gradle", ".dockerfile",
+    ".cmd", ".properties", ".gradle", ".dockerfile", ".pdf", ".docx", ".xlsx", ".pptx",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff",
 }
 SUPPORTED_EXTENSIONLESS_NAMES = {"dockerfile", "makefile", "readme", "license", "notice"}
 
@@ -62,6 +67,11 @@ class AttachmentRecord:
     warning: str | None
     error: str | None
     text_content: str
+    title: str = ""
+    blocks_json: str = "[]"
+    metadata_json: str = "{}"
+    warnings_json: str = "[]"
+    errors_json: str = "[]"
 
     def summary(self) -> dict[str, object]:
         """返回不含真实路径和正文的 Renderer 摘要。"""
@@ -76,6 +86,11 @@ class AttachmentRecord:
             "parserId": self.parser_id,
             "warning": self.warning,
             "error": self.error,
+            "title": self.title or self.name,
+            "blocks": _json_load(self.blocks_json, []),
+            "metadata": _json_load(self.metadata_json, {}),
+            "warnings": _json_load(self.warnings_json, []),
+            "errors": _json_load(self.errors_json, []),
         }
 
     def message_ref(self) -> dict[str, object]:
@@ -91,10 +106,16 @@ class AttachmentRecord:
 class AttachmentStore:
     """管理应用受控附件目录及 assistant.db 中的附件索引。"""
 
-    def __init__(self, db_path: str, root: str) -> None:
-        """打开附件表并清理上次异常退出遗留的未发送草稿。"""
+    def __init__(
+        self,
+        db_path: str,
+        root: str,
+        parser_registry: DocumentParserRegistry | None = None,
+    ) -> None:
+        """打开附件表，并接入 Runtime 唯一 Parser Registry。"""
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self.registry = parser_registry or DocumentParserRegistry()
         self._connection = sqlite3.connect(db_path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA journal_mode=WAL")
@@ -125,6 +146,11 @@ class AttachmentStore:
                     warning TEXT,
                     error TEXT,
                     text_content TEXT NOT NULL DEFAULT '',
+                    title TEXT NOT NULL DEFAULT '',
+                    blocks_json TEXT NOT NULL DEFAULT '[]',
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    warnings_json TEXT NOT NULL DEFAULT '[]',
+                    errors_json TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     sent_at TEXT
                 );
@@ -137,6 +163,26 @@ class AttachmentStore:
                 INSERT INTO attachment_schema_meta(key, value) VALUES ('schema_version', '1')
                     ON CONFLICT(key) DO UPDATE SET value=excluded.value;
                 """
+            )
+        self._ensure_columns()
+
+    def _ensure_columns(self) -> None:
+        """为 C1 已存在的附件表增加结构化解析列，保留旧文本正文。"""
+        columns = {str(row[1]) for row in self._connection.execute("PRAGMA table_info(attachments)").fetchall()}
+        additions = {
+            "title": "TEXT NOT NULL DEFAULT ''",
+            "blocks_json": "TEXT NOT NULL DEFAULT '[]'",
+            "metadata_json": "TEXT NOT NULL DEFAULT '{}'",
+            "warnings_json": "TEXT NOT NULL DEFAULT '[]'",
+            "errors_json": "TEXT NOT NULL DEFAULT '[]'",
+        }
+        with self._connection:
+            for name, declaration in additions.items():
+                if name not in columns:
+                    self._connection.execute(f"ALTER TABLE attachments ADD COLUMN {name} {declaration}")
+            self._connection.execute(
+                "INSERT INTO attachment_schema_meta(key, value) VALUES ('schema_version', '2') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
             )
 
     def register_many(self, items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -151,8 +197,9 @@ class AttachmentStore:
                     INSERT INTO attachments(
                         id, conversation_id, display_name, relative_storage_path,
                         extension, detected_mime, size_bytes, sha256, parser_id,
-                        status, warning, error, text_content, created_at, sent_at
-                    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                        status, warning, error, text_content, title, blocks_json,
+                        metadata_json, warnings_json, errors_json, created_at, sent_at
+                    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                     """,
                     (
                         record.id,
@@ -167,6 +214,11 @@ class AttachmentStore:
                         record.warning,
                         record.error,
                         record.text_content,
+                        record.title,
+                        record.blocks_json,
+                        record.metadata_json,
+                        record.warnings_json,
+                        record.errors_json,
                         _now(),
                     ),
                 )
@@ -197,17 +249,24 @@ class AttachmentStore:
 
         raw = path.read_bytes()
         sha256 = hashlib.sha256(raw).hexdigest()
-        detected_mime = MIME_BY_EXTENSION.get(extension, "text/plain")
+        detected_mime = MIME_BY_EXTENSION.get(extension, mimetypes.guess_type(name)[0] or "application/octet-stream")
         try:
-            text = raw.decode("utf-8-sig")
-            status = "ready"
-            parser_id = "utf8-text-v1"
-            error = None
-        except UnicodeDecodeError:
-            text = ""
-            status = "error"
-            parser_id = None
-            error = "attachment_decode_failed"
+            # 登记阶段只完成图片安全解码和元数据校验，视觉摘要延迟到发送任务。
+            parsed = self.registry.parse(path, name=name, mime=detected_mime, defer_vision=True)
+        except DocumentParseError as parse_error:
+            parsed = ParsedDocument(name, "", [], errors=[parse_error.problem])
+        except Exception as error:
+            LOGGER.error(
+                "附件解析出现未分类异常 extension=%s bytes=%s error=%s",
+                extension,
+                actual_size,
+                error.__class__.__name__,
+            )
+            parsed = ParsedDocument(name, "", [], errors=[DocumentParseError("document_parse_failed", "附件解析失败。").problem])
+        status = "ready" if parsed.ready else "error"
+        error = parsed.errors[0].code if parsed.errors else None
+        warning = parsed.warnings[0].code if parsed.warnings else None
+        text = parsed.plain_text if parsed.ready else ""
         return (
             AttachmentRecord(
                 id=attachment_id,
@@ -217,10 +276,15 @@ class AttachmentStore:
                 detected_mime=detected_mime,
                 size_bytes=actual_size,
                 status=status,
-                parser_id=parser_id,
-                warning=None,
+                parser_id=parsed.parser_id or None,
+                warning=warning,
                 error=error,
                 text_content=text,
+                title=parsed.title,
+                blocks_json=json.dumps([block.as_dict() for block in parsed.blocks], ensure_ascii=False),
+                metadata_json=json.dumps(parsed.metadata, ensure_ascii=False),
+                warnings_json=json.dumps([item.as_dict() for item in parsed.warnings], ensure_ascii=False),
+                errors_json=json.dumps([item.as_dict() for item in parsed.errors], ensure_ascii=False),
             ),
             relative_path,
             sha256,
@@ -228,6 +292,22 @@ class AttachmentStore:
 
     def bind_for_request(self, attachment_ids: list[str], conversation_id: str) -> list[AttachmentRecord]:
         """校验附件可用性并原子绑定到当前会话，阻止跨会话复用。"""
+        records = self.validate_for_request(attachment_ids, conversation_id)
+        unique_ids = list(dict.fromkeys(attachment_ids))
+        with self._connection:
+            for attachment_id in unique_ids:
+                self._connection.execute(
+                    """
+                    UPDATE attachments
+                    SET conversation_id=?, sent_at=COALESCE(sent_at, ?)
+                    WHERE id=?
+                    """,
+                    (conversation_id, _now(), attachment_id),
+                )
+        return self.get_records(unique_ids)
+
+    def validate_for_request(self, attachment_ids: list[str], conversation_id: str) -> list[AttachmentRecord]:
+        """在不改变会话归属的前提下校验发送附件，供发送前视觉准备复用。"""
         unique_ids = list(dict.fromkeys(attachment_ids))
         if len(unique_ids) != len(attachment_ids) or len(unique_ids) > MAX_ATTACHMENT_COUNT:
             raise ValueError("附件 ID 列表无效。")
@@ -241,17 +321,72 @@ class AttachmentStore:
                 raise ValueError(record.error or "attachment_not_ready")
             if record.conversation_id not in {None, conversation_id}:
                 raise ValueError("附件已经属于其他会话。")
+        return records
+
+    def vision_source(self, attachment_id: str) -> tuple[Path, Path]:
+        """返回视觉分析所需的受控源文件和同目录临时派生图路径。"""
+        row = self._connection.execute(
+            "SELECT relative_storage_path FROM attachments WHERE id=? AND parser_id='image-metadata-v1'",
+            (attachment_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("attachment_not_found")
+        source = self._resolve(str(row["relative_storage_path"]))
+        derived = source.parent / "vision-derived.png"
+        if derived.parent.resolve() != source.parent.resolve():
+            raise ValueError("attachment_storage_invalid")
+        return source, derived
+
+    def apply_vision_summary(self, attachment_id: str, summary: dict[str, object]) -> AttachmentRecord:
+        """把固定视觉摘要写回附件结构块，不持久化图片字节或 Base64。"""
+        title = str(summary.get("title", "图片"))[:200]
+        visible_text = _string_list(summary.get("visibleText"))
+        observations = _string_list(summary.get("observations"))
+        limitations = _string_list(summary.get("limitations"))
+        sections = [title, str(summary.get("summary", ""))]
+        if visible_text:
+            sections.append("可见文字：\n" + "\n".join(visible_text))
+        if observations:
+            sections.append("观察：\n" + "\n".join(observations))
+        if limitations:
+            sections.append("局限：\n" + "\n".join(limitations))
+        content = "\n\n".join(item for item in sections if item.strip())
+        block = {
+            "kind": "image_summary",
+            "content": content,
+            "location": {
+                "kind": "image_summary", "value": "vision-summary", "page": None,
+                "headingPath": [], "paragraph": None, "sheet": None,
+                "cellRange": None, "slide": None,
+            },
+            "metadata": {"promptVersion": "vision-summary-v1"},
+        }
         with self._connection:
-            for attachment_id in unique_ids:
-                self._connection.execute(
-                    """
-                    UPDATE attachments
-                    SET conversation_id=?, sent_at=COALESCE(sent_at, ?)
-                    WHERE id=?
-                    """,
-                    (conversation_id, _now(), attachment_id),
-                )
-        return self.get_records(unique_ids)
+            self._connection.execute(
+                """
+                UPDATE attachments SET status='ready', parser_id='image-vision-v1', error=NULL,
+                    title=?, text_content=?, blocks_json=?, errors_json='[]'
+                WHERE id=? AND parser_id='image-metadata-v1'
+                """,
+                (title, content, json.dumps([block], ensure_ascii=False), attachment_id),
+            )
+        records = self.get_records([attachment_id])
+        if not records:
+            raise ValueError("attachment_not_found")
+        return records[0]
+
+    def apply_vision_error(self, attachment_id: str, code: str) -> AttachmentRecord:
+        """将视觉临时故障或响应错误保存为结构化附件问题。"""
+        problem = {"code": code, "message": "图片视觉摘要失败。", "retryable": code not in {"vision_invalid_credentials", "vision_model_unsupported"}}
+        with self._connection:
+            self._connection.execute(
+                "UPDATE attachments SET status='error', error=?, errors_json=? WHERE id=?",
+                (code, json.dumps([problem], ensure_ascii=False), attachment_id),
+            )
+        records = self.get_records([attachment_id])
+        if not records:
+            raise ValueError("attachment_not_found")
+        return records[0]
 
     def get_records(self, attachment_ids: list[str]) -> list[AttachmentRecord]:
         """按调用方顺序读取附件，不返回磁盘路径。"""
@@ -294,6 +429,10 @@ class AttachmentStore:
             "nextOffset": end if end < total_characters else None,
             "totalCharacters": total_characters,
             "truncated": end < total_characters,
+            "title": record.title or record.name,
+            "blocks": _json_load(record.blocks_json, []),
+            "warnings": _json_load(record.warnings_json, []),
+            "errors": _json_load(record.errors_json, []),
         }
 
     def build_context(
@@ -306,9 +445,19 @@ class AttachmentStore:
         parts: list[str] = []
         sources: list[dict[str, object]] = []
         for index, record in enumerate(records, start=1):
+            structured_blocks = _json_load(record.blocks_json, [])
+            first_location = (
+                structured_blocks[0].get("location")
+                if isinstance(structured_blocks, list)
+                and structured_blocks
+                and isinstance(structured_blocks[0], dict)
+                else None
+            )
+            structured_content = _context_from_blocks(structured_blocks)
+            context_content = structured_content or record.text_content
             available = max(0, remaining - 160)
-            content = record.text_content[:available]
-            truncated = len(content) < len(record.text_content)
+            content = context_content[:available]
+            truncated = len(content) < len(context_content)
             remaining = max(0, remaining - len(content) - 160)
             parts.append(
                 f'<ATTACHMENT id="{record.id}" name="{record.name}" index="{index}">\n'
@@ -323,6 +472,7 @@ class AttachmentStore:
                     "name": record.name,
                     "excerpt": " ".join(record.text_content[:240].split()),
                     "truncated": truncated,
+                    "location": first_location,
                 }
             )
         return "\n\n".join(parts), sources
@@ -431,4 +581,61 @@ class AttachmentStore:
             warning=str(row["warning"]) if row["warning"] else None,
             error=str(row["error"]) if row["error"] else None,
             text_content=str(row["text_content"]),
+            title=str(row["title"]) if "title" in row.keys() else "",
+            blocks_json=str(row["blocks_json"]) if "blocks_json" in row.keys() else "[]",
+            metadata_json=str(row["metadata_json"]) if "metadata_json" in row.keys() else "{}",
+            warnings_json=str(row["warnings_json"]) if "warnings_json" in row.keys() else "[]",
+            errors_json=str(row["errors_json"]) if "errors_json" in row.keys() else "[]",
         )
+
+
+def _json_load(value: str, fallback: object) -> object:
+    """安全读取结构化 JSON，兼容早期数据库中的空列。"""
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _string_list(value: object) -> list[str]:
+    """只保留视觉固定协议中的字符串数组项。"""
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str)]
+
+
+def _context_from_blocks(value: object) -> str:
+    """把结构块转换为带位置标签的不可信上下文，不加入技术元数据。"""
+    if not isinstance(value, list):
+        return ""
+    parts: list[str] = []
+    for item in value:
+        if not isinstance(item, dict) or not isinstance(item.get("content"), str):
+            continue
+        location = item.get("location")
+        label = _location_label(location if isinstance(location, dict) else {})
+        parts.append(f"[位置：{label}]\n{item['content']}" if label else str(item["content"]))
+    return "\n\n".join(parts)
+
+
+def _location_label(location: dict[str, object]) -> str:
+    """生成可供模型引用的简短文档位置。"""
+    if isinstance(location.get("page"), int):
+        return f"第 {location['page']} 页"
+    sheet = location.get("sheet")
+    if isinstance(sheet, str) and sheet:
+        cell_range = location.get("cellRange")
+        return f"工作表 {sheet}" + (f"，区域 {cell_range}" if isinstance(cell_range, str) and cell_range else "")
+    slide = location.get("slide")
+    if isinstance(slide, int):
+        return f"幻灯片 {slide}"
+    heading_path = location.get("headingPath")
+    paragraph = location.get("paragraph")
+    heading = " / ".join(str(item) for item in heading_path) if isinstance(heading_path, list) else ""
+    if heading and isinstance(paragraph, int):
+        return f"{heading}，段落 {paragraph}"
+    if heading:
+        return heading
+    if isinstance(paragraph, int):
+        return f"段落 {paragraph}"
+    return str(location.get("value", ""))

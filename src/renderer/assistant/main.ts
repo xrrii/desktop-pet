@@ -11,6 +11,7 @@ import type {
   AssistantKnowledgeSnapshot,
   AssistantLayoutTracePhase,
   AssistantMemorySnapshot,
+  AssistantModelSettingsSnapshot,
   AssistantRuntimeStatus,
   AssistantSkillInstallPreview,
   AssistantSkillSnapshot,
@@ -18,6 +19,8 @@ import type {
   AssistantWebProvider,
   AssistantWebSettingsSnapshot,
   AssistantWebSource,
+  AssistantVisionSettingsSnapshot,
+  AssistantVisionSnapshot,
   AssistantWindowLayout,
   MemoryClearScope,
   MemoryItemKind,
@@ -73,9 +76,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const petRoot = requireElement<HTMLElement>('#pet-root')
   const conversation = requireElement<HTMLElement>('#conversation')
   const memoryView = requireElement<HTMLElement>('#memory-view')
+  const settingsView = requireElement<HTMLElement>('#settings-view')
   const knowledgeView = requireElement<HTMLElement>('#knowledge-view')
   const skillView = requireElement<HTMLElement>('#skill-view')
   const webView = requireElement<HTMLElement>('#web-view')
+  const webSettingsScroll = requireElement<HTMLElement>('#web-settings-scroll')
   const skillContent = requireElement<HTMLElement>('#skill-content')
   const skillAddLocal = requireElement<HTMLButtonElement>('#skill-add-local')
   const skillRefresh = requireElement<HTMLButtonElement>('#skill-refresh')
@@ -117,6 +122,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const memoryClearCancel = requireElement<HTMLButtonElement>('#memory-clear-cancel')
   const memoryClearConfirm = requireElement<HTMLButtonElement>('#memory-clear-confirm')
   const memoryButton = requireElement<HTMLButtonElement>('#memory-button')
+  const settingsButton = requireElement<HTMLButtonElement>('#settings-button')
   const knowledgeButton = requireElement<HTMLButtonElement>('#knowledge-button')
   const skillButton = requireElement<HTMLButtonElement>('#skill-button')
   const webButton = requireElement<HTMLButtonElement>('#web-button')
@@ -131,11 +137,36 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const webTest = requireElement<HTMLButtonElement>('#web-test')
   const webSave = requireElement<HTMLButtonElement>('#web-save')
   const webTestStatus = requireElement<HTMLElement>('#web-test-status')
+  const modelSettingsForm = requireElement<HTMLFormElement>('#model-settings-form')
+  const modelBaseUrl = requireElement<HTMLInputElement>('#model-base-url')
+  const modelName = requireElement<HTMLInputElement>('#model-name')
+  const modelApiKey = requireElement<HTMLInputElement>('#model-api-key')
+  const modelClearKey = requireElement<HTMLButtonElement>('#model-clear-key')
+  const modelSave = requireElement<HTMLButtonElement>('#model-save')
+  const modelConfiguredStatus = requireElement<HTMLElement>('#model-configured-status')
+  const modelSaveStatus = requireElement<HTMLElement>('#model-save-status')
+  const settingsBack = requireElement<HTMLButtonElement>('#settings-back')
+  const settingsOpenWeb = requireElement<HTMLButtonElement>('#settings-open-web')
+  const settingsOpenKnowledge = requireElement<HTMLButtonElement>('#settings-open-knowledge')
+  const settingsOpenSkill = requireElement<HTMLButtonElement>('#settings-open-skill')
   const webPrivacyNote = requireElement<HTMLElement>('#web-privacy-note')
   const webEnableConfirm = requireElement<HTMLDialogElement>('#web-enable-confirm')
   const webEnableConfirmTitle = requireElement<HTMLElement>('#web-enable-confirm-title')
   const webEnableCancel = requireElement<HTMLButtonElement>('#web-enable-cancel')
   const webEnableSubmit = requireElement<HTMLButtonElement>('#web-enable-submit')
+  const visionSettingsForm = requireElement<HTMLFormElement>('#vision-settings-form')
+  const visionMode = requireElement<HTMLSelectElement>('#vision-mode')
+  const visionCustomFields = requireElement<HTMLElement>('#vision-custom-fields')
+  const visionBaseUrl = requireElement<HTMLInputElement>('#vision-base-url')
+  const visionModel = requireElement<HTMLInputElement>('#vision-model')
+  const visionIndependentCredentials = requireElement<HTMLInputElement>('#vision-independent-credentials')
+  const visionApiKeyField = requireElement<HTMLElement>('#vision-api-key-field')
+  const visionApiKey = requireElement<HTMLInputElement>('#vision-api-key')
+  const visionTest = requireElement<HTMLButtonElement>('#vision-test')
+  const visionSave = requireElement<HTMLButtonElement>('#vision-save')
+  const visionConfiguredStatus = requireElement<HTMLElement>('#vision-configured-status')
+  const visionStatus = requireElement<HTMLElement>('#vision-status')
+  const visionTestStatus = requireElement<HTMLElement>('#vision-test-status')
   const activeSkillChip = requireElement<HTMLButtonElement>('#active-skill-chip')
   const composer = requireElement<HTMLFormElement>('#composer')
   const attachmentList = requireElement<HTMLElement>('#attachment-list')
@@ -176,6 +207,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let latestLayoutRevision = 0
   let selectedCommandIndex = 0
   let memoryMode = false
+  let settingsMode = false
+  let returnToSettings = false
   let knowledgeMode = false
   let skillMode = false
   let webMode = false
@@ -183,6 +216,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let webSnapshot: AssistantWebSettingsSnapshot | null = null
   let webBusy = false
   let webEnableConfirmed = false
+  let visionSettings: AssistantVisionSettingsSnapshot | null = null
+  let visionSnapshot: AssistantVisionSnapshot | null = null
+  let visionBusy = false
+  let modelSettings: AssistantModelSettingsSnapshot | null = null
+  let modelBusy = false
   let pendingSkillPreview: AssistantSkillInstallPreview | null = null
   let pendingSkillUninstall: AssistantSkillSummary | null = null
   let selectedSkillId: string | null = null
@@ -220,6 +258,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (memoryMode) {
         closeMemoryView()
       } else {
+        if (settingsMode) {
+          closeSettingsView()
+        }
         if (knowledgeMode) {
           closeKnowledgeView()
         }
@@ -338,6 +379,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (memoryMode) {
         closeMemoryView()
       } else {
+        if (settingsMode) {
+          closeSettingsView()
+        }
         if (knowledgeMode) {
           closeKnowledgeView()
         }
@@ -369,6 +413,27 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       }
     }
   })
+  settingsButton.addEventListener('click', () => {
+    if (busy) return
+    if (settingsMode) {
+      closeSettingsView()
+      return
+    }
+    if (memoryMode) closeMemoryView()
+    if (knowledgeMode) closeKnowledgeView()
+    if (skillMode) closeSkillView()
+    if (webMode) closeWebView()
+    void openSettingsView()
+  })
+  settingsBack.addEventListener('click', closeSettingsView)
+  settingsOpenWeb.addEventListener('click', () => void openSettingsChild(openWebView))
+  settingsOpenKnowledge.addEventListener('click', () => void openSettingsChild(openKnowledgeView))
+  settingsOpenSkill.addEventListener('click', () => void openSettingsChild(openSkillView))
+  modelSettingsForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    void saveModelSettings()
+  })
+  modelClearKey.addEventListener('click', () => void clearModelKey())
   skillButton.addEventListener('click', () => {
     if (!busy) {
       if (skillMode) {
@@ -441,6 +506,14 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
   webClearKey.addEventListener('click', () => void clearWebApiKey())
   webTest.addEventListener('click', () => void testWebSearch())
+  visionMode.addEventListener('change', renderVisionFields)
+  visionIndependentCredentials.addEventListener('change', renderVisionFields)
+  visionApiKey.addEventListener('input', renderVisionFields)
+  visionSettingsForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    void saveVisionSettings()
+  })
+  visionTest.addEventListener('click', () => void testVisionCapability())
   skillBack.addEventListener('click', closeSkillView)
   skillRefresh.addEventListener('click', () => void refreshSkills())
   skillAddLocal.addEventListener('click', () => void previewLocalSkills())
@@ -569,6 +642,51 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
   }
 
+  /** 打开统一助手配置页，主模型表单与能力入口均只展示脱敏信息。 */
+  async function openSettingsView(): Promise<void> {
+    clearError()
+    try {
+      modelSettings = await window.desktopPet.getAssistantModelSettings()
+      settingsMode = true
+      conversation.hidden = true
+      settingsView.hidden = false
+      input.disabled = true
+      sendButton.disabled = true
+      newConversationButton.disabled = true
+      settingsButton.setAttribute('aria-pressed', 'true')
+      document.body.dataset.assistantMode = 'settings'
+      renderModelSettings()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 从统一配置页进入一个能力子页面，子页面返回时恢复配置页。 */
+  async function openSettingsChild(open: () => Promise<void>): Promise<void> {
+    if (busy) return
+    returnToSettings = true
+    settingsMode = false
+    settingsView.hidden = true
+    settingsButton.setAttribute('aria-pressed', 'false')
+    await open()
+  }
+
+  /** 关闭统一配置页并恢复聊天输入状态。 */
+  function closeSettingsView(): void {
+    settingsMode = false
+    settingsView.hidden = true
+    conversation.hidden = false
+    input.disabled = busy
+    sendButton.disabled = false
+    sendButton.textContent = busy ? '■' : '↑'
+    sendButton.title = busy ? '暂停生成' : '发送'
+    sendButton.setAttribute('aria-label', busy ? '暂停生成' : '发送')
+    newConversationButton.disabled = busy
+    settingsButton.setAttribute('aria-pressed', 'false')
+    document.body.dataset.assistantMode = 'chat'
+    input.focus()
+  }
+
   /** 打开记忆管理视图，读取数据失败时保留聊天模式并显示错误。 */
   async function openMemoryView(): Promise<void> {
     clearError()
@@ -630,6 +748,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   function closeKnowledgeView(): void {
+    const reopenSettings = returnToSettings
+    returnToSettings = false
     knowledgeMode = false
     pendingKnowledgeDelete = null
     pendingEmbeddingAction = null
@@ -648,6 +768,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       knowledgePoll = null
     }
     input.focus()
+    if (reopenSettings) void openSettingsView()
   }
 
   /** 打开 Skill 管理视图，只读取脱敏元数据快照。 */
@@ -670,6 +791,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   function closeSkillView(): void {
+    const reopenSettings = returnToSettings
+    returnToSettings = false
     skillMode = false
     pendingSkillPreview = null
     pendingSkillUninstall = null
@@ -682,13 +805,21 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     skillButton.setAttribute('aria-pressed', 'false')
     document.body.dataset.assistantMode = 'chat'
     input.focus()
+    if (reopenSettings) void openSettingsView()
   }
 
   /** 打开联网设置，只读取是否启用和是否已配置等脱敏状态。 */
   async function openWebView(): Promise<void> {
     clearError()
     try {
-      webSnapshot = await window.desktopPet.getAssistantWebSettings()
+      const [webSettings, currentVisionSettings, documentCapabilities] = await Promise.all([
+        window.desktopPet.getAssistantWebSettings(),
+        window.desktopPet.getAssistantVisionSettings(),
+        window.desktopPet.getAssistantDocumentCapabilities().catch(() => null)
+      ])
+      webSnapshot = webSettings
+      visionSettings = currentVisionSettings
+      visionSnapshot = documentCapabilities?.vision ?? null
       webMode = true
       webEnableConfirmed = webSnapshot.enabled
       conversation.hidden = true
@@ -699,6 +830,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       webButton.setAttribute('aria-pressed', 'true')
       document.body.dataset.assistantMode = 'web'
       renderWebSettings()
+      renderVisionSettings()
+      webSettingsScroll.scrollTop = 0
     } catch (error) {
       showError(error)
     }
@@ -706,11 +839,15 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
   /** 退出联网设置并恢复聊天输入状态。 */
   function closeWebView(): void {
+    const reopenSettings = returnToSettings
+    returnToSettings = false
     webMode = false
     webEnableConfirmed = false
     if (webEnableConfirm.open) {
       webEnableConfirm.close()
     }
+    visionApiKey.value = ''
+    visionTestStatus.textContent = ''
     webView.hidden = true
     conversation.hidden = false
     input.disabled = busy
@@ -719,6 +856,75 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     webButton.setAttribute('aria-pressed', 'false')
     document.body.dataset.assistantMode = 'chat'
     input.focus()
+    if (reopenSettings) void openSettingsView()
+  }
+
+  /** 根据 Main 返回的脱敏快照恢复主模型表单，不回填 API Key。 */
+  function renderModelSettings(): void {
+    const snapshot = modelSettings
+    modelBaseUrl.value = snapshot?.baseUrl ?? ''
+    modelName.value = snapshot?.model ?? 'gpt-4o-mini'
+    modelApiKey.value = ''
+    modelApiKey.placeholder = snapshot?.configuredKey ? CONFIGURED_API_KEY_PLACEHOLDER : EMPTY_API_KEY_PLACEHOLDER
+    modelConfiguredStatus.textContent = snapshot?.configuredKey
+      ? `密钥已安全保存（${snapshot.source === 'saved' ? '应用配置' : '环境变量'}）`
+      : '尚未配置 API Key，Runtime 将使用模拟后端'
+    modelClearKey.disabled = modelBusy || !snapshot?.configuredKey
+    modelSave.disabled = modelBusy
+    modelBaseUrl.disabled = modelBusy
+    modelName.disabled = modelBusy
+    modelApiKey.disabled = modelBusy
+  }
+
+  /** 保存主模型设置；Runtime 重启期间短暂显示启动状态。 */
+  async function saveModelSettings(): Promise<void> {
+    const model = modelName.value.trim()
+    if (!model) {
+      showError('请填写主模型名称。')
+      modelName.focus()
+      return
+    }
+    setModelBusy(true)
+    try {
+      modelSettings = await window.desktopPet.setAssistantModelSettings({
+        baseUrl: modelBaseUrl.value.trim(),
+        model,
+        ...(modelApiKey.value.trim() ? { apiKey: modelApiKey.value.trim() } : {})
+      })
+      modelSaveStatus.textContent = '主模型配置已保存。'
+      clearError()
+      renderModelSettings()
+    } catch (error) {
+      showError(error)
+    } finally {
+      setModelBusy(false)
+    }
+  }
+
+  /** 删除主模型密钥并回退到模拟后端，删除前要求用户确认。 */
+  async function clearModelKey(): Promise<void> {
+    if (!modelSettings?.configuredKey || !window.confirm('确认删除已保存的主模型 API Key？')) return
+    setModelBusy(true)
+    try {
+      modelSettings = await window.desktopPet.setAssistantModelSettings({
+        baseUrl: modelBaseUrl.value.trim(),
+        model: modelName.value.trim() || modelSettings.model,
+        clearApiKey: true
+      })
+      modelSaveStatus.textContent = '主模型 API Key 已删除。'
+      clearError()
+      renderModelSettings()
+    } catch (error) {
+      showError(error)
+    } finally {
+      setModelBusy(false)
+    }
+  }
+
+  /** 统一锁定主模型配置控件，防止保存期间重复重启 Runtime。 */
+  function setModelBusy(value: boolean): void {
+    modelBusy = value
+    renderModelSettings()
   }
 
   /** 根据 Main 返回的脱敏快照渲染设置，不回填 API Key。 */
@@ -864,6 +1070,138 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       !isWebProviderConfigured(selectedWebProvider()) && !webApiKey.value.trim()
     )
     webSave.disabled = value
+  }
+
+  /** 使用 Main 返回的脱敏快照恢复视觉设置，绝不回填已保存密钥。 */
+  function renderVisionSettings(): void {
+    const settings = visionSettings
+    visionMode.value = settings?.mode ?? 'inherit'
+    visionBaseUrl.value = settings?.baseUrl ?? ''
+    visionModel.value = settings?.model ?? ''
+    visionIndependentCredentials.checked = settings?.independentCredentials ?? false
+    visionApiKey.value = ''
+    renderVisionFields()
+  }
+
+  /** 根据继承模式和独立凭据开关显示最少必要字段及脱敏状态。 */
+  function renderVisionFields(): void {
+    const custom = visionMode.value === 'custom'
+    const independent = custom && visionIndependentCredentials.checked
+    visionCustomFields.hidden = !custom
+    visionApiKeyField.hidden = !independent
+    visionBaseUrl.disabled = visionBusy || !custom
+    visionModel.disabled = visionBusy || !custom
+    visionIndependentCredentials.disabled = visionBusy || !custom
+    visionApiKey.disabled = visionBusy || !independent
+    visionMode.disabled = visionBusy
+    visionSave.disabled = visionBusy
+    visionTest.disabled = visionBusy
+    visionApiKey.placeholder = visionSettings?.configuredKey && independent
+      ? CONFIGURED_API_KEY_PLACEHOLDER
+      : EMPTY_API_KEY_PLACEHOLDER
+
+    const status = visionSnapshot?.status ?? 'untested'
+    visionStatus.dataset.status = status
+    visionStatus.textContent = visionStatusLabel(status)
+    if (!custom) {
+      visionConfiguredStatus.textContent = '继承主模型地址、密钥和模型'
+    } else if (!independent) {
+      visionConfiguredStatus.textContent = '沿用主模型地址或密钥'
+    } else {
+      visionConfiguredStatus.textContent = visionSettings?.configuredKey
+        ? '独立密钥已安全保存'
+        : '尚未保存独立密钥'
+    }
+  }
+
+  /** 保存视觉配置并重启 Runtime，使新配置从未测试状态重新开始。 */
+  async function saveVisionSettings(showSuccess = true): Promise<boolean> {
+    const mode = visionMode.value === 'custom' ? 'custom' : 'inherit'
+    const baseUrl = visionBaseUrl.value.trim()
+    const model = visionModel.value.trim()
+    const independentCredentials = mode === 'custom' && visionIndependentCredentials.checked
+    const apiKey = visionApiKey.value.trim()
+    if (mode === 'custom' && !model) {
+      showError('单独配置图片理解时必须填写视觉模型名称。')
+      visionModel.focus()
+      return false
+    }
+    if (independentCredentials && !visionSettings?.configuredKey && !apiKey) {
+      showError('使用独立视觉凭据时必须填写 API Key。')
+      visionApiKey.focus()
+      return false
+    }
+
+    setVisionBusy(true)
+    try {
+      visionSettings = await window.desktopPet.setAssistantVisionSettings({
+        mode,
+        ...(mode === 'custom' && baseUrl ? { baseUrl } : {}),
+        ...(mode === 'custom' ? { model, independentCredentials } : {}),
+        ...(apiKey ? { apiKey } : {})
+      })
+      visionSnapshot = (await window.desktopPet.getAssistantDocumentCapabilities()).vision
+      renderVisionSettings()
+      visionTestStatus.textContent = showSuccess ? '配置已保存，请主动探测图片能力。' : ''
+      clearError()
+      return true
+    } catch (error) {
+      showError(error)
+      return false
+    } finally {
+      setVisionBusy(false)
+    }
+  }
+
+  /** 保存表单后用本地随机验证码图片探测，不依据模型名称猜测能力。 */
+  async function testVisionCapability(): Promise<void> {
+    if (!(await saveVisionSettings(false))) {
+      return
+    }
+    setVisionBusy(true)
+    visionTestStatus.textContent = '正在使用本地随机验证码图片主动探测…'
+    try {
+      visionSnapshot = await window.desktopPet.testAssistantVision()
+      renderVisionFields()
+      visionTestStatus.textContent = visionProbeResultText(visionSnapshot)
+      clearError()
+    } catch (error) {
+      visionTestStatus.textContent = '主动探测请求失败，未改变为“不支持”。'
+      showError(error)
+    } finally {
+      setVisionBusy(false)
+    }
+  }
+
+  /** 统一锁定视觉表单，避免配置重启与探测并发。 */
+  function setVisionBusy(value: boolean): void {
+    visionBusy = value
+    renderVisionFields()
+  }
+
+  /** 把固定视觉状态转换为紧凑界面标签。 */
+  function visionStatusLabel(status: AssistantVisionSnapshot['status']): string {
+    return {
+      unconfigured: '未配置',
+      untested: '未测试',
+      supported: '已支持',
+      unsupported: '不支持',
+      unavailable: '暂不可用',
+      'invalid-credentials': '凭据无效'
+    }[status]
+  }
+
+  /** 区分永久能力结论与临时服务故障，避免误导用户。 */
+  function visionProbeResultText(snapshot: AssistantVisionSnapshot): string {
+    if (snapshot.status === 'supported') return '主动探测通过，图片附件已启用。'
+    if (snapshot.status === 'unsupported') return '端点可用，但当前模型不支持图片输入。'
+    if (snapshot.status === 'invalid-credentials') return '视觉模型凭据无效，请更新后重试。'
+    if (snapshot.status === 'unavailable') {
+      const reason = snapshot.lastError ? attachmentErrorText(snapshot.lastError) : '视觉服务暂时不可用'
+      return `${reason}，本次临时故障不会缓存为“不支持”。`
+    }
+    if (snapshot.status === 'unconfigured') return '视觉模型尚未配置完整。'
+    return '视觉配置尚未完成主动探测。'
   }
 
   function selectedWebProvider(): AssistantWebProvider {
@@ -2101,7 +2439,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       const title = document.createElement('strong')
       title.textContent = `[资料${index + 1}] ${source.title}`
       const path = document.createElement('span')
-      path.textContent = `${source.libraryName} / ${source.relativePath}`
+      path.textContent = `${source.libraryName} / ${source.relativePath}${formatDocumentLocation(source.location)}`
       const excerpt = document.createElement('p')
       excerpt.textContent = source.excerpt
       item.append(title, path, excerpt)
@@ -2130,9 +2468,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       item.className = 'retrieval-source attachment-source'
       const title = document.createElement('strong')
       title.textContent = source.name + (source.truncated ? '（内容已截断）' : '')
+      const location = document.createElement('span')
+      location.textContent = formatDocumentLocation(source.location).replace(/^ · /, '')
+      location.hidden = !location.textContent
       const excerpt = document.createElement('p')
       excerpt.textContent = source.excerpt || '附件无可展示摘要。'
-      item.append(title, excerpt)
+      item.append(title, location, excerpt)
       details.append(item)
     })
     article.append(details)
@@ -2590,7 +2931,38 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
   /** 把 Runtime 内部解析码转换为用户可理解的错误。 */
   function attachmentErrorText(error: string): string {
-    return error === 'attachment_decode_failed' ? '文件不是有效的 UTF-8 文本' : error
+    const messages: Record<string, string> = {
+      attachment_decode_failed: '文件不是有效的 UTF-8 文本',
+      document_corrupt: '文档已损坏或格式不完整',
+      document_encrypted: '文档已加密，暂不支持读取',
+      document_archive_limit_exceeded: '文档解压后超过安全限制',
+      document_archive_unsafe: '文档压缩结构不安全',
+      document_xml_unsafe: '文档包含不安全的 XML 内容',
+      document_active_content: '文档包含脚本或主动内容',
+      document_ocr_required: 'PDF 没有文本层，需要 OCR',
+      image_decode_failed: '图片无法安全解码',
+      image_too_large: '图片像素、帧数或派生图大小超限',
+      vision_not_configured: '尚未配置视觉模型',
+      vision_capability_untested: '视觉模型尚未通过能力测试',
+      vision_model_unsupported: '当前模型不支持图片理解',
+      vision_invalid_credentials: '视觉模型凭据无效',
+      vision_provider_unavailable: '视觉服务暂时不可用',
+      vision_provider_timeout: '视觉服务响应超时',
+      vision_rate_limited: '视觉服务请求过于频繁',
+      vision_summary_failed: '图片摘要生成失败'
+    }
+    return messages[error] || error
+  }
+
+  /** 把结构位置转换为简短来源标签。 */
+  function formatDocumentLocation(location: import('../../shared/assistant').AssistantDocumentLocation | null | undefined): string {
+    if (!location) return ''
+    if (location.page) return ` · 第 ${location.page} 页`
+    if (location.sheet) return ` · ${location.sheet}${location.cellRange ? `!${location.cellRange}` : ''}`
+    if (location.slide) return ` · 幻灯片 ${location.slide}`
+    if (location.headingPath.length > 0) return ` · ${location.headingPath.join(' / ')}${location.paragraph ? ` / 段落 ${location.paragraph}` : ''}`
+    if (location.paragraph) return ` · 段落 ${location.paragraph}`
+    return location.value ? ` · ${location.value}` : ''
   }
 
   /** 打开附件预览并加载第一页，真实路径和完整数据库记录不会进入 Renderer。 */

@@ -24,7 +24,7 @@ Deferred     延后
 
 ```text
 AI 助手核心功能状态：Done（阶段 1 至阶段 5）
-后续增强状态：In Progress（C1、C1.1 已完成，C2、C3 实现完成并处于验收收尾，C4-C6 按新范围重新规划）
+后续增强状态：In Progress（C1、C1.1、C4 已完成，C2、C3 实现完成并处于验收收尾，C5 Not Started，C6 Deferred）
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
@@ -32,7 +32,7 @@ Python LangChain Runtime：Done（阶段 5）
 RAG 文档管理：Done（阶段 4）
 RAG 检索优化：In Progress（R0/R3/R4 部分完成、R1 完成、R2 主体已实现但未完成正式验收）
 Skill 系统：Done（阶段 5）
-对话资源能力：In Progress（C1、C1.1 Done，C2、C3 In Progress，C4/C5 Not Started，C6 Deferred）
+对话资源能力：In Progress（C1、C1.1、C4 Done，C2、C3 In Progress，C5 Not Started，C6 Deferred）
 ```
 
 ## 2. 已完成事项
@@ -225,13 +225,13 @@ Skill 系统：Done（阶段 5）
 
 ### 对话资源能力
 
-状态：In Progress（C1、C1.1 已完成，C2、C3 实现完成并处于验收收尾）
+状态：In Progress（C1、C1.1、C4 已完成，C2、C3 实现完成并处于验收收尾）
 
 - [x] C1：拖拽附件与文本解析。
 - [x] C1.1：草稿/历史附件文本预览与失败投放提示。
 - [ ] C2：基础 Artifact 文件输出（实现完成，原生保存对话框与打包版 E2E 待收尾）。
 - [ ] C3：联网搜索与网页引用（实现完成，真实火山连接与打包版设置 E2E 已通过，完整搜索/抓取/引用 E2E 待收尾）。
-- [ ] C4：复杂文档输入与条件式图片理解。
+- [x] C4：复杂文档输入与条件式图片理解。
 - [ ] C5：多文件只读分析和临时索引。
 - [ ] C6：受控 Python 执行与复杂文档输出/修改（Deferred，未排期）。
 
@@ -449,3 +449,15 @@ C2 已实现：
 - C5 收缩为多文件只读分析和会话级临时索引，只使用 C2 已有 TXT、Markdown、CSV、JSON 等基础 Artifact 交付结果。
 - 新增 C6 规划，用于固定依赖和资源配额下的受控 Python 执行、复杂 PDF/Office/图片输出、重新读取验证和受控修改；当前状态为 Deferred，未排期。
 - C2、C3 的实现和验收状态不因本次范围调整而改变。
+
+### 2026-08-04（C4 输入能力实现与验收）
+
+- 完成 C4.0-C4.2：新增唯一 `DocumentParserRegistry`、`ParsedDocument`、结构块/位置/问题协议；PDF 文本层与页码、DOCX 标题/段落/列表/表格、XLSX 工作表/有效区域/单元格/公式文本、PPTX 标题/正文/备注均为只读输入。扫描 PDF 返回 `document_ocr_required`，不执行本地 OCR。
+- 完成 C4.1：Office ZIP/XML 在第三方库前检查文件数、单项/总解压大小、压缩比、重复名称、路径穿越、符号链接、加密 OLE、DTD/ENTITY、宏/OLE/ActiveX、远程模板和外部关系；PDF 脚本/自动动作/嵌入对象拒绝；图片限制像素/帧数并去除 EXIF/GPS 后生成 PNG 派生图。
+- 完成 C4.3-C4.4：Vision Analyzer 与主 Agent 隔离，无工具、记忆或 Skill 权限；支持继承主模型、同地址/凭据覆盖模型和独立地址/Key/模型。Renderer 提供脱敏配置、独立凭据和主动探测界面，不回填密钥。随机验证码主动探测区分 `unconfigured`、`untested`、`supported`、`unsupported`、`unavailable`、`invalid-credentials`；401/403、模型不存在、429、超时和 5xx 分类独立；摘要按图片哈希/视觉配置签名/提示版本缓存且不落图片 Base64。附件登记、预览、上下文和来源卡片已接入结构位置。
+- 完成 C4.5：知识库索引改用同一 Registry，Chunk 增加可选 `location_json` 迁移列，检索来源透出 PDF 页码、DOCX 标题路径/段落、XLSX 工作表/区域和 PPTX 幻灯片位置；知识库图片索引默认关闭。
+- 完成 C4.6：68 项 TypeScript 测试、64 项 Python Runtime 测试通过；最终解包目录中的 PyInstaller onefile 为 96,468,304 字节（基线 83,282,372，增加 13,185,932，15.83%），独立 Runtime 冷启动 3,725 ms，能力/正常四类文档解析/图片未探测拒绝/优雅退出通过；开发版和解包版 Electron E2E 均通过。
+- 统一助手配置页已接入主模型、联网与图片理解、知识库和 Skill；Composer 能力入口收敛为新对话、附件、会话记忆和统一配置。主动探测成功后的稳定状态会按视觉配置签名持久化，重复保存未变化的配置不会重启 Runtime，程序重启后仍可恢复；真正修改视觉配置仍回到 `untested`。
+- 图片附件登记已改为延迟视觉分析：拖入/选择阶段仅做本地安全校验和元数据解析，发送任务启动后才按附件顺序调用 Vision Analyzer，并在主模型推理前等待结果；知识库图片索引默认关闭不变。
+- C4 输入依赖锁定为 `pypdf 6.14.2`（BSD-3-Clause）、`python-docx 1.2.0`（MIT）、`openpyxl 3.1.5`（MIT）、`python-pptx 1.0.2`（MIT）、`Pillow 12.3.0`（MIT-CMU）、`defusedxml 0.7.1`（PSFL）；必要传递依赖 `lxml 6.1.1`（BSD-3-Clause）、`XlsxWriter 3.2.9`（BSD-2-Clause）已锁定。未引入 reportlab、OCR 模型或复杂生成依赖。
+- 真实视觉 Provider 的在线验证码探测和多端点兼容性仍需在具备可控视觉模型凭据的环境完成；C2/C3 原有验收收尾和 C5 多文件只读分析按原计划不提前改变。

@@ -574,11 +574,11 @@ C4 不生成 PDF、DOCX、XLSX、PPTX、PNG 或 JPEG Artifact。复杂格式输�
 
 ### 10.3 Vision Analyzer 配置
 
-视觉配置默认继承主模型的 `base_url`、凭据引用和模型名，但必须通过本地随机验证码图片主动探测后才标记为 `supported`。主模型不支持时，可以配置同一地址/密钥下的其他模型，或独立的地址和密钥。Renderer 只能看到配置状态和测试结果，密钥继续由 Main 使用 `safeStorage` 管理。
+视觉配置默认继承主模型的 `base_url`、凭据引用和模型名，但必须通过本地随机验证码图片主动探测后才标记为 `supported`。主模型不支持时，可以配置同一地址/密钥下的其他模型，或独立的地址和密钥。Renderer 只能看到配置状态和测试结果，密钥继续由 Main 使用 `safeStorage` 管理；稳定探测结果按视觉配置签名持久化，程序重启后可恢复，配置变化后必须重新进入 `untested`。
 
 能力状态固定为 `unconfigured`、`untested`、`supported`、`unsupported`、`unavailable` 和 `invalid-credentials`。只有随机图片内容被正确识别时才能标记 `supported`；401/403、模型不存在、429、超时和 5xx 必须分别归类，不能把临时故障缓存为不支持。探测结果绑定地址来源、模型名、凭据引用版本和视觉协议版本，配置变化后回到 `untested`。
 
-图片发送前必须限制尺寸、像素和帧数，移除全部 EXIF/GPS 并重新编码为安全派生图。模型返回的摘要、可见文字、观察和局限始终是不可信资料；不承诺传统 OCR 的逐字准确率或精确视觉坐标。知识库图片索引默认关闭，用户明确启用 Vision Analyzer 后才允许上传摘要请求。
+图片拖入/选择阶段只执行格式、尺寸、像素和帧数校验；用户发送后才移除全部 EXIF/GPS、生成安全派生图并调用 Vision Analyzer，主模型等待该摘要完成。模型返回的摘要、可见文字、观察和局限始终是不可信资料；不承诺传统 OCR 的逐字准确率或精确视觉坐标。知识库图片索引默认关闭，用户明确启用 Vision Analyzer 后才允许上传摘要请求。
 
 ### 10.4 主动内容和压缩安全
 
@@ -665,6 +665,8 @@ assistant:set-web-settings          加密保存 Provider 配置
 assistant:get-vision-settings       获取脱敏视觉模型配置和探测状态
 assistant:set-vision-settings       保存主模型继承或独立视觉配置
 assistant:test-vision-model         使用随机测试图片主动探测能力
+assistant:get-model-settings        获取脱敏主模型地址、模型名和密钥状态
+assistant:set-model-settings        保存主模型配置并按需重启 Runtime
 ```
 
 所有 handler 必须复用当前助手窗口身份校验，并验证 ID、数量、字符串长度、枚举和对象结构。
@@ -828,6 +830,10 @@ source_changed_before_write
 
 C1 至 C6 是依赖顺序，不代表已经确定具体开发日期。每个阶段只有在其完成门槛通过后才能在进度文档中标记为 Done。
 
+### C4 实现状态补充（2026-08-04）
+
+C4.0-C4.6 已完成本地实现和打包验收：统一 Parser Registry 同时服务附件与知识库，复杂格式仅输入解析；Office/PDF/图片安全层、结构位置、Vision Analyzer 主动探测与缓存、附件/知识库来源接入均已落地。依赖、测试数字、包体和已知真实视觉 Provider 验收缺口记录在 `docs/AI_ASSISTANT_PROGRESS.md`，C5 多文件只读分析和 C6 受控执行/复杂输出不因本轮实现提前启动。
+
 ## 17. 测试要求
 
 ### 17.1 TypeScript 单元测试
@@ -918,7 +924,7 @@ C1 至 C6 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 [x] C1.1 草稿/历史附件文本预览和失败投放提示通过验收
 [ ] C2 Artifact 生成、预览和受控保存通过验收（实现完成，原生保存对话框与打包版 E2E 待收尾）
 [ ] C3 联网搜索、网页引用和网络安全通过验收
-[ ] C4 PDF、Office 和条件式图片输入通过验收
+[x] C4 PDF、Office 和条件式图片输入通过验收
 [ ] C5 多文件临时索引和只读分析通过验收
 [ ] C6 受控 Python 执行和复杂文档输出/修改通过验收
 [ ] 附件、网页和 Artifact 不扩大既有工具权限
