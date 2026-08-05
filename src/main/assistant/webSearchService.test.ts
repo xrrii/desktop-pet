@@ -83,6 +83,29 @@ describe('WebSearchService', () => {
     expect(called).toBe(false)
   })
 
+  it('允许本地可控 Provider 提供正文并保持来源归属校验', async () => {
+    const provider: WebSearchProvider = {
+      search: async () => [{
+        title: '本地页面',
+        url: 'https://93.184.216.34/petdock-test',
+        excerpt: '本地摘要',
+        publishedAt: null
+      }],
+      fetch: async (url) => ({
+        title: '本地页面正文',
+        content: '本地正文内容',
+        finalUrl: url
+      })
+    }
+    const service = new WebSearchService(settings, { volcengine: provider })
+    service.beginTask('fixture-task', '测试本地 Provider')
+    const search = await service.search('fixture-task', '测试', 1)
+    const fetched = await service.fetch('fixture-task', search.results[0].url)
+    expect(fetched.content).toBe('本地正文内容')
+    expect(fetched.source.kind).toBe('fetched-page')
+    expect(fetched.source.citationIndex).toBe(1)
+  })
+
   it('只按引用编号返回 Main 保存的真实来源字段', async () => {
     const provider: WebSearchProvider = {
       search: async () => [

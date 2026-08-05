@@ -1,5 +1,5 @@
 import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
-import { basename, extname } from 'node:path'
+import { basename, extname, resolve } from 'node:path'
 import type {
   AssistantAskInput,
   AssistantAttachmentDropZone,
@@ -47,6 +47,12 @@ import {
   setTransparentAreaClickThrough
 } from './window'
 
+// 自动化 Smoke 使用独立数据目录，避免测试读写用户的模型密钥、会话和浏览器缓存。
+const smokeUserDataPath = process.env.PETDOCK_SMOKE_USER_DATA?.trim()
+if (smokeUserDataPath) {
+  app.setPath('userData', resolve(smokeUserDataPath))
+}
+
 // 仅供自动化测试在无可用 GPU 的受限环境中启用软件渲染。
 if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
   app.disableHardwareAcceleration()
@@ -56,10 +62,36 @@ if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
 
 let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
+let smokeArtifactSaveCancelled = false
 const assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
   (event) => petWindow?.webContents.send('assistant:event', event)
 )
+
+/**
+ * 打开 Artifact 原生保存对话框；仅在自动化 Smoke 明确注入变量时提供确定性选择结果。
+ * 测试适配不向生产配置暴露，也不改变后续 Main 读取、原子写入和保存标记流程。
+ */
+async function showArtifactSaveDialog(
+  window: BrowserWindow,
+  artifactName: string,
+  extension: string
+): Promise<Electron.SaveDialogReturnValue> {
+  if (process.env.PETDOCK_SMOKE_ARTIFACT_SAVE_CANCEL_ONCE === '1' && !smokeArtifactSaveCancelled) {
+    smokeArtifactSaveCancelled = true
+    return { canceled: true, filePath: '' }
+  }
+  const smokePath = process.env.PETDOCK_SMOKE_ARTIFACT_SAVE_PATH?.trim()
+  if (smokePath) {
+    return { canceled: false, filePath: smokePath }
+  }
+  return dialog.showSaveDialog(window, {
+    title: '保存生成文件',
+    defaultPath: artifactName,
+    filters: [{ name: `${extension.toUpperCase()} 文件`, extensions: [extension] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation']
+  })
+}
 
 app.disableHardwareAcceleration()
 app.setAppUserModelId('com.local.petdock')
@@ -335,12 +367,7 @@ function registerIpc(): void {
       throw new Error('Artifact 尚未生成成功。')
     }
     const extension = extname(artifact.name).slice(1) || 'txt'
-    const selection = await dialog.showSaveDialog(window, {
-      title: '保存生成文件',
-      defaultPath: artifact.name,
-      filters: [{ name: `${extension.toUpperCase()} 文件`, extensions: [extension] }],
-      properties: ['createDirectory', 'showOverwriteConfirmation']
-    })
+    const selection = await showArtifactSaveDialog(window, artifact.name, extension)
     if (selection.canceled || !selection.filePath) {
       assistantManager.recordArtifactAudit('save', artifact.id, false, 'artifact_save_cancelled')
       return {

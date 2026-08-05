@@ -24,7 +24,7 @@ Deferred     延后
 
 ```text
 AI 助手核心功能状态：Done（阶段 1 至阶段 5）
-后续增强状态：In Progress（C1、C1.1、C4 已完成，C2、C3 实现完成并处于验收收尾，C5 Not Started，C6 Deferred）
+后续增强状态：In Progress（C1、C1.1、C2、C3、C4 已完成，C5 Not Started，C6 Deferred）
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
@@ -32,7 +32,7 @@ Python LangChain Runtime：Done（阶段 5）
 RAG 文档管理：Done（阶段 4）
 RAG 检索优化：In Progress（R0/R3/R4 部分完成、R1 完成、R2 主体已实现但未完成正式验收）
 Skill 系统：Done（阶段 5）
-对话资源能力：In Progress（C1、C1.1、C4 Done，C2、C3 In Progress，C5 Not Started，C6 Deferred）
+对话资源能力：In Progress（C1、C1.1、C2、C3、C4 Done，C5 Not Started，C6 Deferred）
 ```
 
 ## 2. 已完成事项
@@ -225,12 +225,12 @@ Skill 系统：Done（阶段 5）
 
 ### 对话资源能力
 
-状态：In Progress（C1、C1.1、C4 已完成，C2、C3 实现完成并处于验收收尾）
+状态：In Progress（C1、C1.1、C2、C3、C4 已完成，C5 Not Started，C6 Deferred）
 
 - [x] C1：拖拽附件与文本解析。
 - [x] C1.1：草稿/历史附件文本预览与失败投放提示。
-- [ ] C2：基础 Artifact 文件输出（实现完成，原生保存对话框与打包版 E2E 待收尾）。
-- [ ] C3：联网搜索与网页引用（实现完成，真实火山连接与打包版设置 E2E 已通过，完整搜索/抓取/引用 E2E 待收尾）。
+- [x] C2：基础 Artifact 文件输出（开发版与解包版生成、预览、取消保存、实际保存和删除验收完成）。
+- [x] C3：联网搜索与网页引用（开发版与解包版本地可控 Provider 搜索、抓取、引用验收完成）。
 - [x] C4：复杂文档输入与条件式图片理解。
 - [ ] C5：多文件只读分析和临时索引。
 - [ ] C6：受控 Python 执行与复杂文档输出/修改（Deferred，未排期）。
@@ -272,7 +272,7 @@ C2 已实现：
 - 保存必须由 Main 打开原生“另存为”对话框；Main 按 Artifact ID 从 Runtime 取回内容，并通过同目录临时文件直接原子替换目标，替换失败时原目标未被移走，取消或失败时保留应用内 Artifact。
 - Artifact 生成、保存和删除写入不含正文及目标路径的现有 JSONL 工具审计日志；删除会话、清空会话或显式删除卡片时清理应用内文件，外部另存副本不由 PetDock 管理。
 - `npm.cmd run typecheck`、26 个 TypeScript 测试和 35 个 Python Runtime 测试通过；Runtime 测试覆盖七种格式、Windows 文件名清理、大小与会话隔离、生成事件、预览、内容读取、保存标记和会话清理，Main 写入测试覆盖新建、原子覆盖、替换失败保留原文件、清理异常不误报和 Windows 符号链接拒绝。
-- 开发版 E2E 已验证 Artifact 生成、卡片、预览和删除，独立 Runtime 的打包形态启动测试通过；Windows 原生“另存为”对话框的取消与实际保存自动化仍不稳定，完整 Electron unpacked 包在本机构建阶段无进展，因此打包版生成、预览和保存闭环尚未完成验收，C2 暂不标记为 Done。
+- 开发版与解包版 E2E 已验证 Artifact 生成、卡片、预览、取消保存、实际保存内容和删除；生产路径仍由 Windows 原生“另存为”对话框选择目标，Smoke 仅在测试环境替换 Main 选择结果，C2 已标记为 Done。
 
 ### RAG 后续增强
 
@@ -418,7 +418,7 @@ C2 已实现：
 - 增加草稿和历史附件纯文本预览弹窗、分页加载状态及解析失败状态。
 - 增加 Runtime 附件预览接口和归属校验，Main/Preload/Renderer 全链路只使用附件 ID。
 - 修复不支持格式拖到收起桌宠后未自动展开的问题，并清理 IPC 错误包装文本。
-- 开发版 E2E 已覆盖不支持格式提示、草稿预览和历史附件预览；C2 至 C5 状态不变。
+- 开发版 E2E 已覆盖不支持格式提示、草稿预览和历史附件预览；C2、C3 已完成验收，C5 尚未开始。
 
 ### 2026-07-28（C2 基础 Artifact 文件输出）
 
@@ -439,7 +439,7 @@ C2 已实现：
 - 修复应用在 PyInstaller Runtime 冷启动期间退出时只终止外层进程、遗留内层 Runtime 的竞态，并增加“启动中退出”回归测试。
 - 修复模型在单次响应中生成多个联网调用时任务直接失败的问题；Runtime 现在最多接收 6 个外部调用并逐项串行派发，每项仍独立经过 Main 策略、配额、审计和确认流程。
 - 联网设置在 Provider 已保存密钥时显示固定掩码占位符，真实输入值仍为空；未配置状态显示输入提示，重新保存不会把掩码写成密钥。
-- 有效火山引擎 Key 在最新解包版的真实搜索连接已返回 1 条结果，进程能够正常退出且无 Runtime 遗留；本地可控 Provider 的开发版/打包版完整搜索、抓取和引用 E2E 仍待验收。
+- 有效火山引擎 Key 在最新解包版的真实搜索连接已返回 1 条结果，进程能够正常退出且无 Runtime 遗留；本地可控 Provider 的开发版/解包版完整搜索、抓取和引用 E2E 已通过。
 
 ### 2026-08-04（C4-C6 范围调整）
 
@@ -449,6 +449,13 @@ C2 已实现：
 - C5 收缩为多文件只读分析和会话级临时索引，只使用 C2 已有 TXT、Markdown、CSV、JSON 等基础 Artifact 交付结果。
 - 新增 C6 规划，用于固定依赖和资源配额下的受控 Python 执行、复杂 PDF/Office/图片输出、重新读取验证和受控修改；当前状态为 Deferred，未排期。
 - C2、C3 的实现和验收状态不因本次范围调整而改变。
+
+### 2026-08-05（C2/C3 验收收尾）
+
+- C2 增加开发版与解包版专用 Smoke：生成、预览、取消保存、受控实际保存内容校验、卡片状态和删除均通过；取消与保存继续分别写入脱敏 Artifact 审计日志。
+- C3 增加本地可控 Provider Smoke：模拟 OpenAI 兼容模型依次请求 `search_web`、`fetch_web_page`，正文只在当前任务中使用，最终仅渲染实际引用的 `[网页1]`，来源标记为“已读取正文”。测试 Provider 只在 `PETDOCK_SMOKE_WEB_FIXTURE=1` 时注册。
+- 新增 `test:e2e:assistant:c2`、`test:e2e:assistant:c2:packaged`、`test:e2e:assistant:c3` 和 `test:e2e:assistant:c3:packaged` 命令；生产保存和网络安全路径未改变。
+- 当前 TypeScript 类型检查与 69 项测试、Python Runtime 现有测试、开发版/解包版 C2/C3 Smoke 均通过。
 
 ### 2026-08-04（C4 输入能力实现与验收）
 
@@ -460,4 +467,4 @@ C2 已实现：
 - 统一助手配置页已接入主模型、联网与图片理解、知识库和 Skill；Composer 能力入口收敛为新对话、附件、会话记忆和统一配置。主动探测成功后的稳定状态会按视觉配置签名持久化，重复保存未变化的配置不会重启 Runtime，程序重启后仍可恢复；真正修改视觉配置仍回到 `untested`。
 - 图片附件登记已改为延迟视觉分析：拖入/选择阶段仅做本地安全校验和元数据解析，发送任务启动后才按附件顺序调用 Vision Analyzer，并在主模型推理前等待结果；知识库图片索引默认关闭不变。
 - C4 输入依赖锁定为 `pypdf 6.14.2`（BSD-3-Clause）、`python-docx 1.2.0`（MIT）、`openpyxl 3.1.5`（MIT）、`python-pptx 1.0.2`（MIT）、`Pillow 12.3.0`（MIT-CMU）、`defusedxml 0.7.1`（PSFL）；必要传递依赖 `lxml 6.1.1`（BSD-3-Clause）、`XlsxWriter 3.2.9`（BSD-2-Clause）已锁定。未引入 reportlab、OCR 模型或复杂生成依赖。
-- 真实视觉 Provider 的在线验证码探测和多端点兼容性仍需在具备可控视觉模型凭据的环境完成；C2/C3 原有验收收尾和 C5 多文件只读分析按原计划不提前改变。
+- 真实视觉 Provider 的在线验证码探测和多端点兼容性仍需在具备可控视觉模型凭据的环境完成；C2/C3 已完成验收，C5 多文件只读分析仍未开始。

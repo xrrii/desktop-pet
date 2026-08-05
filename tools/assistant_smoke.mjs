@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { createServer as createTcpServer } from 'node:net'
 import { dirname, join, parse, resolve } from 'node:path'
@@ -22,13 +22,18 @@ const rightScreenshotPath = join(
   screenshotParts.dir,
   `${screenshotParts.name}-right${screenshotParts.ext}`
 )
-const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' ? 'langchain' : 'mock'
+const c3Only = process.env.PETDOCK_SMOKE_C3_ONLY === '1'
+const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' || c3Only ? 'langchain' : 'mock'
 const c2Only = process.env.PETDOCK_SMOKE_C2_ONLY === '1'
 const realWebSearch = process.env.PETDOCK_SMOKE_REAL_WEB === '1'
 const expectedResponse = backend === 'langchain' ? '本地模型适配测试通过' : '离线模式回应'
 const assistantThemes = ['quiet', 'note', 'glass', 'pixel', 'apple']
 const attachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-attachment.md')
 const unsupportedAttachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-unsupported.exe')
+const artifactSmokeSavePath = join(projectRoot, 'outputs', 'assistant-smoke-saved.md')
+const smokeUserDataPath = c2Only || c3Only
+  ? join(projectRoot, 'temp', `assistant-smoke-user-${process.pid}`)
+  : null
 let child
 
 async function main() {
@@ -40,8 +45,11 @@ async function main() {
     : devMode
       ? [electronViteCli, 'dev', '--remoteDebuggingPort', String(port)]
       : [`--remote-debugging-port=${port}`, projectRoot]
+  if (configuredExecutable && smokeUserDataPath) {
+    launchArgs.push(`--user-data-dir=${smokeUserDataPath}`)
+  }
   if (configuredExecutable && process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
-    launchArgs.push('--disable-gpu')
+    launchArgs.push('--disable-gpu', '--disable-gpu-compositing', '--in-process-gpu', '--use-angle=swiftshader', '--no-sandbox')
   }
   const environment = {
     ...process.env,
@@ -51,6 +59,39 @@ async function main() {
     environment.PETDOCK_LLM_API_KEY = 'local-smoke-key'
     environment.PETDOCK_LLM_BASE_URL = `http://127.0.0.1:${fakeModel.port}/v1`
     environment.PETDOCK_LLM_MODEL = 'petdock-smoke-model'
+  }
+  if (c2Only) {
+    environment.PETDOCK_SMOKE_ARTIFACT_SAVE_PATH = artifactSmokeSavePath
+    if (process.env.PETDOCK_SMOKE_ARTIFACT_SAVE_CANCEL_ONCE === '1') {
+      environment.PETDOCK_SMOKE_ARTIFACT_SAVE_CANCEL_ONCE = '1'
+      if (process.env.PETDOCK_SMOKE_ARTIFACT_SAVE_CANCEL_ONLY === '1') {
+        environment.PETDOCK_SMOKE_ARTIFACT_SAVE_CANCEL_ONLY = '1'
+      }
+    }
+    await rm(artifactSmokeSavePath, { force: true })
+  }
+  if (c3Only) {
+    environment.PETDOCK_SMOKE_WEB_FIXTURE = '1'
+  }
+  if (smokeUserDataPath) {
+    await rm(smokeUserDataPath, { recursive: true, force: true })
+    await mkdir(smokeUserDataPath, { recursive: true })
+    environment.PETDOCK_SMOKE_USER_DATA = smokeUserDataPath
+  }
+  if (devMode) {
+    const electronCliArgs = []
+    if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
+      electronCliArgs.push('--disable-gpu', '--disable-gpu-compositing', '--in-process-gpu', '--use-angle=swiftshader', '--no-sandbox')
+    }
+    if (smokeUserDataPath) {
+      electronCliArgs.push(`--user-data-dir=${smokeUserDataPath}`)
+    }
+    if (electronCliArgs.length > 0) {
+      environment.ELECTRON_CLI_ARGS = JSON.stringify(electronCliArgs)
+    }
+    if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
+      environment.NO_SANDBOX = '1'
+    }
   }
   if (!configuredExecutable) {
     environment.PETDOCK_PYTHON = pythonPath
@@ -121,6 +162,11 @@ async function main() {
     }
     if (!['unconfigured', 'untested'].includes(documentCapabilities.vision?.status)) {
       throw new Error(`Unexpected Vision state: ${documentCapabilities.vision?.status}`)
+    }
+    if (c3Only) {
+      await assertWebSearchWorkflow(petClient)
+      process.stdout.write(`ASSISTANT_C3_SMOKE_OK\n`)
+      return
     }
     if (realWebSearch) {
       const connectionResult = await evaluate(
@@ -655,6 +701,10 @@ async function main() {
     await fakeModel?.close()
     await rm(attachmentSmokePath, { force: true }).catch(() => undefined)
     await rm(unsupportedAttachmentSmokePath, { force: true }).catch(() => undefined)
+    await rm(artifactSmokeSavePath, { force: true }).catch(() => undefined)
+    if (smokeUserDataPath && process.env.PETDOCK_SMOKE_KEEP_USER_DATA !== '1') {
+      await rm(smokeUserDataPath, { recursive: true, force: true }).catch(() => undefined)
+    }
   }
 }
 
@@ -748,7 +798,76 @@ async function assertCollapsedPetAttachmentDrop(client) {
   await writeFile(attachmentScreenshotPath, Buffer.from(screenshot.data, 'base64'))
 }
 
-/** 验证 Artifact 生成、预览和删除卡片闭环。 */
+/** 验证本地可控 Provider 的搜索、正文读取、提示注入边界和最终引用闭环。 */
+async function assertWebSearchWorkflow(client) {
+  const original = await evaluate(client, 'window.desktopPet.getAssistantWebSettings()', true)
+  let temporaryKey = false
+  try {
+    const configured = Array.isArray(original.configuredProviders) &&
+      original.configuredProviders.includes('volcengine')
+    if (!configured) {
+      temporaryKey = true
+    }
+    await evaluate(
+      client,
+      `(async () => window.desktopPet.setAssistantWebSettings({
+        enabled: true,
+        provider: 'volcengine',
+        ${temporaryKey ? "apiKey: 'petdock-smoke-fixture-key'," : ''}
+      }))()`,
+      true
+    )
+    await evaluate(client, `document.querySelector('#new-conversation').click()`)
+    await submitMessage(client, '请使用联网搜索核对本地可控网页，并读取正文后回答。')
+    await waitForEvaluation(
+      client,
+      `document.querySelector('#conversation').innerText`,
+      (value) => typeof value === 'string' && value.includes('本地可控搜索已完成') && value.includes('[网页1]'),
+      20_000
+    )
+    const sourceState = await waitForEvaluation(
+      client,
+      `(() => {
+        const source = document.querySelector('.web-source')
+        return source ? {
+          count: document.querySelectorAll('.web-source').length,
+          title: source.querySelector('.web-source-link')?.textContent,
+          meta: source.querySelector('.web-source-meta')?.textContent,
+          excerpt: source.querySelector('p')?.textContent
+        } : null
+      })()`,
+      (value) => value?.count === 1 && value?.title?.includes('[网页1]') &&
+        value?.meta?.includes('已读取正文') && value?.excerpt?.includes('不可信资料'),
+      10_000
+    )
+    if (!sourceState) {
+      throw new Error('C3 source citation card was not rendered.')
+    }
+  } finally {
+    if (temporaryKey) {
+      await evaluate(
+        client,
+        `window.desktopPet.setAssistantWebSettings({
+          enabled: false,
+          provider: 'volcengine',
+          clearApiKey: true
+        })`,
+        true
+      ).catch(() => undefined)
+    } else {
+      await evaluate(
+        client,
+        `window.desktopPet.setAssistantWebSettings(${JSON.stringify({
+          enabled: original.enabled,
+          provider: original.provider
+        })})`,
+        true
+      ).catch(() => undefined)
+    }
+  }
+}
+
+/** 验证 Artifact 生成、预览、取消保存、实际保存和删除卡片闭环。 */
 async function assertArtifactWorkflow(client) {
   await evaluate(client, `document.querySelector('#new-conversation').click()`)
   await submitMessage(
@@ -792,6 +911,55 @@ async function assertArtifactWorkflow(client) {
     (value) => value === '发送',
     5_000
   )
+  const saveButton = `document.querySelector('.artifact-card-actions button[aria-label^="保存"]')`
+  await evaluate(client, `${saveButton}.click()`)
+  if (process.env.PETDOCK_SMOKE_ARTIFACT_SAVE_CANCEL_ONCE === '1') {
+    const cancelledState = await waitForEvaluation(
+      client,
+      `(() => {
+        const button = ${saveButton}
+        return button && !button.disabled
+          ? { status: document.querySelector('.artifact-card-status')?.textContent || '' }
+          : null
+      })()`,
+      (value) => value !== null,
+      10_000
+    )
+    if (!cancelledState.status.includes('已取消保存')) {
+      throw new Error(`Artifact cancellation state is invalid: ${JSON.stringify(cancelledState)}`)
+    }
+    if (process.env.PETDOCK_SMOKE_ARTIFACT_SAVE_CANCEL_ONLY === '1') {
+      return
+    }
+    const secondClickState = await evaluate(
+      client,
+      `(() => {
+        const button = ${saveButton}
+        const before = button?.disabled
+        button?.click()
+        return { found: !!button, before, after: button?.disabled }
+      })()`
+    )
+    if (!secondClickState.found || secondClickState.before || !secondClickState.after) {
+      throw new Error(`Artifact save retry did not start: ${JSON.stringify(secondClickState)}`)
+    }
+  }
+  await waitForEvaluation(
+    client,
+    `document.querySelector('.artifact-card-status')?.textContent || ''`,
+    (value) => typeof value === 'string' && value.includes('已另存'),
+    10_000
+  )
+  if (process.env.PETDOCK_SMOKE_ARTIFACT_SAVE_PATH) {
+    const saved = await readFile(artifactSmokeSavePath, 'utf8')
+    if (!saved.includes('紫色罗盘')) {
+      throw new Error('Packaged Artifact save content is invalid.')
+    }
+    const savedStat = await stat(artifactSmokeSavePath)
+    if (savedStat.size <= 0) {
+      throw new Error('Packaged Artifact save file is empty.')
+    }
+  }
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png' })
   const artifactScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-artifact$1')
   await writeFile(artifactScreenshotPath, Buffer.from(screenshot.data, 'base64'))
@@ -1232,47 +1400,40 @@ async function startFakeModelServer() {
       return
     }
 
-    request.resume()
-    response.writeHead(200, {
+    const chunks = []
+    request.on('data', (chunk) => chunks.push(chunk))
+    request.once('end', () => {
+      let requestBody = {}
+      try {
+        requestBody = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      } catch {
+        response.writeHead(400).end()
+        return
+      }
+      response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive'
-    })
-    const chunks = ['本地', '模型', '适配', '测试', '通过', '。']
-    let index = 0
-    const timer = setInterval(() => {
-      if (index < chunks.length) {
-        response.write(
-          `data: ${JSON.stringify({
-            id: 'chatcmpl-petdock-smoke',
-            object: 'chat.completion.chunk',
-            created: 1,
-            model: 'petdock-smoke-model',
-            choices: [
-              {
-                index: 0,
-                delta: index === 0 ? { role: 'assistant', content: chunks[index] } : { content: chunks[index] },
-                finish_reason: null
-              }
-            ]
-          })}\n\n`
-        )
-        index += 1
+      })
+      if (c3Only) {
+        const messages = Array.isArray(requestBody.messages) ? requestBody.messages : []
+        const toolMessages = messages.filter((message) => message?.role === 'tool')
+        if (toolMessages.length === 0) {
+          writeToolCall(response, 'call-search', 'search_web', {
+            query: 'PetDock 本地可控网页',
+            maxResults: 1
+          })
+        } else if (toolMessages.length === 1) {
+          writeToolCall(response, 'call-fetch', 'fetch_web_page', {
+            url: 'https://93.184.216.34/petdock-smoke'
+          })
+        } else {
+          writeTextResponse(response, ['本地可控搜索', '已完成', '。', '[网页1]'])
+        }
         return
       }
-      clearInterval(timer)
-      response.write(
-        `data: ${JSON.stringify({
-          id: 'chatcmpl-petdock-smoke',
-          object: 'chat.completion.chunk',
-          created: 1,
-          model: 'petdock-smoke-model',
-          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
-        })}\n\n`
-      )
-      response.end('data: [DONE]\n\n')
-    }, 25)
-    response.on('close', () => clearInterval(timer))
+      writeTextResponse(response, ['本地', '模型', '适配', '测试', '通过', '。'])
+    })
   })
 
   await new Promise((resolveListen, reject) => {
@@ -1283,6 +1444,68 @@ async function startFakeModelServer() {
     port,
     close: () => new Promise((resolveClose) => server.close(() => resolveClose()))
   }
+}
+
+/** 向 OpenAI 兼容 SSE 返回一个完整工具调用，供 LangChain 解析为 tool_call_chunks。 */
+function writeToolCall(response, id, name, args) {
+  response.write(
+    `data: ${JSON.stringify({
+      id: 'chatcmpl-petdock-smoke',
+      object: 'chat.completion.chunk',
+      created: 1,
+      model: 'petdock-smoke-model',
+      choices: [{
+        index: 0,
+        delta: {
+          role: 'assistant',
+          tool_calls: [{
+            index: 0,
+            id,
+            type: 'function',
+            function: { name, arguments: JSON.stringify(args) }
+          }]
+        },
+        finish_reason: 'tool_calls'
+      }]
+    })}\n\n`
+  )
+  response.end('data: [DONE]\n\n')
+}
+
+/** 向 OpenAI 兼容 SSE 分片返回文本回答。 */
+function writeTextResponse(response, chunks) {
+  let index = 0
+  const timer = setInterval(() => {
+    if (index < chunks.length) {
+      response.write(
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-petdock-smoke',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: 'petdock-smoke-model',
+          choices: [{
+            index: 0,
+            delta: index === 0 ? { role: 'assistant', content: chunks[index] } : { content: chunks[index] },
+            finish_reason: null
+          }]
+        })}\n\n`
+      )
+      index += 1
+      return
+    }
+    clearInterval(timer)
+    response.write(
+      `data: ${JSON.stringify({
+        id: 'chatcmpl-petdock-smoke',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'petdock-smoke-model',
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+      })}\n\n`
+    )
+    response.end('data: [DONE]\n\n')
+  }, 25)
+  response.on('close', () => clearInterval(timer))
 }
 
 function waitForExit(process, timeoutMs) {
