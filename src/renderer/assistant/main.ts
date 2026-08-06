@@ -869,7 +869,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     modelConfiguredStatus.textContent = snapshot?.configuredKey
       ? `密钥已安全保存（${snapshot.source === 'saved' ? '应用配置' : '环境变量'}）`
       : '尚未配置 API Key，Runtime 将使用模拟后端'
-    modelClearKey.disabled = modelBusy || !snapshot?.configuredKey
+    renderModelBusyState()
+  }
+
+  /** 只更新主模型表单的忙碌态，避免保存前重绘并清空用户输入。 */
+  function renderModelBusyState(): void {
+    modelClearKey.disabled = modelBusy || !modelSettings?.configuredKey
     modelSave.disabled = modelBusy
     modelBaseUrl.disabled = modelBusy
     modelName.disabled = modelBusy
@@ -878,7 +883,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
   /** 保存主模型设置；Runtime 重启期间短暂显示启动状态。 */
   async function saveModelSettings(): Promise<void> {
+    const baseUrl = modelBaseUrl.value.trim()
     const model = modelName.value.trim()
+    const apiKey = modelApiKey.value.trim()
     if (!model) {
       showError('请填写主模型名称。')
       modelName.focus()
@@ -887,9 +894,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     setModelBusy(true)
     try {
       modelSettings = await window.desktopPet.setAssistantModelSettings({
-        baseUrl: modelBaseUrl.value.trim(),
+        baseUrl,
         model,
-        ...(modelApiKey.value.trim() ? { apiKey: modelApiKey.value.trim() } : {})
+        ...(apiKey ? { apiKey } : {})
       })
       modelSaveStatus.textContent = '主模型配置已保存。'
       clearError()
@@ -924,7 +931,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 统一锁定主模型配置控件，防止保存期间重复重启 Runtime。 */
   function setModelBusy(value: boolean): void {
     modelBusy = value
-    renderModelSettings()
+    renderModelBusyState()
   }
 
   /** 根据 Main 返回的脱敏快照渲染设置，不回填 API Key。 */
