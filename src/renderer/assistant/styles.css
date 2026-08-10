@@ -887,17 +887,14 @@ button:disabled {
 }
 
 .retrieval-sources {
+  order: -1;
   width: min(92%, 390px);
-  margin: 6px 0 0;
+  margin: 0 0 6px;
   border: 1px solid #ccd3dc;
   border-radius: 7px;
   color: #4d5865;
   background: rgb(255 255 255 / 0.92);
   box-shadow: 0 4px 12px rgb(28 35 45 / 0.09);
-}
-
-.message.assistant .retrieval-sources {
-  align-self: flex-start;
 }
 
 .retrieval-sources summary {
@@ -1177,6 +1174,7 @@ body[data-theme="apple"] .memory-candidate span {
 .message {
   display: flex;
   flex: 0 0 auto;
+  flex-direction: column;
   width: 100%;
   margin: 0 0 20px;
   animation: bubble-in 180ms ease-out both;
@@ -1186,28 +1184,14 @@ body[data-theme="apple"] .memory-candidate span {
   margin-top: auto;
 }
 
-.message.has-artifact {
-  flex-direction: column;
-}
-
-body[data-side="left"] .message.user.has-artifact,
-body[data-side="right"] .message.assistant.has-artifact {
-  align-items: flex-end;
-}
-
-body[data-side="left"] .message.assistant.has-artifact,
-body[data-side="right"] .message.user.has-artifact {
-  align-items: flex-start;
-}
-
 body[data-side="left"] .message.user,
 body[data-side="right"] .message.assistant {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 body[data-side="left"] .message.assistant,
 body[data-side="right"] .message.user {
-  justify-content: flex-start;
+  align-items: flex-start;
 }
 
 .message-body {
@@ -1518,11 +1502,11 @@ body[data-side="right"] .message.user .message-body::after {
 }
 
 .permission-message {
-  justify-content: flex-start;
+  align-items: flex-start;
 }
 
 body[data-side="left"] .permission-message {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .permission-card {
