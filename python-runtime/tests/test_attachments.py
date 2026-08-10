@@ -165,7 +165,10 @@ def test_attachment_api_emits_sources_and_cleans_conversation(tmp_path: Path) ->
             return events, history.json(), deleted.json()["deleted"]
 
     events, history, deleted = asyncio.run(scenario())
-    assert any(event["type"] == "attachment_sources" for event in events)
+    attachment_event = next(event for event in events if event["type"] == "attachment_sources")
+    assert attachment_event["payload"]["mode"] == "direct"
+    assert attachment_event["payload"]["totalAttachments"] == 1
+    assert attachment_event["payload"]["sources"][0]["citationIndex"] == 1
     response_text = "".join(
         str(event["payload"]["delta"])
         for event in events

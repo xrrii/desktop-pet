@@ -713,8 +713,12 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 Electron Main、Preload、Renderer 和 Python Runtime 的职责边界保持稳定，核心功能不需要为后续增强推翻重做。
 
-后续增强以 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md` 为方案基线。当前 C1、C1.1、C2、C3 与 C4 已完成，C5 为多文件只读分析和会话级临时索引，状态为 Not Started；C6 规划受控 Python 执行、复杂文档输出和修改，状态为 Deferred。C2 沿用既有职责边界：Runtime 的 `create_artifact` 只向应用受控目录生成白名单文本文件并维护 SQLite 索引，Main 只按 Artifact ID 读取内容、打开原生“另存为”对话框并执行可恢复的原子写入，Preload 仅暴露预览、保存和删除 IPC，Renderer 只展示脱敏摘要、卡片和只读预览；开发版与解包版 Smoke 已覆盖取消、实际保存和删除。C3 将 Main 作为唯一联网边界：火山引擎豆包搜索为默认 Provider，Brave Search 作为兼容 Provider，API Key 按 Provider 使用 `safeStorage` 隔离保存；搜索和网页抓取执行公网 DNS/重定向/大小/超时策略，完整网页正文只进入 Runtime 当前任务，Renderer 只接收最终实际引用的短来源；开发版与解包版本地可控 Provider Smoke 已覆盖搜索、抓取和引用。C4 在 Runtime 内建立附件与知识库共用的 `DocumentParserRegistry`，PDF/Office 只解析静态内容；图片先生成去除 EXIF/GPS 的安全派生图，再由无工具、无记忆、无 Skill 权限的独立 Vision Analyzer 生成结构化摘要。视觉配置默认继承主模型地址、凭据引用和模型名，但只有主动能力探测通过后才能启用图片输入；扫描 PDF OCR 不属于 C4。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。
+后续增强以 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md` 为方案基线。当前 C1 至 C5 已完成；C6 规划受控 Python 执行、复杂文档输出和修改，状态为 Deferred。C2 沿用既有职责边界：Runtime 的 `create_artifact` 只向应用受控目录生成白名单文本文件并维护 SQLite 索引，Main 只按 Artifact ID 读取内容、打开原生“另存为”对话框并执行可恢复的原子写入，Preload 仅暴露预览、保存和删除 IPC，Renderer 只展示脱敏摘要、卡片和只读预览；开发版与解包版 Smoke 已覆盖取消、实际保存和删除。C3 将 Main 作为唯一联网边界：火山引擎豆包搜索为默认 Provider，Brave Search 作为兼容 Provider，API Key 按 Provider 使用 `safeStorage` 隔离保存；搜索和网页抓取执行公网 DNS/重定向/大小/超时策略，完整网页正文只进入 Runtime 当前任务，Renderer 只接收最终实际引用的短来源；开发版与解包版本地可控 Provider Smoke 已覆盖搜索、抓取和引用。C4 在 Runtime 内建立附件与知识库共用的 `DocumentParserRegistry`，PDF/Office 只解析静态内容；图片先生成去除 EXIF/GPS 的安全派生图，再由无工具、无记忆、无 Skill 权限的独立 Vision Analyzer 生成结构化摘要。视觉配置默认继承主模型地址、凭据引用和模型名，但只有主动能力探测通过后才能启用图片输入；扫描 PDF OCR 不属于 C4。C5 汇总当前会话全部附件，12,000 tokens 内直接注入，超出后使用复用活动 Embedding Profile、但与知识库完全隔离的会话临时索引，并把检索注入限制为 8,000 tokens；来源卡片明确显示逐文件命中与结构位置，删除会话时级联清理派生索引。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。
 
 #### C4 实现记录（2026-08-04）
 
-C4 已完成输入实现和本地/打包验收。`python-runtime/petdock_runtime/document_parser.py` 是附件与知识库唯一 Parser Registry；附件 SQLite 通过增量列迁移保留 C1 正文，知识库 `document_chunks.location_json` 保留旧 Chunk 兼容性。Renderer 只接收结构块、脱敏元数据和资源 ID，并提供不回填密钥的视觉配置与主动探测界面，不接触 Runtime 绝对路径、图片字节或模型密钥。Vision Analyzer 的配置由 Main `safeStorage` 管理，Runtime 只读取环境注入的短生命周期凭据并直接调用固定视觉端点，摘要缓存不保存 Base64。C4 不生成复杂格式 Artifact；C5/C6 仍按本文档原范围延期。
+C4 已完成输入实现和本地/打包验收。`python-runtime/petdock_runtime/document_parser.py` 是附件与知识库唯一 Parser Registry；附件 SQLite 通过增量列迁移保留 C1 正文，知识库 `document_chunks.location_json` 保留旧 Chunk 兼容性。Renderer 只接收结构块、脱敏元数据和资源 ID，并提供不回填密钥的视觉配置与主动探测界面，不接触 Runtime 绝对路径、图片字节或模型密钥。Vision Analyzer 的配置由 Main `safeStorage` 管理，Runtime 只读取环境注入的短生命周期凭据并直接调用固定视觉端点，摘要缓存不保存 Base64。C4 不生成复杂格式 Artifact；C6 仍按本文档原范围延期。
+
+#### C5 实现记录（2026-08-10）
+
+C5 在 Runtime 内新增会话附件分析服务和独立临时索引，不增加 Renderer 文件权限，也不改变 Main 的附件授权边界。知识库和附件索引共用 Chunk 策略及活动 Embedding Profile，但数据库、Chroma 目录和 collection 隔离；资料量、模式、逐文件覆盖、位置、未命中范围和解析警告通过结构化事件返回。开发版与 Windows 解包版 Smoke 已覆盖双文件检索、跨轮复用和来源展示。

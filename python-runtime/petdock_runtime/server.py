@@ -10,6 +10,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from .attachment_store import AttachmentStore
+from .attachment_index import AttachmentAnalysisService, AttachmentIndexStore
 from .artifact_store import ArtifactStore
 from .backends import create_backend
 from .config import RuntimeConfig
@@ -65,6 +66,9 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     artifacts = ArtifactStore(config.memory_db_path, config.artifact_root)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
     embedding = create_embedding_provider(config)
+    attachment_index = AttachmentIndexStore(config.attachment_index_root, embedding)
+    attachment_index.reconcile(attachments.conversation_ids())
+    attachment_analysis = AttachmentAnalysisService(attachments, attachment_index, embedding)
     fallback_vectors = (
         ChromaVectorStore(config.chroma_path, LocalHashEmbedding())
         if embedding.descriptor.id != LocalHashEmbedding.name
@@ -92,7 +96,15 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
             attachments.apply_vision_summary(record.id, summary.as_dict())
 
     service = AssistantService(
-        create_backend(config, store, knowledge, skills, attachments, artifacts),
+        create_backend(
+            config,
+            store,
+            knowledge,
+            skills,
+            attachments,
+            artifacts,
+            attachment_analysis,
+        ),
         create_memory_extractor(config, store),
         prepare_attachments,
     )
@@ -388,6 +400,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         """删除一条记忆、会话或常用项。"""
         authorize(authorization)
         if request.kind == "conversation":
+            if not attachment_index.delete_conversation(request.id):
+                raise HTTPException(status_code=500, detail="attachment_index_cleanup_failed")
             attachments.delete_conversation(request.id)
             if not artifacts.delete_conversation(request.id):
                 raise HTTPException(status_code=500, detail="artifact_cleanup_failed")
@@ -413,6 +427,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         """按范围清理会话、长期记忆或工具日志。"""
         authorize(authorization)
         if request.scope in {"all", "conversations"}:
+            if not attachment_index.clear():
+                raise HTTPException(status_code=500, detail="attachment_index_cleanup_failed")
             attachments.clear_conversations()
             if not artifacts.clear_conversations():
                 raise HTTPException(status_code=500, detail="artifact_cleanup_failed")
@@ -588,6 +604,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         vision.close()
         skills.close()
         attachments.cleanup_drafts()
+        attachment_index.close()
         attachments.close()
         artifacts.close()
         store.close()

@@ -2161,7 +2161,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
 
     if (event.type === 'attachment_sources') {
-      renderAttachmentSources(event.payload.sources)
+      renderAttachmentSources(event.payload)
       return
     }
 
@@ -2458,29 +2458,51 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
   /** 展示本轮实际进入模型上下文的附件来源和截断状态。 */
   function renderAttachmentSources(
-    sources: Extract<AssistantEvent, { type: 'attachment_sources' }>['payload']['sources']
+    payload: Extract<AssistantEvent, { type: 'attachment_sources' }>['payload']
   ): void {
     const article = activeAssistantMessage?.closest('article')
-    if (!article || sources.length === 0) {
+    if (!article || payload.totalAttachments === 0) {
       return
     }
     article.querySelector('.attachment-sources')?.remove()
     const details = document.createElement('details')
     details.className = 'retrieval-sources attachment-sources'
     const summary = document.createElement('summary')
-    summary.textContent = `已读取附件 ${sources.length}`
+    summary.textContent = payload.mode === 'direct'
+      ? `已直接读取附件 ${payload.sources.length}`
+      : `附件命中 ${new Set(payload.sources.map((source) => source.attachmentId)).size} / ${payload.totalAttachments}`
     details.append(summary)
-    sources.forEach((source) => {
+    payload.sources.forEach((source) => {
       const item = document.createElement('div')
       item.className = 'retrieval-source attachment-source'
       const title = document.createElement('strong')
-      title.textContent = source.name + (source.truncated ? '（内容已截断）' : '')
+      title.textContent = `[附件资料${source.citationIndex}] ${source.name}${source.mode === 'retrieval' ? '（命中片段）' : ''}`
       const location = document.createElement('span')
       location.textContent = formatDocumentLocation(source.location).replace(/^ · /, '')
       location.hidden = !location.textContent
       const excerpt = document.createElement('p')
       excerpt.textContent = source.excerpt || '附件无可展示摘要。'
       item.append(title, location, excerpt)
+      details.append(item)
+    })
+    payload.unmatchedAttachments.forEach((source) => {
+      const item = document.createElement('div')
+      item.className = 'retrieval-source attachment-source'
+      const title = document.createElement('strong')
+      title.textContent = `${source.name}（未命中）`
+      const reason = document.createElement('p')
+      reason.textContent = source.reason
+      item.append(title, reason)
+      details.append(item)
+    })
+    payload.warnings.forEach((warning) => {
+      const item = document.createElement('div')
+      item.className = 'retrieval-source attachment-source'
+      const title = document.createElement('strong')
+      title.textContent = `${warning.name}（解析警告）`
+      const message = document.createElement('p')
+      message.textContent = warning.message
+      item.append(title, message)
       details.append(item)
     })
     article.append(details)
@@ -2967,8 +2989,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (location.page) return ` · 第 ${location.page} 页`
     if (location.sheet) return ` · ${location.sheet}${location.cellRange ? `!${location.cellRange}` : ''}`
     if (location.slide) return ` · 幻灯片 ${location.slide}`
-    if (location.headingPath.length > 0) return ` · ${location.headingPath.join(' / ')}${location.paragraph ? ` / 段落 ${location.paragraph}` : ''}`
+    if (location.headingPath?.length > 0) return ` · ${location.headingPath.join(' / ')}${location.paragraph ? ` / 段落 ${location.paragraph}` : ''}`
     if (location.paragraph) return ` · 段落 ${location.paragraph}`
+    if (location.lineStart) return ` · 第 ${location.lineStart}-${location.lineEnd || location.lineStart} 行`
+    if (location.block) return ` · 块 ${location.block}`
     return location.value ? ` · ${location.value}` : ''
   }
 

@@ -20,11 +20,11 @@ Deferred     延后
 
 ## 1. 当前总览
 
-更新时间：2026-08-04
+更新时间：2026-08-10
 
 ```text
 AI 助手核心功能状态：Done（阶段 1 至阶段 5）
-后续增强状态：In Progress（C1、C1.1、C2、C3、C4 已完成，C5 Not Started，C6 Deferred）
+后续增强状态：In Progress（C1 至 C5 已完成，C6 Deferred）
 架构设计状态：Done
 AI 开工前工程基线：Done
 桌宠基础能力：Done
@@ -32,7 +32,7 @@ Python LangChain Runtime：Done（阶段 5）
 RAG 文档管理：Done（阶段 4）
 RAG 检索优化：In Progress（R0/R3/R4 部分完成、R1 完成、R2 主体已实现但未完成正式验收）
 Skill 系统：Done（阶段 5）
-对话资源能力：In Progress（C1、C1.1、C2、C3、C4 Done，C5 Not Started，C6 Deferred）
+对话资源能力：In Progress（C1 至 C5 Done，C6 Deferred）
 ```
 
 ## 2. 已完成事项
@@ -225,14 +225,14 @@ Skill 系统：Done（阶段 5）
 
 ### 对话资源能力
 
-状态：In Progress（C1、C1.1、C2、C3、C4 已完成，C5 Not Started，C6 Deferred）
+状态：In Progress（C1 至 C5 已完成，C6 Deferred）
 
 - [x] C1：拖拽附件与文本解析。
 - [x] C1.1：草稿/历史附件文本预览与失败投放提示。
 - [x] C2：基础 Artifact 文件输出（开发版与解包版生成、预览、取消保存、实际保存和删除验收完成）。
 - [x] C3：联网搜索与网页引用（开发版与解包版本地可控 Provider 搜索、抓取、引用验收完成）。
 - [x] C4：复杂文档输入与条件式图片理解。
-- [ ] C5：多文件只读分析和临时索引。
+- [x] C5：多文件只读分析和临时索引（开发版与解包版双文件检索、跨轮复用、来源定位验收完成）。
 - [ ] C6：受控 Python 执行与复杂文档输出/修改（Deferred，未排期）。
 
 实现基线：
@@ -273,6 +273,15 @@ C2 已实现：
 - Artifact 生成、保存和删除写入不含正文及目标路径的现有 JSONL 工具审计日志；删除会话、清空会话或显式删除卡片时清理应用内文件，外部另存副本不由 PetDock 管理。
 - `npm.cmd run typecheck`、26 个 TypeScript 测试和 35 个 Python Runtime 测试通过；Runtime 测试覆盖七种格式、Windows 文件名清理、大小与会话隔离、生成事件、预览、内容读取、保存标记和会话清理，Main 写入测试覆盖新建、原子覆盖、替换失败保留原文件、清理异常不误报和 Windows 符号链接拒绝。
 - 开发版与解包版 E2E 已验证 Artifact 生成、卡片、预览、取消保存、实际保存内容和删除；生产路径仍由 Windows 原生“另存为”对话框选择目标，Smoke 仅在测试环境替换 Main 选择结果，C2 已标记为 Done。
+
+C5 已实现：
+
+- Runtime 按会话读取全部已绑定附件，使用活动 Embedding Profile 的 Token 计数统一决策：总量不超过 12,000 tokens 直接注入，超出后切换到最多 8,000 tokens 的相关片段上下文。
+- 会话索引位于独立 `assistant/session-index/<profile-signature>`，使用独立 SQLite/FTS5、Chroma 目录和 collection；Chunk 策略与知识库共用，向量生成复用活动 Profile，但数据不会进入长期知识库。
+- 索引按附件内容指纹、Embedding 签名和 Chunk 版本增量更新；向量失败可降级到 FTS5，索引整体失败时本轮对话继续并明确显示未读取范围。
+- 多文件比较、总结、字段提取和交叉核对优先保证逐文件覆盖；结构化 `attachment_sources` 显示直接读取或命中片段、引用编号、分数、行/块/页/标题路径/工作表/幻灯片位置、未命中文件和解析警告。
+- 删除会话、清空会话和切换 Embedding Profile 会清理对应派生索引；后续轮次无需重新上传或重复提交附件 ID。
+- 69 项 TypeScript 测试、73 项 Python Runtime 测试、类型检查和生产构建通过；开发版与 Windows 解包版 `test:e2e:assistant:c5` Smoke 均通过。
 
 ### RAG 后续增强
 
@@ -468,3 +477,11 @@ C2 已实现：
 - 图片附件登记已改为延迟视觉分析：拖入/选择阶段仅做本地安全校验和元数据解析，发送任务启动后才按附件顺序调用 Vision Analyzer，并在主模型推理前等待结果；知识库图片索引默认关闭不变。
 - C4 输入依赖锁定为 `pypdf 6.14.2`（BSD-3-Clause）、`python-docx 1.2.0`（MIT）、`openpyxl 3.1.5`（MIT）、`python-pptx 1.0.2`（MIT）、`Pillow 12.3.0`（MIT-CMU）、`defusedxml 0.7.1`（PSFL）；必要传递依赖 `lxml 6.1.1`（BSD-3-Clause）、`XlsxWriter 3.2.9`（BSD-2-Clause）已锁定。未引入 reportlab、OCR 模型或复杂生成依赖。
 - 真实视觉 Provider 的在线验证码探测和多端点兼容性仍需在具备可控视觉模型凭据的环境完成；C2/C3 已完成验收，C5 多文件只读分析仍未开始。
+
+### 2026-08-10（C5 多文件只读分析与临时索引）
+
+- 完成会话资料集汇总与 Token 决策：不超过 12,000 tokens 直接注入，超出后检索最多 8,000 tokens 的相关片段；后续轮次自动复用会话已绑定附件。
+- 临时索引复用活动 Embedding Profile 和统一 Chunk 策略，但使用独立 SQLite/FTS5、Chroma 目录及 collection；内容指纹、Profile 签名和 Chunk 版本共同控制增量更新与重建。
+- 多文件问题优先保留逐文件证据，来源事件和界面区分直接读取、命中片段、未命中文件及解析警告，并展示 C4 结构位置或文本行号。
+- 删除会话、清空会话和 Profile 切换均有派生索引清理规则；向量不可用时降级 FTS5，索引整体故障时不终止对话且明确提示未读取范围。
+- 类型检查、69 项 TypeScript 测试、73 项 Python Runtime 测试和生产构建通过；开发版与 Windows 解包版 C5 Smoke 均完成双文件检索、跨轮复用和来源展示验收。

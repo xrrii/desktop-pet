@@ -70,6 +70,10 @@ export interface AssistantDocumentLocation {
   sheet: string | null
   cellRange: string | null
   slide: number | null
+  block?: number | null
+  sourceBlock?: number | null
+  lineStart?: number | null
+  lineEnd?: number | null
 }
 
 export interface AssistantDocumentBlock {
@@ -571,12 +575,30 @@ export interface AssistantRetrievalSourcesEvent extends AssistantEventBase {
 export interface AssistantAttachmentSourcesEvent extends AssistantEventBase {
   type: 'attachment_sources'
   payload: {
+    mode: 'direct' | 'retrieval'
+    totalAttachments: number
+    totalTokens: number
     sources: Array<{
       id: string
+      attachmentId: string
+      citationIndex: number
       name: string
       excerpt: string
       truncated: boolean
+      mode: 'direct' | 'retrieval'
+      score: number
       location?: AssistantDocumentLocation | null
+    }>
+    unmatchedAttachments: Array<{
+      id: string
+      name: string
+      reason: string
+    }>
+    warnings: Array<{
+      id: string
+      name: string
+      code: string
+      message: string
     }>
   }
 }

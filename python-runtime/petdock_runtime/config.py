@@ -32,6 +32,7 @@ class RuntimeConfig:
     embedding_dimensions: int | None = None
     attachment_root: str = "attachments"
     artifact_root: str = "artifacts"
+    attachment_index_root: str = ":memory:"
     vision_api_key: str | None = None
     vision_base_url: str | None = None
     vision_model: str | None = None
@@ -68,6 +69,9 @@ class RuntimeConfig:
         )
         artifact_root = os.environ.get("PETDOCK_ARTIFACT_ROOT", "").strip() or os.path.join(
             os.getcwd(), "assistant", "artifacts"
+        )
+        attachment_index_root = os.environ.get("PETDOCK_ATTACHMENT_INDEX_ROOT", "").strip() or os.path.join(
+            os.getcwd(), "assistant", "session-index"
         )
         embedding_provider = os.environ.get("PETDOCK_EMBEDDING_PROVIDER", "hash").strip().lower()
         if embedding_provider not in {"hash", "local", "online"}:
@@ -127,6 +131,7 @@ class RuntimeConfig:
             skills_root=skills_root,
             attachment_root=attachment_root,
             artifact_root=artifact_root,
+            attachment_index_root=attachment_index_root,
             embedding_provider=embedding_provider,  # type: ignore[arg-type]
             embedding_model_dir=embedding_model_dir,
             embedding_descriptor_json=embedding_descriptor_json,

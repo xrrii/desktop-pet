@@ -27,7 +27,7 @@ PetDock 是一个基于 Electron 的透明桌面宠物应用，并集成了本�
   - `open_app`：打开白名单应用 `notepad`、`explorer`、`calculator`，需要用户确认。
   - `open_file_or_folder`：打开存在的文件或目录，需要用户确认。
   - `search_web` / `fetch_web_page`：在联网搜索启用后由 Main 统一执行。
-- 支持附件对话：最多 10 个 UTF-8 文本附件，真实路径不暴露给 Renderer。
+- 支持附件对话：单轮最多 10 个文本、PDF、DOCX、XLSX、PPTX 或条件式图片附件，真实路径不暴露给 Renderer；会话资料集超过 12,000 tokens 时自动使用独立临时索引进行多文件只读分析。
 - 支持 Artifact 生成：Runtime 只在应用受控目录写入白名单文本格式，Main 通过原生“另存为”对话框保存到用户选择位置。
 - 支持记忆管理：会话历史、长期偏好、常用应用/目录、工具日志和记忆候选确认。
 - 支持本地知识库：目录授权、索引、暂停、恢复、删除索引、来源引用。
@@ -187,6 +187,8 @@ npm.cmd run test:runtime:packaged
 ```powershell
 npm.cmd run test:e2e:assistant
 npm.cmd run test:e2e:assistant:packaged
+npm.cmd run test:e2e:assistant:c5
+npm.cmd run test:e2e:assistant:c5:packaged
 ```
 
 如果要验证 LangChain 后端链路：
@@ -200,12 +202,13 @@ npm.cmd run test:e2e:assistant:langchain
 Electron 会把用户配置和 Runtime 数据放到 `app.getPath('userData')` 对应目录，主要包括：
 
 - `settings.json`：桌宠 ID、位置、缩放、置顶、点击穿透、助手主题和选中的知识库。
-- `assistant.db`：会话、记忆、附件索引、Artifact 索引和工具日志。
+- `assistant.db`：会话、记忆、附件元数据、Artifact 索引和工具日志。
 - `knowledge.db`：知识库业务数据。
 - `rag/chroma`：Chroma 向量索引。
 - `skills.db`：Skill 状态。
 - `skills/packages`：已安装 Skill 包。
 - `assistant/attachments`：受控附件副本。
+- `assistant/session-index`：按活动 Embedding Profile 隔离的会话附件临时索引。
 - `assistant/artifacts`：应用内生成文件。
 - `assistant/web-search*.json/bin`：联网搜索配置和加密 API Key。
 - `pets`：用户自定义桌宠资源目录。

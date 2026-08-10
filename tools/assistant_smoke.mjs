@@ -25,13 +25,16 @@ const rightScreenshotPath = join(
 const c3Only = process.env.PETDOCK_SMOKE_C3_ONLY === '1'
 const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' || c3Only ? 'langchain' : 'mock'
 const c2Only = process.env.PETDOCK_SMOKE_C2_ONLY === '1'
+const c5Only = process.env.PETDOCK_SMOKE_C5_ONLY === '1'
 const realWebSearch = process.env.PETDOCK_SMOKE_REAL_WEB === '1'
 const expectedResponse = backend === 'langchain' ? '本地模型适配测试通过' : '离线模式回应'
 const assistantThemes = ['quiet', 'note', 'glass', 'pixel', 'apple']
 const attachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-attachment.md')
 const unsupportedAttachmentSmokePath = join(projectRoot, 'outputs', 'assistant-smoke-unsupported.exe')
 const artifactSmokeSavePath = join(projectRoot, 'outputs', 'assistant-smoke-saved.md')
-const smokeUserDataPath = c2Only || c3Only
+const c5FirstAttachmentPath = join(projectRoot, 'outputs', 'assistant-smoke-c5-first.txt')
+const c5SecondAttachmentPath = join(projectRoot, 'outputs', 'assistant-smoke-c5-second.txt')
+const smokeUserDataPath = c2Only || c3Only || c5Only
   ? join(projectRoot, 'temp', `assistant-smoke-user-${process.pid}`)
   : null
 let child
@@ -162,6 +165,11 @@ async function main() {
     }
     if (!['unconfigured', 'untested'].includes(documentCapabilities.vision?.status)) {
       throw new Error(`Unexpected Vision state: ${documentCapabilities.vision?.status}`)
+    }
+    if (c5Only) {
+      await assertMultiFileAttachmentWorkflow(petClient)
+      process.stdout.write(`ASSISTANT_C5_SMOKE_OK\n`)
+      return
     }
     if (c3Only) {
       await assertWebSearchWorkflow(petClient)
@@ -702,10 +710,104 @@ async function main() {
     await rm(attachmentSmokePath, { force: true }).catch(() => undefined)
     await rm(unsupportedAttachmentSmokePath, { force: true }).catch(() => undefined)
     await rm(artifactSmokeSavePath, { force: true }).catch(() => undefined)
+    await rm(c5FirstAttachmentPath, { force: true }).catch(() => undefined)
+    await rm(c5SecondAttachmentPath, { force: true }).catch(() => undefined)
     if (smokeUserDataPath && process.env.PETDOCK_SMOKE_KEEP_USER_DATA !== '1') {
       await rm(smokeUserDataPath, { recursive: true, force: true }).catch(() => undefined)
     }
   }
+}
+
+/** 验证大资料集进入会话临时索引、多文件命中、位置引用和跨轮复用。 */
+async function assertMultiFileAttachmentWorkflow(client) {
+  await mkdir(dirname(c5FirstAttachmentPath), { recursive: true })
+  const firstContent = Array.from(
+    { length: 1_400 },
+    (_, index) => `line ${index + 1} alpha timeout setting 30 seconds first profile`
+  ).join('\n')
+  const secondContent = Array.from(
+    { length: 1_400 },
+    (_, index) => `line ${index + 1} alpha timeout setting 60 seconds second profile`
+  ).join('\n')
+  await Promise.all([
+    writeFile(c5FirstAttachmentPath, firstContent, 'utf8'),
+    writeFile(c5SecondAttachmentPath, secondContent, 'utf8')
+  ])
+
+  await evaluate(client, `document.querySelector('#new-conversation').click()`)
+  await dropFilesOnComposer(client, [c5FirstAttachmentPath, c5SecondAttachmentPath])
+  await waitForEvaluation(
+    client,
+    `(() => ({
+      count: document.querySelectorAll('#attachment-list .attachment-chip').length,
+      ready: document.querySelectorAll('#attachment-list .attachment-chip[data-status="ready"]').length
+    }))()`,
+    (value) => value?.count === 2 && value?.ready === 2,
+    15_000
+  )
+
+  await submitMessage(client, '比较这些文件的 alpha timeout 配置')
+  const firstResult = await waitForEvaluation(
+    client,
+    `(() => {
+      const message = document.querySelector('.message.assistant:last-of-type')
+      const details = message?.querySelector('.attachment-sources')
+      return details ? {
+        summary: details.querySelector('summary')?.textContent || '',
+        titles: Array.from(details.querySelectorAll('.attachment-source strong')).map((node) => node.textContent || ''),
+        locations: Array.from(details.querySelectorAll('.attachment-source span')).map((node) => node.textContent || ''),
+        body: message.querySelector('.message-body')?.textContent || '',
+        sendLabel: document.querySelector('#send-button')?.getAttribute('aria-label') || ''
+      } : null
+    })()`,
+    (value) => value?.summary === '附件命中 2 / 2' &&
+      value?.titles?.some((title) => title.includes('assistant-smoke-c5-first.txt（命中片段）')) &&
+      value?.titles?.some((title) => title.includes('assistant-smoke-c5-second.txt（命中片段）')) &&
+      value?.locations?.filter((location) => location.includes('行')).length >= 2 &&
+      value?.body?.includes('timeout') && value?.sendLabel === '发送',
+    30_000
+  )
+  if (!smokeUserDataPath) {
+    throw new Error('C5 smoke requires an isolated user data directory.')
+  }
+  const indexRoot = join(smokeUserDataPath, 'assistant', 'session-index')
+  const indexStat = await stat(indexRoot)
+  if (!indexStat.isDirectory()) {
+    throw new Error('C5 session index directory was not created.')
+  }
+
+  await submitMessage(client, '再次比较这些文件的 alpha timeout 配置')
+  await waitForEvaluation(
+    client,
+    `(() => {
+      const message = document.querySelector('.message.assistant:last-of-type')
+      return {
+        summary: message?.querySelector('.attachment-sources summary')?.textContent || '',
+        attachmentChips: document.querySelectorAll('#attachment-list .attachment-chip').length,
+        body: message?.querySelector('.message-body')?.textContent || '',
+        sendLabel: document.querySelector('#send-button')?.getAttribute('aria-label') || ''
+      }
+    })()`,
+    (value) => value?.summary === '附件命中 2 / 2' && value?.attachmentChips === 0 &&
+      value?.body?.includes('timeout') && value?.sendLabel === '发送',
+    30_000
+  )
+
+  await evaluate(
+    client,
+    `(() => {
+      const details = document.querySelector('.message.assistant:last-of-type .attachment-sources')
+      if (details) {
+        details.open = true
+        details.scrollIntoView({ block: 'end' })
+      }
+    })()`
+  )
+  await delay(200)
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' })
+  const c5ScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-c5$1')
+  await writeFile(c5ScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  await evaluate(client, `window.desktopPet.clearAssistantMemory('conversations')`, true)
 }
 
 /** 验证真实文件拖到收起桌宠后自动展开，并完成只附件对话。 */
@@ -984,6 +1086,25 @@ async function dropFileOnCollapsedPet(client, filePath) {
   const dragData = {
     items: [{ mimeType: 'text/plain', data: '' }],
     files: [filePath],
+    dragOperationsMask: 1
+  }
+  await client.send('Input.dispatchDragEvent', { type: 'dragEnter', ...point, data: dragData })
+  await client.send('Input.dispatchDragEvent', { type: 'dragOver', ...point, data: dragData })
+  await client.send('Input.dispatchDragEvent', { type: 'drop', ...point, data: dragData })
+}
+
+/** 使用 CDP 向已展开的输入区投放一组真实文件。 */
+async function dropFilesOnComposer(client, filePaths) {
+  const point = await evaluate(
+    client,
+    `(() => {
+      const rect = document.querySelector('#composer').getBoundingClientRect()
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+    })()`
+  )
+  const dragData = {
+    items: [{ mimeType: 'text/plain', data: '' }],
+    files: filePaths,
     dragOperationsMask: 1
   }
   await client.send('Input.dispatchDragEvent', { type: 'dragEnter', ...point, data: dragData })

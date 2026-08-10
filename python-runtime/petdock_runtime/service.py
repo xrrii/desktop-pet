@@ -130,7 +130,7 @@ class AssistantService:
                         )
                         continue
                     if isinstance(output, AttachmentContext):
-                        await emit("attachment_sources", {"sources": output.sources})
+                        await emit("attachment_sources", output.dataset.event_payload())
                         continue
                     if isinstance(output, WebSourcesContext):
                         await emit("web_sources", {"sources": output.sources})

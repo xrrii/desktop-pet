@@ -400,6 +400,28 @@ class AttachmentStore:
         by_id = {str(row["id"]): self._record(row) for row in rows}
         return [by_id[item] for item in attachment_ids if item in by_id]
 
+    def conversation_records(self, conversation_id: str) -> list[AttachmentRecord]:
+        """按发送时间返回会话全部就绪附件，供 C5 会话资料集统一分析。"""
+        rows = self._connection.execute(
+            """
+            SELECT * FROM attachments
+            WHERE conversation_id=? AND status='ready'
+            ORDER BY COALESCE(sent_at, created_at), created_at, id
+            """,
+            (conversation_id,),
+        ).fetchall()
+        return [self._record(row) for row in rows]
+
+    def conversation_ids(self) -> set[str]:
+        """返回仍持有就绪附件的会话 ID，用于启动时清理孤立临时索引。"""
+        rows = self._connection.execute(
+            """
+            SELECT DISTINCT conversation_id FROM attachments
+            WHERE conversation_id IS NOT NULL AND status='ready'
+            """
+        ).fetchall()
+        return {str(row["conversation_id"]) for row in rows}
+
     def preview(
         self,
         attachment_id: str,
