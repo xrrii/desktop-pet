@@ -19,6 +19,7 @@ import type {
 import { AssistantManager } from './assistant/assistantManager'
 import { writeArtifactAtomically } from './assistant/artifactFileWriter'
 import { logError, logInfo } from './logger'
+import { ScreenshotManager } from './screenshotManager'
 import { setAssistantTheme } from './theme'
 import {
   ensureUserPetsRoot,
@@ -67,6 +68,13 @@ const assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
   (event) => petWindow?.webContents.send('assistant:event', event)
 )
+const screenshotManager = new ScreenshotManager(
+  () => petWindow,
+  assistantManager,
+  (window) => openAssistantForPet(window),
+  (result) => petWindow?.webContents.send('assistant:attachments-staged', result),
+  (message) => petWindow?.webContents.send('assistant:attachment-stage-error', message)
+)
 
 /**
  * 打开 Artifact 原生保存对话框；仅在自动化 Smoke 明确注入变量时提供确定性选择结果。
@@ -99,6 +107,8 @@ app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('disable-software-rasterizer')
 
 function registerIpc(): void {
+  screenshotManager.registerIpc()
+
   ipcMain.on('assistant:layout-applied', (event: IpcMainEvent, revision: number) => {
     const window = requirePetSender(event)
     if (Number.isInteger(revision)) {
@@ -617,6 +627,7 @@ app.whenReady().then(() => {
   ensureSelectedPetIsAvailable()
   registerIpc()
   openPetWindow()
+  screenshotManager.registerGlobalShortcut()
   void assistantManager.start().catch((error: unknown) => {
     logError('assistant runtime failed to start', error)
   })
@@ -793,6 +804,10 @@ app.on('before-quit', (event) => {
 
 app.on('window-all-closed', () => {
   // Keep the tray app alive until the user chooses Quit.
+})
+
+app.on('will-quit', () => {
+  screenshotManager.dispose()
 })
 
 app.on('child-process-gone', (_event, details) => {

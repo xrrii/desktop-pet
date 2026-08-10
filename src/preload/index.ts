@@ -35,6 +35,7 @@ import type {
   MemoryClearScope,
   MemoryItemKind
 } from '../shared/assistant'
+import type { ScreenshotOverlayPayload, ScreenshotSelectionInput } from '../shared/screenshot'
 import type { AssistantThemeId } from '../shared/theme'
 import type {
   AvailablePet,
@@ -82,6 +83,12 @@ const api = {
   openAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:open'),
   openAssistantExternalUrl: (url: string): Promise<boolean> =>
     ipcRenderer.invoke('assistant:open-external-url', url),
+  getScreenshotOverlay: (): Promise<ScreenshotOverlayPayload> =>
+    ipcRenderer.invoke('screenshot:get-overlay'),
+  confirmScreenshotSelection: (input: ScreenshotSelectionInput): Promise<void> =>
+    ipcRenderer.invoke('screenshot:confirm-selection', input),
+  cancelScreenshotSelection: (): Promise<void> =>
+    ipcRenderer.invoke('screenshot:cancel'),
   getAssistantStatus: (): Promise<AssistantRuntimeStatus> =>
     ipcRenderer.invoke('assistant:get-status'),
   getAssistantWebSettings: (): Promise<AssistantWebSettingsSnapshot> =>
@@ -324,5 +331,13 @@ if (document.readyState === 'loading') {
 } else {
   installAttachmentDropHandlers()
 }
+
+ipcRenderer.on('assistant:attachments-staged', (_event, result: AssistantAttachmentDropResult) => {
+  attachmentStagedListeners.forEach((listener) => listener(result))
+})
+
+ipcRenderer.on('assistant:attachment-stage-error', (_event, message: string) => {
+  attachmentErrorListeners.forEach((listener) => listener(message))
+})
 
 export type DesktopPetApi = typeof api

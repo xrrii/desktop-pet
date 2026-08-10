@@ -1,0 +1,77 @@
+:root {
+  color-scheme: dark;
+  font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #05070b;
+  cursor: crosshair;
+  user-select: none;
+}
+
+body {
+  position: relative;
+}
+
+.screenshot-root {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.screenshot-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.screenshot-hud {
+  position: fixed;
+  left: 24px;
+  top: 24px;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  color: #eef3ff;
+  background: rgb(7 11 19 / 72%);
+  border: 1px solid rgb(163 183 255 / 24%);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 32%);
+  pointer-events: none;
+}
+
+.screenshot-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.screenshot-label,
+.screenshot-status {
+  font-size: 12px;
+  color: rgb(225 233 255 / 82%);
+}
+
+.selection-box {
+  position: fixed;
+  z-index: 2;
+  border: 1px solid rgb(255 255 255 / 96%);
+  background: transparent;
+  box-shadow: 0 0 0 99999px rgb(5 7 11 / 52%);
+  pointer-events: none;
+}
+
+.selection-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgb(130 174 255 / 88%);
+}

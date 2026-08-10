@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>PetDock Screenshot</title>
+  </head>
+  <body>
+    <main class="screenshot-root" aria-label="截图覆盖层">
+      <img id="screenshot-image" class="screenshot-image" alt="" />
+      <section class="screenshot-hud" aria-live="polite">
+        <strong class="screenshot-title">F5 截图提问</strong>
+        <span id="screenshot-label" class="screenshot-label"></span>
+        <span id="screenshot-status" class="screenshot-status"></span>
+      </section>
+      <div id="selection-box" class="selection-box" hidden></div>
+    </main>
+    <script type="module" src="/screenshot/main.ts"></script>
+  </body>
+</html>
