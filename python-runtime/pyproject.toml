@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "petdock-assistant-runtime"
 version = "0.1.0"
 description = "Local assistant runtime for PetDock."
+license = "MIT"
+authors = [{ name = "xrrii" }]
 requires-python = ">=3.11"
 dependencies = [
   "chromadb>=1.5,<2",

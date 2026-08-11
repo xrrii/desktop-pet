@@ -2,7 +2,7 @@
   "name": "petdock",
   "version": "0.1.1",
   "description": "A transparent Electron desktop pet dock powered by spritesheet atlases.",
-  "author": "Local",
+  "author": "xrrii",
   "license": "MIT",
   "private": true,
   "main": "dist/main/index.js",
@@ -27,10 +27,11 @@
     "test:e2e:assistant:langchain": "cross-env PETDOCK_SMOKE_EXECUTABLE=release\\win-unpacked\\PetDock.exe PETDOCK_SMOKE_SCREENSHOT=outputs\\assistant-stage1-langchain.png PETDOCK_SMOKE_BACKEND=langchain node tools/assistant_smoke.mjs",
     "build": "electron-vite build",
     "build:runtime": "node tools/build_runtime.mjs",
+    "licenses": "node tools/generate_third_party_notices.mjs",
     "check": "npm run typecheck && npm test && npm run test:runtime && npm run test:retrieval && npm run build",
     "preview": "electron-vite preview",
-    "pack": "npm run build && npm run build:runtime && electron-builder --dir",
-    "dist": "npm run build && npm run build:runtime && electron-builder"
+    "pack": "npm run licenses && npm run build && npm run build:runtime && electron-builder --dir",
+    "dist": "npm run licenses && npm run build && npm run build:runtime && electron-builder"
   },
   "build": {
     "appId": "com.local.petdock",
@@ -49,6 +50,30 @@
       {
         "from": "python-runtime/dist/petdock-assistant.exe",
         "to": "python-runtime/petdock-assistant.exe"
+      },
+      {
+        "from": "LICENSE",
+        "to": "legal/LICENSE"
+      },
+      {
+        "from": "ASSET_LICENSES.md",
+        "to": "legal/ASSET_LICENSES.md"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "legal/THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "THIRD_PARTY_LICENSES.txt",
+        "to": "legal/THIRD_PARTY_LICENSES.txt"
+      },
+      {
+        "from": "THIRD_PARTY_SERVICES.md",
+        "to": "legal/THIRD_PARTY_SERVICES.md"
+      },
+      {
+        "from": "PRIVACY.md",
+        "to": "legal/PRIVACY.md"
       }
     ],
     "win": {

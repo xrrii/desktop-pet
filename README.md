@@ -289,6 +289,15 @@ assets/pets/<pet-id>/
 - `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`：AI 助手总体架构。
 - `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md`：BYOK 与官方服务双模式实施方案。
 
+## 许可证与隐私
+
+- PetDock 自有代码和文档使用 [MIT License](LICENSE)，版权主体为 `xrrii`。
+- 图片、图标和桌宠动画不自动适用 MIT，逐文件状态见 [素材授权说明](ASSET_LICENSES.md)。
+- 第三方依赖摘要见 [第三方依赖声明](THIRD_PARTY_NOTICES.md)，完整许可证由
+  `npm.cmd run licenses` 生成到 `THIRD_PARTY_LICENSES.txt`。
+- 第三方在线服务和数据范围见 [第三方在线服务说明](THIRD_PARTY_SERVICES.md)。
+- 当前本地 BYOK 版本的数据处理方式见 [隐私说明](PRIVACY.md)。
+
 ## 开发约定
 
 - TypeScript、Python 和文档统一优先使用 UTF-8 无 BOM。

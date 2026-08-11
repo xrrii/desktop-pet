@@ -52,7 +52,6 @@ desktop-pet/
     features/
     guides/
     roadmap/
-    references/
   assets/
     pets/
       hammer-dude/
