@@ -13,6 +13,7 @@ htmlcov/
 *.egg-info/
 python-runtime/build/
 python-runtime/dist/
+/python-runtime/*.spec
 assistant.db*
 python-runtime/assistant.db*
 
