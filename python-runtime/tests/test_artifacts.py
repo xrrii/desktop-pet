@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from petdock_runtime.artifact_store import ArtifactStore, MAX_ARTIFACT_BYTES
+from petdock_runtime.artifacts.store import ArtifactStore, MAX_ARTIFACT_BYTES
 from petdock_runtime.config import RuntimeConfig
-from petdock_runtime.server import create_app
+from petdock_runtime.api.server import create_app
 
 TOKEN = "c" * 64
 

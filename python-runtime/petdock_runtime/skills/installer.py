@@ -15,14 +15,14 @@ from uuid import uuid4
 
 import httpx
 
-from .skill_manifest import (
+from .manifest import (
     SkillManifestError,
     SkillMetadata,
     calculate_package_hash,
     discover_skill_files,
     parse_skill_metadata,
 )
-from .skill_registry import SkillRegistry
+from .registry import SkillRegistry
 
 """本地和 GitHub Skill 的预览、安全解压与原子安装。"""
 

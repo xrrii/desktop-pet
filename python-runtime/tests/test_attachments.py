@@ -10,10 +10,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
-from petdock_runtime.attachment_store import AttachmentStore
+from petdock_runtime.attachments.store import AttachmentStore
 from petdock_runtime.config import RuntimeConfig
 from petdock_runtime.protocol import AssistantRequest
-from petdock_runtime.server import create_app
+from petdock_runtime.api.server import create_app
 
 TOKEN = "a" * 64
 

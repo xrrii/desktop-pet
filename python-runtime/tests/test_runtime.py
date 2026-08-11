@@ -4,16 +4,17 @@ import asyncio
 
 from httpx import ASGITransport, AsyncClient
 
-from petdock_runtime.backends import MockBackend
+from petdock_runtime.agent.mock_backend import MockBackend
 from petdock_runtime.config import RuntimeConfig
-from petdock_runtime.embeddings import LocalHashEmbedding
-from petdock_runtime.knowledge import ChromaVectorStore, KnowledgeService
-from petdock_runtime.knowledge_store import KnowledgeStore
-from petdock_runtime.memory_store import MemoryStore
-from petdock_runtime.memory_extractor import _fallback_candidate
+from petdock_runtime.providers.embeddings import LocalHashEmbedding
+from petdock_runtime.knowledge.service import KnowledgeService
+from petdock_runtime.knowledge.store import KnowledgeStore
+from petdock_runtime.memory.store import MemoryStore
+from petdock_runtime.memory.extractor import _fallback_candidate
 from petdock_runtime.protocol import AssistantRequest
-from petdock_runtime.server import create_app
-from petdock_runtime.service import AssistantService
+from petdock_runtime.api.server import create_app
+from petdock_runtime.agent.service import AssistantService
+from petdock_runtime.rag.vector_store import ChromaVectorStore
 
 TOKEN = "t" * 64
 

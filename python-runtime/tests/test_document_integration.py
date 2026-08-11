@@ -8,10 +8,10 @@ from pathlib import Path
 from docx import Document
 from PIL import Image
 
-from petdock_runtime.attachment_store import AttachmentStore
-from petdock_runtime.document_parser import DocumentParserRegistry
-from petdock_runtime.knowledge import KnowledgeService
-from petdock_runtime.knowledge_store import KnowledgeStore
+from petdock_runtime.attachments.store import AttachmentStore
+from petdock_runtime.documents.parser import DocumentParserRegistry
+from petdock_runtime.knowledge.service import KnowledgeService
+from petdock_runtime.knowledge.store import KnowledgeStore
 
 
 def test_attachment_uses_registry_and_returns_structured_preview(tmp_path: Path) -> None:

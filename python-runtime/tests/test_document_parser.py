@@ -14,7 +14,7 @@ from pptx import Presentation
 from pptx.util import Inches
 from pypdf import PdfReader, PdfWriter
 
-from petdock_runtime.document_parser import (
+from petdock_runtime.documents.parser import (
     DocumentParseError,
     DocumentParserRegistry,
     derive_safe_image,
@@ -240,7 +240,7 @@ def test_image_corrupt_and_pixel_limit(tmp_path: Path, monkeypatch: pytest.Monke
     assert error.value.problem.code == "image_decode_failed"
     oversized = tmp_path / "oversized.png"
     Image.new("RGB", (4, 4), "white").save(oversized)
-    monkeypatch.setattr("petdock_runtime.document_parser.MAX_IMAGE_PIXELS", 10)
+    monkeypatch.setattr("petdock_runtime.documents.parser.MAX_IMAGE_PIXELS", 10)
     with pytest.raises(DocumentParseError) as error:
         DocumentParserRegistry().parse(oversized)
     assert error.value.problem.code == "image_too_large"

@@ -610,7 +610,7 @@ Runtime 只在 Main 注入的 Artifact 根目录生成白名单 UTF-8 文本文�
 C4 Parser 由附件和知识库共用的 `DocumentParserRegistry` 提供。依赖安装后可运行：
 
 ```powershell
-python-runtime\.venv\Scripts\python.exe -m pytest -q python-runtime\tests
+python-runtime\.venv\Scripts\python.exe -m pytest -q python-runtime\tests --basetemp temp\pytest-runtime
 npm.cmd run typecheck
 npm.cmd test -- --run
 npm.cmd run build:runtime

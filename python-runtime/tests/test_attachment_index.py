@@ -7,9 +7,10 @@ import openpyxl
 import pytest
 from docx import Document
 
-from petdock_runtime.attachment_index import AttachmentAnalysisService, AttachmentIndexStore
-from petdock_runtime.attachment_store import AttachmentStore
-from petdock_runtime.embeddings import LocalHashEmbedding
+from petdock_runtime.attachments.analysis import AttachmentAnalysisService
+from petdock_runtime.attachments.index_store import AttachmentIndexStore
+from petdock_runtime.attachments.store import AttachmentStore
+from petdock_runtime.providers.embeddings import LocalHashEmbedding
 
 """C5 会话资料集直接注入、临时索引、来源位置和清理测试。"""
 

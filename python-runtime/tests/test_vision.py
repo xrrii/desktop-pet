@@ -9,8 +9,8 @@ import httpx
 import pytest
 from PIL import Image
 
-import petdock_runtime.vision as vision_module
-from petdock_runtime.vision import VisionAnalyzer, VisionConfiguration, VisionRequestError
+import petdock_runtime.vision.analyzer as vision_module
+from petdock_runtime.vision.analyzer import VisionAnalyzer, VisionConfiguration, VisionRequestError
 
 
 class _FakeClient:

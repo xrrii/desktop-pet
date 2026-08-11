@@ -7,9 +7,9 @@ from typing import Any
 
 from langchain_openai import ChatOpenAI
 
-from .config import RuntimeConfig
-from .memory_store import MemoryStore
-from .protocol import AssistantRequest
+from ..config import RuntimeConfig
+from ..protocol import AssistantRequest
+from .store import MemoryStore
 
 """异步长期记忆候选分析器。
 

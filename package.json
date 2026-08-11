@@ -12,7 +12,7 @@
     "debug": "cross-env DESKTOP_PET_DEVTOOLS=1 electron-vite dev",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:runtime": "python-runtime\\.venv\\Scripts\\python.exe -m pytest -q python-runtime\\tests",
+    "test:runtime": "python-runtime\\.venv\\Scripts\\python.exe -m pytest -q python-runtime\\tests --basetemp temp\\pytest-runtime",
     "test:retrieval": "python-runtime\\.venv\\Scripts\\python.exe tools\\evaluate_retrieval.py",
     "test:runtime:packaged": "node tools/runtime_smoke.mjs",
     "test:e2e:assistant": "npm run build && node tools/assistant_smoke.mjs",

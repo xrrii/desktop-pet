@@ -318,9 +318,9 @@ SKILL.md 正文上限：256 KB
 
 ## 7. Agent 工具注册与执行
 
-### 7.1 动态工具注册表
+### 7.1 工具目录与渐进式披露
 
-当前 `backends.py` 中静态 `TOOL_DEFINITIONS` 应重构为统一工具注册表：
+固定工具 schema 统一维护在 `agent/tool_catalog.py`，执行逻辑按内部工具和 Electron Main 外部工具分离：
 
 ```text
 Builtin OS Tools
@@ -591,29 +591,30 @@ agent
 
 ```text
 python-runtime/petdock_runtime/
-  skill_manifest.py
-  skill_registry.py
-  skill_store.py
-  skill_installer.py
+  skills/
+    manifest.py
+    registry.py
+    store.py
+    installer.py
 ```
 
 职责：
 
 ```text
-skill_manifest.py
+manifest.py
   解析 frontmatter、skill.json 和归一化元数据。
 
-skill_registry.py
+registry.py
   扫描、缓存、启停、冲突检测、渐进式披露、资源读取和热刷新。
 
-skill_store.py
+store.py
   skills.db schema、状态和运行日志。
 
-skill_installer.py
+installer.py
   本地和 GitHub 预览、安全归档、来源元数据、原子安装、更新与卸载。
 ```
 
-Agent 有限循环、激活上下文和权限收缩实现于 `backends.py`；安装器在 Runtime 内使用 `httpx` 和 `zipfile`，不调用系统 Git、Shell、PowerShell 或 CMD。
+Agent 有限循环、激活上下文和权限收缩实现于 `agent/langchain_backend.py`，稳定事件契约位于 `agent/contracts.py`；安装器在 Runtime 内使用 `httpx` 和 `zipfile`，不调用系统 Git、Shell、PowerShell 或 CMD。
 
 所有类和方法必须有中文 docstring。扫描、路径归一化、内容预算和 Agent 循环等复杂逻辑需要中文方法内注释，并在失败分支记录可排查但不泄露隐私的日志。
 

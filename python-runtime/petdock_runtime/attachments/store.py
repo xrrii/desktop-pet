@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .document_parser import DocumentParseError, DocumentParserRegistry, ParsedDocument
+from ..documents.parser import DocumentParseError, DocumentParserRegistry, ParsedDocument
 
 """会话附件登记、统一文档解析、上下文构造和文件生命周期。"""
 

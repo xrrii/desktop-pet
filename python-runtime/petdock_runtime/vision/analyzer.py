@@ -22,7 +22,7 @@ from typing import Literal
 import httpx
 from PIL import Image, ImageDraw, ImageFont
 
-from .document_parser import derive_safe_image
+from ..documents.parser import derive_safe_image
 
 LOGGER = logging.getLogger("petdock.vision")
 PROMPT_VERSION = "vision-summary-v1"

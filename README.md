@@ -54,7 +54,7 @@ PetDock 是一个基于 Electron 的透明桌面宠物应用，并集成了本�
 ## 项目结构
 
 ```text
-desktop-pets/
+desktop-pet/
   assets/
     app/                 应用图标
     assistant/           助手静态配置，例如 Embedding 白名单
@@ -62,7 +62,18 @@ desktop-pets/
   docs/                  设计、开发和阶段文档
   python-runtime/        Python Assistant Runtime
     app.py               Runtime 进程入口
-    petdock_runtime/     FastAPI、RAG、Memory、Skill、Artifact 等实现
+    petdock_runtime/
+      api/               FastAPI 路由与服务资源装配
+      agent/             Agent 契约、编排、后端适配器和工具目录
+      attachments/       会话附件存储、临时索引和资料集分析
+      artifacts/         生成文件生命周期
+      documents/         文档解析与分块
+      knowledge/         长期知识库服务与元数据存储
+      memory/            会话记忆与偏好提取
+      providers/         Embedding 等外部能力适配器
+      rag/               检索规划、评分与向量存储
+      skills/            Skill 清单、注册、安装与持久化
+      vision/            图片理解能力适配器
     tests/               Runtime 测试
   src/
     main/                Electron Main：窗口、托盘、安全边界、Runtime 管理

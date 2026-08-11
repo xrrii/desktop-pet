@@ -94,32 +94,26 @@ src/
 
 python-runtime/
   app.py
-  agent/
-    langchain_agent.py
-    prompts.py
-    planner.py
-  llm/
-    openai_compatible.py
-    model_config.py
-  tools/
-    registry.py
-    schemas.py
-  rag/
-    indexer.py
-    retriever.py
-    chunker.py
-  memory/
-    memory_store.py
-    summarizer.py
-  skills/
-    registry.py
-    loader.py
-  policy/
-    policy.py
-    risk.py
-  storage/
-    sqlite.py
-    vector_store.py
+  petdock_runtime/
+    api/
+      server.py             FastAPI 路由和本地鉴权
+      resources.py          Runtime 服务创建与关闭
+    agent/
+      contracts.py          编排层与模型后端的稳定契约
+      service.py            任务、SSE 和工具结果编排
+      factory.py            后端选择入口
+      langchain_backend.py  在线模型适配器
+      mock_backend.py       离线降级与测试适配器
+      tool_catalog.py       固定工具 schema
+    attachments/            会话附件存储、临时索引和资料集分析
+    artifacts/              生成文件生命周期
+    documents/              文档解析和分块
+    knowledge/              长期知识库服务和元数据
+    memory/                 会话记忆和偏好提取
+    providers/              Embedding 等外部能力适配器
+    rag/                    检索规划、评分和向量存储
+    skills/                 Skill 清单、注册、安装和持久化
+    vision/                 图片理解适配器
 ```
 
 ## 5. 通信方式
@@ -717,7 +711,7 @@ Electron Main、Preload、Renderer 和 Python Runtime 的职责边界保持稳�
 
 #### C4 实现记录（2026-08-04）
 
-C4 已完成输入实现和本地/打包验收。`python-runtime/petdock_runtime/document_parser.py` 是附件与知识库唯一 Parser Registry；附件 SQLite 通过增量列迁移保留 C1 正文，知识库 `document_chunks.location_json` 保留旧 Chunk 兼容性。Renderer 只接收结构块、脱敏元数据和资源 ID，并提供不回填密钥的视觉配置与主动探测界面，不接触 Runtime 绝对路径、图片字节或模型密钥。Vision Analyzer 的配置由 Main `safeStorage` 管理，Runtime 只读取环境注入的短生命周期凭据并直接调用固定视觉端点，摘要缓存不保存 Base64。C4 不生成复杂格式 Artifact；C6 仍按本文档原范围延期。
+C4 已完成输入实现和本地/打包验收。`python-runtime/petdock_runtime/documents/parser.py` 是附件与知识库唯一 Parser Registry；附件 SQLite 通过增量列迁移保留 C1 正文，知识库 `document_chunks.location_json` 保留旧 Chunk 兼容性。Renderer 只接收结构块、脱敏元数据和资源 ID，并提供不回填密钥的视觉配置与主动探测界面，不接触 Runtime 绝对路径、图片字节或模型密钥。Vision Analyzer 的配置由 Main `safeStorage` 管理，Runtime 只读取环境注入的短生命周期凭据并直接调用固定视觉端点，摘要缓存不保存 Base64。C4 不生成复杂格式 Artifact；C6 仍按本文档原范围延期。
 
 #### C5 实现记录（2026-08-10）
 

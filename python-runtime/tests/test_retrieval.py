@@ -5,10 +5,11 @@ import sqlite3
 
 import pytest
 
-from petdock_runtime.embeddings import LocalHashEmbedding, descriptor_from_dict
-from petdock_runtime.knowledge import ChromaVectorStore, KnowledgeService
-from petdock_runtime.knowledge_store import KnowledgeStore
-from petdock_runtime.retrieval import plan_retrieval, retrieval_query_terms, retrieval_terms
+from petdock_runtime.knowledge.service import KnowledgeService
+from petdock_runtime.knowledge.store import KnowledgeStore
+from petdock_runtime.providers.embeddings import LocalHashEmbedding, descriptor_from_dict
+from petdock_runtime.rag.planner import plan_retrieval, retrieval_query_terms, retrieval_terms
+from petdock_runtime.rag.vector_store import ChromaVectorStore
 
 
 class ConstantSemanticEmbedding:

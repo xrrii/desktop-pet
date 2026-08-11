@@ -4,16 +4,17 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-from petdock_runtime.backends import LangChainBackend
+from petdock_runtime.agent.langchain_backend import LangChainBackend
 from petdock_runtime.config import RuntimeConfig
-from petdock_runtime.embeddings import LocalHashEmbedding
-from petdock_runtime.knowledge import ChromaVectorStore, KnowledgeService
-from petdock_runtime.knowledge_store import KnowledgeStore
-from petdock_runtime.memory_store import MemoryStore
+from petdock_runtime.providers.embeddings import LocalHashEmbedding
+from petdock_runtime.knowledge.service import KnowledgeService
+from petdock_runtime.knowledge.store import KnowledgeStore
+from petdock_runtime.memory.store import MemoryStore
 from petdock_runtime.protocol import AssistantRequest, ToolResultRequest
-from petdock_runtime.service import AssistantService
-from petdock_runtime.skill_registry import SkillRegistry
-from petdock_runtime.skill_store import SkillStore
+from petdock_runtime.agent.service import AssistantService
+from petdock_runtime.rag.vector_store import ChromaVectorStore
+from petdock_runtime.skills.registry import SkillRegistry
+from petdock_runtime.skills.store import SkillStore
 
 
 TOKEN = "t" * 64

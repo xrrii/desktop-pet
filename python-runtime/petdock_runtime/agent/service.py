@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from collections.abc import Awaitable, Callable
 
-from .backends import (
+from .contracts import (
     AssistantBackend,
     ArtifactCreatedEvent,
     AttachmentContext,
@@ -14,8 +14,8 @@ from .backends import (
     ToolCallRequest,
     WebSourcesContext,
 )
-from .memory_extractor import MemoryExtractor
-from .protocol import AssistantRequest, ToolResultRequest
+from ..memory.extractor import MemoryExtractor
+from ..protocol import AssistantRequest, ToolResultRequest
 
 """Runtime 任务生命周期、SSE 事件和工具结果等待逻辑。"""
 

@@ -11,10 +11,11 @@ from typing import Any
 RUNTIME_ROOT = Path(__file__).resolve().parents[1] / "python-runtime"
 sys.path.insert(0, str(RUNTIME_ROOT))
 
-from petdock_runtime.embeddings import LocalHashEmbedding  # noqa: E402
-from petdock_runtime.knowledge import ChromaVectorStore, KnowledgeService  # noqa: E402
-from petdock_runtime.knowledge_store import KnowledgeStore  # noqa: E402
-from petdock_runtime.retrieval import plan_retrieval  # noqa: E402
+from petdock_runtime.knowledge.service import KnowledgeService  # noqa: E402
+from petdock_runtime.knowledge.store import KnowledgeStore  # noqa: E402
+from petdock_runtime.providers.embeddings import LocalHashEmbedding  # noqa: E402
+from petdock_runtime.rag.planner import plan_retrieval  # noqa: E402
+from petdock_runtime.rag.vector_store import ChromaVectorStore  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:

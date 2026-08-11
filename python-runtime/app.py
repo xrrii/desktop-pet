@@ -9,7 +9,7 @@ import sys
 import uvicorn
 
 from petdock_runtime.config import RuntimeConfig
-from petdock_runtime.server import create_app
+from petdock_runtime.api.server import create_app
 
 """Runtime 进程入口：绑定本机随机端口并输出单行 readiness JSON。"""
 

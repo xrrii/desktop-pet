@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 
-from .config import RuntimeConfig
+from ..config import RuntimeConfig
 
 """本地、在线和 Hash Embedding Provider。"""
 

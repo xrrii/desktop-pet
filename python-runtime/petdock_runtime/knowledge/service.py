@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import math
 import os
 import re
 import threading
@@ -12,17 +11,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import chromadb
-from chromadb.config import Settings
-
-from .embeddings import EmbeddingProvider, LocalHashEmbedding
-from .document_parser import DocumentParseError, DocumentParserRegistry
-from .document_chunking import (
+from ..documents.chunking import (
     CHUNK_STRATEGY_VERSION,
     split_document,
 )
-from .knowledge_store import KnowledgeStore
-from .retrieval import retrieval_query_terms, retrieval_terms
+from ..documents.parser import DocumentParseError, DocumentParserRegistry
+from ..providers.embeddings import EmbeddingProvider
+from ..rag.planner import retrieval_query_terms, retrieval_terms
+from ..rag.scoring import content_similarity, normalized_similarity
+from ..rag.vector_store import ChromaVectorStore
+from .store import KnowledgeStore
 
 """知识库索引、版本化 Chroma 向量和多信号混合检索。"""
 
@@ -120,118 +118,6 @@ class RetrievalResult:
 
     sources: list[RetrievalSource]
     trace: RetrievalTrace
-
-
-class ChromaVectorStore:
-    """封装按 Embedding 签名隔离的 Chroma 持久化 API。"""
-
-    def __init__(
-        self,
-        path: str,
-        embedding: EmbeddingProvider,
-        collection_name: str | None = None,
-    ) -> None:
-        """打开本地 Chroma，并创建对应向量空间的 collection。"""
-        self.embedding = embedding
-        self.descriptor = embedding.descriptor
-        if path == ":memory:":
-            self._client = chromadb.EphemeralClient(settings=Settings(anonymized_telemetry=False))
-        else:
-            Path(path).mkdir(parents=True, exist_ok=True)
-            self._client = chromadb.PersistentClient(
-                path=path,
-                settings=Settings(anonymized_telemetry=False),
-            )
-        legacy_hash = self.descriptor.id == LocalHashEmbedding.name
-        resolved_name = collection_name or (
-            "petdock_knowledge_v1"
-            if legacy_hash
-            else f"petdock_knowledge_{self.descriptor.signature}"
-        )
-        self._collection = self._client.get_or_create_collection(
-            name=resolved_name,
-            metadata={
-                "hnsw:space": "cosine",
-                "embeddingModel": self.descriptor.id,
-                "embeddingRevision": self.descriptor.revision,
-                "dimensions": self.descriptor.dimensions,
-                "indexSignature": self.descriptor.signature,
-            },
-        )
-
-    @property
-    def count(self) -> int:
-        """返回当前向量空间中的 Chunk 数。"""
-        return int(self._collection.count())
-
-    def upsert(self, records: list[dict[str, Any]]) -> None:
-        """分批写入向量和最小检索元数据，原文仍由 SQLite 持有。"""
-        for offset in range(0, len(records), 128):
-            batch = records[offset : offset + 128]
-            if not batch:
-                continue
-            self._collection.upsert(
-                ids=[str(item["id"]) for item in batch],
-                embeddings=self.embedding.embed_documents([str(item["content"]) for item in batch]),
-                metadatas=[
-                    {
-                        "libraryId": str(item["libraryId"]),
-                        "documentId": str(item["documentId"]),
-                    }
-                    for item in batch
-                ],
-            )
-
-    def delete_ids(self, ids: list[str]) -> None:
-        """删除已失效分块；空列表不会调用 Chroma。"""
-        for offset in range(0, len(ids), 500):
-            batch = ids[offset : offset + 500]
-            if batch:
-                self._collection.delete(ids=batch)
-
-    def delete_library(self, library_id: str) -> None:
-        """按知识库 ID 删除当前向量空间的全部派生向量。"""
-        self._collection.delete(where={"libraryId": library_id})
-
-    def search(
-        self,
-        query: str,
-        library_ids: list[str],
-        limit: int = VECTOR_CANDIDATES,
-    ) -> list[tuple[str, float]]:
-        """执行 ANN 查询，返回 Chunk ID 和余弦相似度。"""
-        if not query.strip() or not library_ids or self.count == 0:
-            return []
-        return self.search_embedding(self.embedding.embed_query(query), library_ids, limit)
-
-    def search_embedding(
-        self,
-        query_embedding: list[float],
-        library_ids: list[str],
-        limit: int = VECTOR_CANDIDATES,
-    ) -> list[tuple[str, float]]:
-        """使用已生成的查询向量执行 ANN，供多文件覆盖检索复用同一次推理。"""
-        if not query_embedding or not library_ids or self.count == 0:
-            return []
-        where: dict[str, Any]
-        if len(library_ids) == 1:
-            where = {"libraryId": library_ids[0]}
-        else:
-            where = {"libraryId": {"$in": library_ids}}
-        result = self._collection.query(
-            query_embeddings=[query_embedding],
-            n_results=max(1, min(limit, 200, self.count)),
-            where=where,
-            include=["distances"],
-        )
-        ids = result.get("ids") or [[]]
-        distances = result.get("distances") or [[]]
-        hits: list[tuple[str, float]] = []
-        for chunk_id, distance in zip(ids[0], distances[0], strict=False):
-            similarity = 1.0 - float(distance)
-            if math.isfinite(similarity) and similarity >= self.descriptor.candidate_min_similarity:
-                hits.append((str(chunk_id), similarity))
-        return hits
 
 
 @dataclass
@@ -569,7 +455,7 @@ class KnowledgeService:
             exact_hits = sum(1 for term in exact_terms if term.casefold() in search_text)
             has_query_anchor = len(matched_terms) >= required_term_hits or exact_hits >= 1
             vector_similarity = candidate.vector_similarity or 0.0
-            vector_strength = _normalized_similarity(
+            vector_strength = normalized_similarity(
                 vector_similarity,
                 active_descriptor.candidate_min_similarity,
             )
@@ -711,13 +597,6 @@ def _scan_files(root: Path, stop: threading.Event) -> list[Path]:
     return sorted(files)
 
 
-def _normalized_similarity(similarity: float, minimum: float) -> float:
-    """把不同模型的候选门槛映射到 0-1 区间。"""
-    if similarity <= minimum:
-        return 0.0
-    return min(1.0, (similarity - minimum) / max(1e-6, 1.0 - minimum))
-
-
 def _dynamic_limit(query: str, requested_limit: int) -> int:
     """普通问题最多三条，多文档比较问题最多五条。"""
     multi_document = _is_multi_document_query(query)
@@ -741,22 +620,13 @@ def _deduplicate_candidates(
         document_id = str(record["documentId"])
         if document_counts.get(document_id, 0) >= 2:
             continue
-        if any(_content_similarity(str(record["content"]), str(item[1]["content"])) >= 0.86 for item in selected):
+        if any(content_similarity(str(record["content"]), str(item[1]["content"])) >= 0.86 for item in selected):
             continue
         selected.append((candidate, record))
         document_counts[document_id] = document_counts.get(document_id, 0) + 1
         if len(selected) >= limit:
             break
     return selected
-
-
-def _content_similarity(left: str, right: str) -> float:
-    """用稳定词元 Jaccard 判断相邻或模板 Chunk 是否重复。"""
-    left_terms = set(retrieval_terms(left, max_terms=128))
-    right_terms = set(retrieval_terms(right, max_terms=128))
-    if not left_terms or not right_terms:
-        return 0.0
-    return len(left_terms & right_terms) / len(left_terms | right_terms)
 
 
 def _query_hash(query: str) -> str:

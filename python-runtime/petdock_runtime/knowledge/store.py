@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .retrieval import retrieval_query_terms, retrieval_terms
+from ..rag.planner import retrieval_query_terms, retrieval_terms
 
 """知识库 SQLite 主存储。
 

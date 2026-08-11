@@ -9,21 +9,8 @@ import httpx
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from .attachment_store import AttachmentStore
-from .attachment_index import AttachmentAnalysisService, AttachmentIndexStore
-from .artifact_store import ArtifactStore
-from .backends import create_backend
-from .config import RuntimeConfig
-from .embeddings import LocalHashEmbedding, create_embedding_provider
-from .knowledge import ChromaVectorStore, KnowledgeService
-from .knowledge_store import KnowledgeStore
-from .memory_store import MemoryStore
-from .memory_extractor import create_memory_extractor
-from .skill_registry import SkillRegistry
-from .skill_store import SkillStore
-from .skill_manifest import SkillManifestError
-from .skill_installer import SkillInstaller
-from .protocol import (
+from ..config import RuntimeConfig
+from ..protocol import (
     AssistantRequest,
     ArtifactAccessRequest,
     ArtifactPreviewRequest,
@@ -39,9 +26,8 @@ from .protocol import (
     SkillInstallRequest,
     SkillLocalPreviewRequest,
 )
-from .service import AssistantService
-from .vision import VisionAnalyzer, VisionConfiguration, VisionRequestError
-from .document_parser import DocumentParserRegistry
+from ..skills.manifest import SkillManifestError
+from .resources import create_runtime_resources
 
 """FastAPI 路由层，只负责鉴权、协议校验和 Runtime 服务编排。"""
 
@@ -51,63 +37,18 @@ LOGGER = logging.getLogger("petdock.server")
 def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | None = None) -> FastAPI:
     """创建带本地 SQLite、聊天、工具和记忆接口的 FastAPI 应用。"""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    store = MemoryStore(config.memory_db_path)
-    parser_registry = DocumentParserRegistry()
-    attachments = AttachmentStore(config.memory_db_path, config.attachment_root, parser_registry)
-    vision = VisionAnalyzer(
-        VisionConfiguration(
-            config.vision_base_url,
-            config.vision_api_key,
-            config.vision_model,
-            config.vision_source,
-        ),
-        config.memory_db_path,
-    )
-    artifacts = ArtifactStore(config.memory_db_path, config.artifact_root)
-    knowledge_store = KnowledgeStore(config.knowledge_db_path)
-    embedding = create_embedding_provider(config)
-    attachment_index = AttachmentIndexStore(config.attachment_index_root, embedding)
-    attachment_index.reconcile(attachments.conversation_ids())
-    attachment_analysis = AttachmentAnalysisService(attachments, attachment_index, embedding)
-    fallback_vectors = (
-        ChromaVectorStore(config.chroma_path, LocalHashEmbedding())
-        if embedding.descriptor.id != LocalHashEmbedding.name
-        else None
-    )
-    knowledge = KnowledgeService(
-        knowledge_store,
-        ChromaVectorStore(config.chroma_path, embedding),
-        fallback_vectors,
-        parser_registry,
-    )
-    skill_store = SkillStore(config.skills_db_path)
-    skills = SkillRegistry(config.skills_root, skill_store)
-    skill_installer = SkillInstaller(config.skills_root, skills)
-    async def prepare_attachments(request: AssistantRequest) -> None:
-        """发送任务开始后才生成图片视觉摘要，登记阶段不调用外部视觉端点。"""
-        records = attachments.validate_for_request(request.attachmentIds, request.conversationId)
-        for record in records:
-            if record.parser_id != "image-metadata-v1":
-                continue
-            if vision.status != "supported":
-                raise VisionRequestError(vision.status, _vision_status_code(vision.status))
-            source, derived = attachments.vision_source(record.id)
-            summary = await vision.analyze(f"{request.taskId}:{record.id}", source, derived)
-            attachments.apply_vision_summary(record.id, summary.as_dict())
-
-    service = AssistantService(
-        create_backend(
-            config,
-            store,
-            knowledge,
-            skills,
-            attachments,
-            artifacts,
-            attachment_analysis,
-        ),
-        create_memory_extractor(config, store),
-        prepare_attachments,
-    )
+    resources = create_runtime_resources(config)
+    store = resources.memory
+    attachments = resources.attachments
+    vision = resources.vision
+    artifacts = resources.artifacts
+    knowledge_store = resources.knowledge_store
+    embedding = resources.embedding
+    attachment_index = resources.attachment_index
+    knowledge = resources.knowledge
+    skills = resources.skills
+    skill_installer = resources.skill_installer
+    service = resources.assistant
 
     def authorize(authorization: str | None) -> None:
         """校验除健康检查外所有接口使用的 Runtime 启动令牌。"""
@@ -600,30 +541,12 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     async def shutdown(authorization: str | None = Header(default=None)) -> dict[str, bool]:
         """关闭 Runtime 服务并释放 SQLite 连接。"""
         authorize(authorization)
-        await knowledge.close()
-        vision.close()
-        skills.close()
-        attachments.cleanup_drafts()
-        attachment_index.close()
-        attachments.close()
-        artifacts.close()
-        store.close()
+        await resources.close()
         if request_shutdown:
             request_shutdown()
         return {"accepted": True}
 
     return app
-
-
-def _vision_status_code(status: str) -> str:
-    """把发送阶段的视觉状态转换为稳定错误码，临时故障不改写为不支持。"""
-    return {
-        "unconfigured": "vision_not_configured",
-        "untested": "vision_capability_untested",
-        "unsupported": "vision_model_unsupported",
-        "unavailable": "vision_provider_unavailable",
-        "invalid-credentials": "vision_invalid_credentials",
-    }.get(status, "vision_summary_failed")
 
 
 def _validate_resource_id(value: str, label: str) -> None:

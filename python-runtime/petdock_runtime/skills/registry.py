@@ -6,7 +6,7 @@ import re
 import threading
 from pathlib import Path
 
-from .skill_manifest import (
+from .manifest import (
     SkillActivation,
     SkillManifestError,
     SkillMetadata,
@@ -15,7 +15,7 @@ from .skill_manifest import (
     load_skill_instructions,
     parse_skill_metadata,
 )
-from .skill_store import SkillStore
+from .store import SkillStore
 
 """Skill 元数据注册表、渐进式披露和资源读取。"""
 

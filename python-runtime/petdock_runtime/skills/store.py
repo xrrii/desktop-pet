@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .skill_manifest import SkillMetadata
+from .manifest import SkillMetadata
 
 """Skill SQLite 状态、权限和运行日志存储。"""
 
