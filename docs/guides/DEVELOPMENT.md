@@ -39,15 +39,20 @@
 
 ## 3. 项目目录结构
 
-建议在 `E:\project\desktop-pets` 使用如下结构：
+项目采用如下顶层结构：
 
 ```text
-desktop-pets/
+desktop-pet/
   package.json
   electron.vite.config.ts
   tsconfig.json
   docs/
-    DEVELOPMENT.md
+    README.md
+    architecture/
+    features/
+    guides/
+    roadmap/
+    references/
   assets/
     pets/
       hammer-dude/
@@ -534,7 +539,7 @@ npm.cmd run pack
 - IPC handler 必须校验调用窗口身份并验证外部输入。
 - 密钥和用户隐私数据不得写入仓库、普通配置文件或日志。
 
-AI 助手后续开发以 `docs/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、基础文件输出、联网搜索、复杂文档输入、多文件只读分析以及后续受控执行与复杂输出必须遵循 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
+AI 助手后续开发以 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/roadmap/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、基础文件输出、联网搜索、复杂文档输入、多文件只读分析以及后续受控执行与复杂输出必须遵循 `docs/features/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/features/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/features/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/features/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
 对话资源能力当前进度：C1 至 C5 已完成；C6 规划受控 Python 执行和复杂文档输出/修改，状态为 Deferred。C4 不新增 PDF、Office 或图片 Artifact 输出，也不执行本地 OCR；图片只在独立 Vision Analyzer 的能力探测通过后启用，默认继承主模型配置但不共享主 Agent 的工具、记忆或 Skill 上下文。C5 在会话附件总解析量不超过 12,000 tokens 时直接注入，超出后使用独立临时索引并将本轮检索上下文限制为 8,000 tokens；临时索引复用活动 Embedding Profile，但不与长期知识库共用数据库、目录或 collection。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送、来源展示、联网设置脱敏状态以及视觉配置字段/状态验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可使用 `npm.cmd run test:e2e:assistant:c2` 验证开发版生成、预览、取消保存、实际保存内容和删除，`npm.cmd run test:e2e:assistant:c2:packaged` 验证解包版；C3 可使用 `npm.cmd run test:e2e:assistant:c3` 与 `npm.cmd run test:e2e:assistant:c3:packaged` 验证本地可控 Provider 的搜索、抓取和引用；C5 使用 `npm.cmd run test:e2e:assistant:c5` 与 `npm.cmd run test:e2e:assistant:c5:packaged` 验证大资料集双文件命中、位置来源和跨轮复用。C3 默认使用火山引擎豆包搜索，Brave Search 作为兼容 Provider；可用 `$env:PETDOCK_SMOKE_REAL_WEB='1'; $env:PETDOCK_SMOKE_EXECUTABLE='release\win-unpacked\PetDock.exe'; node tools\assistant_smoke.mjs` 复验当前脱敏配置的真实连接。
 

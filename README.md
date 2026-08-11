@@ -284,14 +284,10 @@ assets/pets/<pet-id>/
 
 ## 参考文档
 
-- `docs/DEVELOPMENT.md`：开发基线和打包说明。
-- `docs/AI_ASSISTANT_ARCHITECTURE.md`：AI 助手架构。
-- `docs/AI_ASSISTANT_PROGRESS.md`：助手阶段进度。
-- `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`：附件、Artifact、联网搜索和复杂资源能力设计。
-- `docs/RAG_RETRIEVAL_OPTIMIZATION.md`：RAG 检索优化方案。
-- `docs/SKILL_SYSTEM_DEVELOPMENT.md`：Skill 系统开发说明。
-- `docs/EMBEDDING_MODEL_WHITELIST.md`：本地 Embedding 白名单说明。
-- `docs/UI_STYLE_GUIDELINES.md`：UI 风格指南。
+- `docs/README.md`：文档索引、状态和推荐阅读顺序。
+- `docs/guides/DEVELOPMENT.md`：开发、测试和打包基线。
+- `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`：AI 助手总体架构。
+- `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md`：BYOK 与官方服务双模式实施方案。
 
 ## 开发约定
 

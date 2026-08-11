@@ -10,9 +10,9 @@
 
 相关文档：
 
-- 总体架构：`docs/AI_ASSISTANT_ARCHITECTURE.md`
-- 阶段进度：`docs/AI_ASSISTANT_PROGRESS.md`
-- 本地模型清单：`docs/EMBEDDING_MODEL_WHITELIST.md`
+- 总体架构：`docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`
+- 阶段进度：`docs/roadmap/AI_ASSISTANT_PROGRESS.md`
+- 本地模型清单：`docs/features/EMBEDDING_MODEL_WHITELIST.md`
 - 机器可读白名单：`assets/assistant/embedding-model-whitelist.json`
 
 本文中的“召回优化”不是单独提高 Recall@K。PetDock 必须同时解决以下问题：

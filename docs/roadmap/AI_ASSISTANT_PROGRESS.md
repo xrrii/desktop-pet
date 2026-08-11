@@ -4,9 +4,9 @@
 
 关联文档：
 
-- `docs/AI_ASSISTANT_ARCHITECTURE.md`
-- `docs/SKILL_SYSTEM_DEVELOPMENT.md`
-- `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`
+- `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`
+- `docs/features/SKILL_SYSTEM_DEVELOPMENT.md`
+- `docs/features/CONVERSATION_RESOURCE_CAPABILITIES.md`
 
 状态约定：
 
@@ -63,7 +63,7 @@ Skill 系统：Done（阶段 5）
 
 状态：Done
 
-- [x] 编写 `docs/AI_ASSISTANT_ARCHITECTURE.md`。
+- [x] 编写 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`。
 - [x] 明确采用 Electron 桌宠 + Python Assistant Runtime 架构。
 - [x] 明确 Python LangChain 作为 Agent Runtime。
 - [x] 明确 Electron Main 作为权限和系统能力边界。
@@ -237,7 +237,7 @@ Skill 系统：Done（阶段 5）
 
 实现基线：
 
-- `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`
+- `docs/features/CONVERSATION_RESOURCE_CAPABILITIES.md`
 
 已决策的核心交互：
 
@@ -333,7 +333,7 @@ C5 已实现：
 
 实现基线：
 
-- `docs/SKILL_SYSTEM_DEVELOPMENT.md`
+- `docs/features/SKILL_SYSTEM_DEVELOPMENT.md`
 
 首版边界：
 
@@ -406,7 +406,7 @@ C5 已实现：
 ### 2026-07-28（现状同步与方案基线）
 
 - 核心功能阶段 1 至阶段 5 全部完成。
-- 新增 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md`，固定附件对话、文件输出、联网搜索、复杂文档和多文件修改的开发边界。
+- 新增 `docs/features/CONVERSATION_RESOURCE_CAPABILITIES.md`，固定附件对话、文件输出、联网搜索、复杂文档和多文件修改的开发边界。
 - 对话资源能力当前为 Not Started，C1 至 C5 只确定依赖顺序，不代表已经安排具体开发日期。
 - RAG v2 已实现确定性路由、动态准入、结构化 Trace、统一 Embedding Provider 和模型管理界面。
 - 本地 ONNX、在线 Embedding、独立向量空间、Hash 降级和切换失败回滚主体代码已落地。

@@ -13,10 +13,10 @@
 
 关联文档：
 
-- `docs/AI_ASSISTANT_ARCHITECTURE.md`
-- `docs/AI_ASSISTANT_PROGRESS.md`
-- `docs/DEVELOPMENT.md`
-- `docs/RAG_RETRIEVAL_OPTIMIZATION.md`
+- `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`
+- `docs/roadmap/AI_ASSISTANT_PROGRESS.md`
+- `docs/guides/DEVELOPMENT.md`
+- `docs/features/RAG_RETRIEVAL_OPTIMIZATION.md`
 
 本文档只确定本阶段能力边界和实现约束，不改变阶段 1 至阶段 5 已有核心架构。需要改变标记为“已决策”的内容时，应先更新本文档并记录原因，再修改代码。
 
@@ -834,7 +834,7 @@ C1 至 C6 是依赖顺序，不代表已经确定具体开发日期。每个阶�
 
 ### C4 实现状态补充（2026-08-04）
 
-C4.0-C4.6 已完成本地实现和打包验收：统一 Parser Registry 同时服务附件与知识库，复杂格式仅输入解析；Office/PDF/图片安全层、结构位置、Vision Analyzer 主动探测与缓存、附件/知识库来源接入均已落地。依赖、测试数字、包体和已知真实视觉 Provider 验收缺口记录在 `docs/AI_ASSISTANT_PROGRESS.md`，C6 受控执行/复杂输出不因 C5 完成而提前启动。
+C4.0-C4.6 已完成本地实现和打包验收：统一 Parser Registry 同时服务附件与知识库，复杂格式仅输入解析；Office/PDF/图片安全层、结构位置、Vision Analyzer 主动探测与缓存、附件/知识库来源接入均已落地。依赖、测试数字、包体和已知真实视觉 Provider 验收缺口记录在 `docs/roadmap/AI_ASSISTANT_PROGRESS.md`，C6 受控执行/复杂输出不因 C5 完成而提前启动。
 
 ### C5 实现状态补充（2026-08-10）
 

@@ -13,9 +13,9 @@
 
 关联文档：
 
-- `docs/AI_ASSISTANT_ARCHITECTURE.md`
-- `docs/AI_ASSISTANT_PROGRESS.md`
-- `docs/DEVELOPMENT.md`
+- `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`
+- `docs/roadmap/AI_ASSISTANT_PROGRESS.md`
+- `docs/guides/DEVELOPMENT.md`
 
 如果实现过程中需要改变本文档中标记为“已决策”的内容，必须先更新本文档并记录原因，再修改代码。
 

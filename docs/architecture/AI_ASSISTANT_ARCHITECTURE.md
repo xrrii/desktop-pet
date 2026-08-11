@@ -340,7 +340,7 @@ dangerous
 
 ## 9. Skill 系统设计与实现
 
-Skill 系统用于把特定领域能力做成可安装、可启用、可禁用的能力包。阶段 5 已完成首版实现，详细格式、安全边界和验收标准以 `docs/SKILL_SYSTEM_DEVELOPMENT.md` 为准。
+Skill 系统用于把特定领域能力做成可安装、可启用、可禁用的能力包。阶段 5 已完成首版实现，详细格式、安全边界和验收标准以 `docs/features/SKILL_SYSTEM_DEVELOPMENT.md` 为准。
 
 当前实现：
 
@@ -376,7 +376,7 @@ PetDock userData/
 
 ## 10. RAG 文档管理设计
 
-RAG 文档管理用于让 PetDock 理解用户指定的文档、项目、笔记和本地知识库。阶段 4 已实现首个完整闭环，文件索引逻辑保持在独立知识库模块中。后续检索路由、Embedding、召回、精排和评测以 `docs/RAG_RETRIEVAL_OPTIMIZATION.md` 为实现基线。
+RAG 文档管理用于让 PetDock 理解用户指定的文档、项目、笔记和本地知识库。阶段 4 已实现首个完整闭环，文件索引逻辑保持在独立知识库模块中。后续检索路由、Embedding、召回、精排和评测以 `docs/features/RAG_RETRIEVAL_OPTIMIZATION.md` 为实现基线。
 
 初步目标：
 
@@ -679,7 +679,7 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 状态：已完成
 
-详细实现基线见 `docs/SKILL_SYSTEM_DEVELOPMENT.md`。
+详细实现基线见 `docs/features/SKILL_SYSTEM_DEVELOPMENT.md`。
 
 - skills 目录。
 - skill manifest。
@@ -707,7 +707,7 @@ PETDOCK_PYTHON=<optional development Python executable>
 
 Electron Main、Preload、Renderer 和 Python Runtime 的职责边界保持稳定，核心功能不需要为后续增强推翻重做。
 
-后续增强以 `docs/CONVERSATION_RESOURCE_CAPABILITIES.md` 为方案基线。当前 C1 至 C5 已完成；C6 规划受控 Python 执行、复杂文档输出和修改，状态为 Deferred。C2 沿用既有职责边界：Runtime 的 `create_artifact` 只向应用受控目录生成白名单文本文件并维护 SQLite 索引，Main 只按 Artifact ID 读取内容、打开原生“另存为”对话框并执行可恢复的原子写入，Preload 仅暴露预览、保存和删除 IPC，Renderer 只展示脱敏摘要、卡片和只读预览；开发版与解包版 Smoke 已覆盖取消、实际保存和删除。C3 将 Main 作为唯一联网边界：火山引擎豆包搜索为默认 Provider，Brave Search 作为兼容 Provider，API Key 按 Provider 使用 `safeStorage` 隔离保存；搜索和网页抓取执行公网 DNS/重定向/大小/超时策略，完整网页正文只进入 Runtime 当前任务，Renderer 只接收最终实际引用的短来源；开发版与解包版本地可控 Provider Smoke 已覆盖搜索、抓取和引用。C4 在 Runtime 内建立附件与知识库共用的 `DocumentParserRegistry`，PDF/Office 只解析静态内容；图片先生成去除 EXIF/GPS 的安全派生图，再由无工具、无记忆、无 Skill 权限的独立 Vision Analyzer 生成结构化摘要。视觉配置默认继承主模型地址、凭据引用和模型名，但只有主动能力探测通过后才能启用图片输入；扫描 PDF OCR 不属于 C4。C5 汇总当前会话全部附件，12,000 tokens 内直接注入，超出后使用复用活动 Embedding Profile、但与知识库完全隔离的会话临时索引，并把检索注入限制为 8,000 tokens；来源卡片明确显示逐文件命中与结构位置，删除会话时级联清理派生索引。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。
+后续增强以 `docs/features/CONVERSATION_RESOURCE_CAPABILITIES.md` 为方案基线。当前 C1 至 C5 已完成；C6 规划受控 Python 执行、复杂文档输出和修改，状态为 Deferred。C2 沿用既有职责边界：Runtime 的 `create_artifact` 只向应用受控目录生成白名单文本文件并维护 SQLite 索引，Main 只按 Artifact ID 读取内容、打开原生“另存为”对话框并执行可恢复的原子写入，Preload 仅暴露预览、保存和删除 IPC，Renderer 只展示脱敏摘要、卡片和只读预览；开发版与解包版 Smoke 已覆盖取消、实际保存和删除。C3 将 Main 作为唯一联网边界：火山引擎豆包搜索为默认 Provider，Brave Search 作为兼容 Provider，API Key 按 Provider 使用 `safeStorage` 隔离保存；搜索和网页抓取执行公网 DNS/重定向/大小/超时策略，完整网页正文只进入 Runtime 当前任务，Renderer 只接收最终实际引用的短来源；开发版与解包版本地可控 Provider Smoke 已覆盖搜索、抓取和引用。C4 在 Runtime 内建立附件与知识库共用的 `DocumentParserRegistry`，PDF/Office 只解析静态内容；图片先生成去除 EXIF/GPS 的安全派生图，再由无工具、无记忆、无 Skill 权限的独立 Vision Analyzer 生成结构化摘要。视觉配置默认继承主模型地址、凭据引用和模型名，但只有主动能力探测通过后才能启用图片输入；扫描 PDF OCR 不属于 C4。C5 汇总当前会话全部附件，12,000 tokens 内直接注入，超出后使用复用活动 Embedding Profile、但与知识库完全隔离的会话临时索引，并把检索注入限制为 8,000 tokens；来源卡片明确显示逐文件命中与结构位置，删除会话时级联清理派生索引。未完成的 RAG 验收项继续独立记录，不自动并入该阶段。
 
 #### C4 实现记录（2026-08-04）
 
