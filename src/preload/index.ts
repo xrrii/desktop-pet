@@ -83,6 +83,8 @@ const api = {
   openAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:open'),
   openAssistantExternalUrl: (url: string): Promise<boolean> =>
     ipcRenderer.invoke('assistant:open-external-url', url),
+  copyText: (text: string): Promise<boolean> =>
+    ipcRenderer.invoke('assistant:copy-text', text),
   getScreenshotOverlay: (): Promise<ScreenshotOverlayPayload> =>
     ipcRenderer.invoke('screenshot:get-overlay'),
   confirmScreenshotSelection: (input: ScreenshotSelectionInput): Promise<void> =>

@@ -1,4 +1,13 @@
-import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import {
+  BrowserWindow,
+  app,
+  clipboard,
+  dialog,
+  ipcMain,
+  shell,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent
+} from 'electron'
 import { basename, extname, resolve } from 'node:path'
 import type {
   AssistantAskInput,
@@ -250,6 +259,18 @@ function registerIpc(): void {
       return true
     } catch (error) {
       logError('assistant failed to open external URL', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('assistant:copy-text', (event, value: unknown) => {
+    requirePetSender(event)
+    const text = requireClipboardText(value)
+    try {
+      clipboard.writeText(text)
+      return true
+    } catch (error) {
+      logError('助手写入剪贴板失败', error)
       throw error
     }
   })
@@ -682,6 +703,15 @@ function requireString(value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new TypeError('IPC value must be a non-empty string.')
   }
+}
+
+/** 校验 Renderer 提交的剪贴板文本，避免异常大载荷进入主进程。 */
+function requireClipboardText(value: unknown): string {
+  requireString(value)
+  if (value.length > 2_000_000) {
+    throw new TypeError('待复制文本过长。')
+  }
+  return value
 }
 
 /** 限制单次拖拽路径数量；路径值仅在 Preload 与 Main 间流转。 */

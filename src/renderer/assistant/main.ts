@@ -2419,6 +2419,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 通过受控 IPC 打开助手回复中的 HTTP(S) 链接。 */
   function handleConversationClick(event: MouseEvent): void {
     const target = event.target instanceof Element ? event.target : null
+    const copyButton = target?.closest<HTMLButtonElement>('.markdown-code-copy')
+    if (copyButton) {
+      event.preventDefault()
+      void copyCodeBlock(copyButton)
+      return
+    }
     const anchor = target?.closest<HTMLAnchorElement>('.message.assistant a[href]')
     const url = anchor?.getAttribute('href')
     if (!anchor || !url) {
@@ -2426,6 +2432,41 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     event.preventDefault()
     void window.desktopPet.openAssistantExternalUrl(url).catch(showError)
+  }
+
+  /** 复制当前代码块并在按钮上展示短暂的操作结果。 */
+  async function copyCodeBlock(button: HTMLButtonElement): Promise<void> {
+    const code = button.closest('.markdown-code-block')?.querySelector('pre > code')?.textContent
+    if (code === undefined || button.disabled) {
+      return
+    }
+
+    button.disabled = true
+    try {
+      await window.desktopPet.copyText(code)
+      showCopyButtonFeedback(button, '已复制', 'copied')
+    } catch (error) {
+      showCopyButtonFeedback(button, '复制失败', 'failed')
+      showError(error)
+    }
+  }
+
+  /** 恢复复制按钮的默认状态，避免结果提示永久占用工具栏。 */
+  function showCopyButtonFeedback(
+    button: HTMLButtonElement,
+    label: string,
+    state: 'copied' | 'failed'
+  ): void {
+    button.textContent = label
+    button.dataset.state = state
+    window.setTimeout(() => {
+      if (!button.isConnected) {
+        return
+      }
+      button.textContent = '复制'
+      delete button.dataset.state
+      button.disabled = false
+    }, 1600)
   }
 
   /** 在当前助手消息下展示 Runtime 返回的可核查来源。 */

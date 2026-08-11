@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { renderAssistantMarkdown } from './markdown'
+import { renderAssistantMarkdown, renderAssistantMarkdownInto } from './markdown'
 
 describe('助手 Markdown 渲染', () => {
   it('渲染常用 Markdown 结构', () => {
@@ -65,5 +65,19 @@ describe('助手 Markdown 渲染', () => {
 
     expect(html).toContain('class="language-yaml"')
     expect(html).toContain('enabled: true')
+  })
+
+  it('为代码块补充语言标识和复制按钮', () => {
+    const container = document.createElement('div')
+
+    renderAssistantMarkdownInto(container, '```typescript\nconst enabled = true\n```')
+
+    const block = container.querySelector('.markdown-code-block')
+    const button = block?.querySelector<HTMLButtonElement>('.markdown-code-copy')
+    expect(block?.querySelector('.markdown-code-language')?.textContent).toBe('typescript')
+    expect(block?.querySelector('code')?.textContent).toBe('const enabled = true\n')
+    expect(button?.type).toBe('button')
+    expect(button?.textContent).toBe('复制')
+    expect(button?.getAttribute('aria-label')).toBe('复制代码')
   })
 })
