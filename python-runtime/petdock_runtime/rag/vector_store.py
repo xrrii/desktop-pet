@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,19 @@ from ..providers.embeddings import EmbeddingProvider, LocalHashEmbedding
 """按 Embedding Profile 隔离的公共 Chroma 向量存储。"""
 
 DEFAULT_VECTOR_CANDIDATES = 40
+LOGGER = logging.getLogger(__name__)
+
+
+def _create_embedded_client(path: str) -> Any:
+    """只创建本地嵌入式 Chroma 客户端，禁止引入 HTTP Server 或远程客户端。"""
+    settings = Settings(anonymized_telemetry=False)
+    if path == ":memory:":
+        LOGGER.info("初始化本地 Chroma 向量存储 mode=memory")
+        return chromadb.EphemeralClient(settings=settings)
+
+    Path(path).mkdir(parents=True, exist_ok=True)
+    LOGGER.info("初始化本地 Chroma 向量存储 mode=persistent")
+    return chromadb.PersistentClient(path=path, settings=settings)
 
 
 class ChromaVectorStore:
@@ -26,14 +40,7 @@ class ChromaVectorStore:
         """打开本地 Chroma，并创建对应向量空间的 collection。"""
         self.embedding = embedding
         self.descriptor = embedding.descriptor
-        if path == ":memory:":
-            self._client = chromadb.EphemeralClient(settings=Settings(anonymized_telemetry=False))
-        else:
-            Path(path).mkdir(parents=True, exist_ok=True)
-            self._client = chromadb.PersistentClient(
-                path=path,
-                settings=Settings(anonymized_telemetry=False),
-            )
+        self._client = _create_embedded_client(path)
         legacy_hash = self.descriptor.id == LocalHashEmbedding.name
         resolved_name = collection_name or (
             "petdock_knowledge_v1"

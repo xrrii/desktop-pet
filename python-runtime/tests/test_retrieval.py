@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 
+import chromadb
 import pytest
 
 from petdock_runtime.knowledge.service import KnowledgeService
@@ -49,6 +50,25 @@ class ConstantSemanticEmbedding:
     def _vector() -> list[float]:
         """返回 64 维单位向量。"""
         return [1.0] + [0.0] * 63
+
+
+def test_vector_store_never_opens_chroma_http_client(monkeypatch, tmp_path) -> None:
+    """验证向量存储只使用本地嵌入式客户端，不暴露 Chroma Server 攻击入口。"""
+
+    def reject_http_client(*args, **kwargs):
+        """测试期间一旦尝试创建远程客户端就立即失败。"""
+        raise AssertionError("禁止创建 Chroma HttpClient")
+
+    monkeypatch.setattr(chromadb, "HttpClient", reject_http_client)
+    memory_store = ChromaVectorStore(":memory:", LocalHashEmbedding(), "local_memory_policy")
+    persistent_store = ChromaVectorStore(
+        str(tmp_path / "chroma"),
+        LocalHashEmbedding(),
+        "local_persistent_policy",
+    )
+
+    assert memory_store.count == 0
+    assert persistent_store.count == 0
 
 
 @pytest.mark.parametrize(

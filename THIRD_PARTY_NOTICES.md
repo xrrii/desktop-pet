@@ -31,7 +31,7 @@ PetDock 的 MIT 许可证仅覆盖项目自有代码和文档。下列组件继�
 | css-tree | 3.2.1 | MIT | csstree/csstree |
 | data-urls | 7.0.0 | MIT | https://github.com/jsdom/data-urls |
 | decimal.js | 10.6.0 | MIT | https://github.com/MikeMcl/decimal.js |
-| dompurify | 3.4.12 | (MPL-2.0 OR Apache-2.0) | https://github.com/cure53/DOMPurify |
+| dompurify | 3.4.13 | (MPL-2.0 OR Apache-2.0) | https://github.com/cure53/DOMPurify |
 | entities | 4.5.0 | BSD-2-Clause | git://github.com/fb55/entities |
 | entities | 8.0.0 | BSD-2-Clause | https://github.com/fb55/entities |
 | html-encoding-sniffer | 6.0.0 | MIT | https://github.com/jsdom/html-encoding-sniffer |
@@ -54,7 +54,7 @@ PetDock 的 MIT 许可证仅覆盖项目自有代码和文档。下列组件继�
 | tough-cookie | 6.0.2 | BSD-3-Clause | https://github.com/salesforce/tough-cookie |
 | tr46 | 6.0.0 | MIT | https://github.com/jsdom/tr46 |
 | uc.micro | 2.1.0 | MIT | markdown-it/uc.micro |
-| undici | 7.28.0 | MIT | https://undici.nodejs.org |
+| undici | 7.29.0 | MIT | https://undici.nodejs.org |
 | w3c-xmlserializer | 5.0.0 | MIT | jsdom/w3c-xmlserializer |
 | webidl-conversions | 8.0.1 | BSD-2-Clause | https://github.com/jsdom/webidl-conversions |
 | whatwg-mimetype | 5.0.0 | MIT | jsdom/whatwg-mimetype |
@@ -142,7 +142,7 @@ PetDock 的 MIT 许可证仅覆盖项目自有代码和文档。下列组件继�
 | Pygments | 2.20.0 | BSD-2-Clause | https://pygments.org |
 | pyinstaller-hooks-contrib | 2026.6 | Apache Software License | https://github.com/pyinstaller/pyinstaller-hooks-contrib |
 | pyinstaller | 6.21.0 | GPLv2-or-later with a special exception which allows to use PyInstaller to build and distribute non-free programs (including commercial ones) | https://pyinstaller.org |
-| pypdf | 6.14.2 | BSD-3-Clause | https://github.com/py-pdf/pypdf/issues |
+| pypdf | 6.15.0 | BSD-3-Clause | https://github.com/py-pdf/pypdf/issues |
 | PyPika | 0.51.1 | Apache License Version 2.0 | https://github.com/kayak/pypika |
 | pyproject_hooks | 1.2.0 | MIT License | https://pyproject-hooks.readthedocs.io/en/latest/changelog.html |
 | pytest | 9.1.1 | MIT | https://docs.pytest.org/en/stable/changelog.html |

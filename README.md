@@ -297,6 +297,7 @@ assets/pets/<pet-id>/
   `npm.cmd run licenses` 生成到 `THIRD_PARTY_LICENSES.txt`。
 - 第三方在线服务和数据范围见 [第三方在线服务说明](THIRD_PARTY_SERVICES.md)。
 - 当前本地 BYOK 版本的数据处理方式见 [隐私说明](PRIVACY.md)。
+- 漏洞报告入口和已知依赖隔离边界见 [安全策略](SECURITY.md)。
 
 ## 开发约定
 

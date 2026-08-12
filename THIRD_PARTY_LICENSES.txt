@@ -762,7 +762,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ========================================================================================
-npm package: dompurify@3.4.12
+npm package: dompurify@3.4.13
 Declared license: (MPL-2.0 OR Apache-2.0)
 Project source: https://github.com/cure53/DOMPurify
 ----------------------------------------------------------------------------------------
@@ -2119,7 +2119,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ========================================================================================
-npm package: undici@7.28.0
+npm package: undici@7.29.0
 Declared license: MIT
 Project source: https://undici.nodejs.org
 ----------------------------------------------------------------------------------------
@@ -21442,11 +21442,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ========================================================================================
-PyPI package: pypdf@6.14.2
+PyPI package: pypdf@6.15.0
 Declared license: BSD-3-Clause
 Project source: https://github.com/py-pdf/pypdf/issues
 ----------------------------------------------------------------------------------------
-pypdf-6.14.2.dist-info/licenses/LICENSE
+pypdf-6.15.0.dist-info/licenses/LICENSE
 ----------------------------------------------------------------------------------------
 Copyright (c) 2006-2008, Mathieu Fenniak
 Some contributions copyright (c) 2007, Ashish Kulkarni <kulkarni.ashish@gmail.com>

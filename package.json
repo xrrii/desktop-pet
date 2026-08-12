@@ -109,7 +109,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.13",
     "jsdom": "^29.1.1",
     "markdown-it": "^14.3.0"
   }

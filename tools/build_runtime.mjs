@@ -31,6 +31,8 @@ const pyinstallerArgs = [
   '--collect-data',
   'chromadb',
   '--exclude-module',
+  'chromadb.server',
+  '--exclude-module',
   'chromadb.test',
   '--exclude-module',
   'pytest',
