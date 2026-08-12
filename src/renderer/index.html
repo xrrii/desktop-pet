@@ -300,13 +300,36 @@
         ></textarea>
         <button id="active-skill-chip" class="active-skill-chip" type="button" title="取消技能" aria-label="取消当前技能" hidden></button>
         <div class="composer-actions">
-          <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">+</button>
-          <button id="attachment-button" class="icon-button" type="button" title="添加附件" aria-label="添加附件">⊕</button>
-          <button id="settings-button" class="icon-button settings-button" type="button" title="助手配置" aria-label="助手配置" aria-pressed="false">⚙</button>
+          <button id="new-conversation" class="icon-button" type="button" title="新对话" aria-label="新对话">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h7" />
+              <path d="M18 2v6" />
+              <path d="M15 5h6" />
+            </svg>
+          </button>
+          <button id="attachment-button" class="icon-button" type="button" title="添加附件" aria-label="添加附件">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.82-2.82l8.48-8.48" />
+            </svg>
+          </button>
+          <button id="settings-button" class="icon-button settings-button" type="button" title="助手配置" aria-label="助手配置" aria-pressed="false">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 17H5" />
+              <path d="M19 7h-9" />
+              <circle cx="17" cy="17" r="3" />
+              <circle cx="7" cy="7" r="3" />
+            </svg>
+          </button>
           <button id="knowledge-button" class="icon-button knowledge-button" type="button" title="知识库" aria-label="知识库" aria-pressed="false" hidden>▤</button>
           <button id="skill-button" class="icon-button skill-button" type="button" title="技能" aria-label="技能" aria-pressed="false" hidden>$</button>
           <button id="web-button" class="icon-button web-button" type="button" title="联网与图片理解设置" aria-label="联网与图片理解设置" aria-pressed="false" hidden>⌁</button>
-          <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">◈</button>
+          <button id="memory-button" class="icon-button memory-button" type="button" title="记忆管理" aria-label="记忆管理" aria-pressed="false">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 3v5h5" />
+              <path d="M3.05 13a9 9 0 1 0 .5-4" />
+              <path d="M12 7v5l4 2" />
+            </svg>
+          </button>
           <button id="send-button" class="primary-button icon-action-button" type="submit" title="发送" aria-label="发送">↑</button>
           <button id="close-button" class="icon-button" type="button" title="关闭助手" aria-label="关闭助手">×</button>
         </div>

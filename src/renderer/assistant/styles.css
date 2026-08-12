@@ -2176,6 +2176,13 @@ textarea::placeholder {
   line-height: 1;
 }
 
+.toolbar-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  stroke-width: 2;
+}
+
 .icon-button:hover:not(:disabled) {
   color: #252b33;
   background: #eef1f4;
