@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { extname, join, normalize, resolve } from 'node:path'
 import { app } from 'electron'
-import type { AvailablePet } from '../shared/pet'
+import type { AvailablePet, CreatePetInput } from '../shared/pet'
 import { getAssetPath } from './window'
 
 interface PetManifestPreview {
@@ -120,11 +120,79 @@ function readPetPreview(petsRoot: string, folderName: string): AvailablePet | nu
     return {
       id: folderName,
       displayName: manifest.displayName || manifest.id || folderName,
-      description: manifest.description || ''
+      description: manifest.description || '',
+      source: petsRoot === getUserPetsRoot() ? 'user' : 'builtin'
     }
   } catch {
     return null
   }
+}
+
+/**
+ * 使用 Main 选中的图集文件创建用户桌宠目录和最小 manifest。
+ */
+export function createUserPet(
+  input: CreatePetInput,
+  sourcePath: string,
+  sourceFileName: string
+): AvailablePet {
+  const petId = input.id.trim()
+  const displayName = input.displayName.trim()
+  const description = input.description.trim()
+  if (!isSafePathSegment(petId)) {
+    throw new Error('桌宠 ID 只能使用字母、数字、点号、下划线和连字符。')
+  }
+  if (!displayName) {
+    throw new Error('桌宠名称不能为空。')
+  }
+  if (isAvailablePet(petId)) {
+    throw new Error('该桌宠 ID 已存在，请换一个。')
+  }
+  if (!existsSync(sourcePath)) {
+    throw new Error('所选图集文件不存在，请重新选择。')
+  }
+
+  const extension = normalizeSpritesheetExtension(sourceFileName || sourcePath)
+  const petRoot = join(ensureUserPetsRoot(), petId)
+  const spritesheetPath = `spritesheet${extension}`
+  mkdirSync(petRoot, { recursive: true })
+  copyFileSync(sourcePath, join(petRoot, spritesheetPath))
+  writeFileSync(
+    join(petRoot, 'pet.json'),
+    JSON.stringify(
+      {
+        id: petId,
+        displayName,
+        description,
+        spritesheetPath
+      },
+      null,
+      2
+    ),
+    'utf8'
+  )
+
+  return {
+    id: petId,
+    displayName,
+    description,
+    source: 'user'
+  }
+}
+
+/**
+ * 删除用户创建的桌宠目录，内置桌宠不允许通过管理页删除。
+ */
+export function deleteUserPet(petId: string): boolean {
+  if (!isSafePathSegment(petId)) {
+    return false
+  }
+  const pet = listAvailablePets().find((item) => item.id === petId)
+  if (!pet || pet.source !== 'user') {
+    return false
+  }
+  rmSync(join(getUserPetsRoot(), petId), { recursive: true, force: true })
+  return true
 }
 
 function getPetFilePath(petId: string, relativePath: string): string | null {
@@ -158,6 +226,17 @@ function getSafeFilePath(petsRoot: string, petId: string, relativePath: string):
 
 function isSafePathSegment(value: string): boolean {
   return /^[a-zA-Z0-9._-]+$/.test(value)
+}
+
+/**
+ * 仅允许当前渲染链路可加载的常见图片格式，目标文件名统一为 spritesheet。
+ */
+function normalizeSpritesheetExtension(filePath: string): '.png' | '.jpg' | '.jpeg' | '.webp' {
+  const extension = extname(filePath).toLowerCase()
+  if (extension === '.png' || extension === '.jpg' || extension === '.jpeg' || extension === '.webp') {
+    return extension
+  }
+  throw new Error('图集文件只支持 png、jpg、jpeg 或 webp。')
 }
 
 function isSafeRelativePath(value: string): boolean {

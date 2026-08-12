@@ -45,10 +45,53 @@
             <small id="model-save-status" class="web-test-status" role="status"></small>
           </form>
           <nav class="settings-links" aria-label="其他助手配置">
+            <button id="settings-open-pet-manager" class="settings-link" type="button"><strong>桌宠管理</strong><small>创建、切换和删除用户桌宠</small><span aria-hidden="true">›</span></button>
             <button id="settings-open-web" class="settings-link" type="button"><strong>联网与图片理解</strong><small>搜索服务、视觉模型与主动探测</small><span aria-hidden="true">›</span></button>
             <button id="settings-open-knowledge" class="settings-link" type="button"><strong>知识库</strong><small>索引目录与 Embedding 模型</small><span aria-hidden="true">›</span></button>
             <button id="settings-open-skill" class="settings-link" type="button"><strong>Skill</strong><small>安装、启停和更新 Skill</small><span aria-hidden="true">›</span></button>
           </nav>
+        </div>
+      </section>
+
+      <section id="pet-manager-view" class="pet-manager-view" aria-label="桌宠管理" hidden>
+        <header class="memory-header">
+          <h2>桌宠管理</h2>
+          <div class="memory-header-actions">
+            <button id="pet-manager-open-dir" class="icon-button" type="button" title="打开桌宠目录" aria-label="打开桌宠目录">⌂</button>
+            <button id="pet-manager-back" class="icon-button" type="button" title="返回设置" aria-label="返回设置">←</button>
+          </div>
+        </header>
+        <div id="pet-manager-scroll" class="pet-manager-scroll">
+          <form id="pet-manager-form" class="model-settings-form">
+            <div class="settings-section-heading">
+              <strong>创建桌宠</strong>
+              <small id="pet-manager-create-status">上传现成 sprite sheet</small>
+            </div>
+            <label class="web-field" for="pet-manager-id">
+              <span>桌宠 ID</span>
+              <input id="pet-manager-id" type="text" maxlength="80" placeholder="例如 pixel-buddy" autocomplete="off" required />
+            </label>
+            <label class="web-field" for="pet-manager-name">
+              <span>桌宠名称</span>
+              <input id="pet-manager-name" type="text" maxlength="80" placeholder="例如 像素伙伴" autocomplete="off" required />
+            </label>
+            <label class="web-field" for="pet-manager-description">
+              <span>描述（可选）</span>
+              <input id="pet-manager-description" type="text" maxlength="200" placeholder="例如 8x9 动画图集桌宠" autocomplete="off" />
+            </label>
+            <div class="web-field">
+              <span>Sprite Sheet 图集</span>
+              <div class="pet-manager-picker-row">
+                <button id="pet-manager-pick-spritesheet" class="secondary-button" type="button">选择图集</button>
+                <span id="pet-manager-spritesheet-name" class="pet-manager-file-name">未选择文件</span>
+              </div>
+            </div>
+            <p class="web-privacy-note">当前版本只支持上传已按现有动画协议制作好的 sprite sheet，创建后会自动复制到用户桌宠目录。</p>
+            <div class="settings-actions">
+              <button id="pet-manager-create" class="primary-button" type="submit">创建并切换</button>
+            </div>
+          </form>
+          <div id="pet-manager-list" class="pet-manager-list" aria-label="桌宠列表"></div>
         </div>
       </section>
 

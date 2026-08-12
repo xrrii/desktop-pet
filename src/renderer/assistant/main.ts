@@ -26,6 +26,7 @@ import type {
   MemoryItemKind,
   ToolCall
 } from '../../shared/assistant'
+import type { AvailablePet, PetSpritesheetSelection } from '../../shared/pet'
 import type { AssistantThemeId } from '../../shared/theme'
 import {
   getCommandPaletteState,
@@ -77,10 +78,22 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const conversation = requireElement<HTMLElement>('#conversation')
   const memoryView = requireElement<HTMLElement>('#memory-view')
   const settingsView = requireElement<HTMLElement>('#settings-view')
+  const petManagerView = requireElement<HTMLElement>('#pet-manager-view')
   const knowledgeView = requireElement<HTMLElement>('#knowledge-view')
   const skillView = requireElement<HTMLElement>('#skill-view')
   const webView = requireElement<HTMLElement>('#web-view')
   const webSettingsScroll = requireElement<HTMLElement>('#web-settings-scroll')
+  const petManagerScroll = requireElement<HTMLElement>('#pet-manager-scroll')
+  const petManagerForm = requireElement<HTMLFormElement>('#pet-manager-form')
+  const petManagerList = requireElement<HTMLElement>('#pet-manager-list')
+  const petManagerBack = requireElement<HTMLButtonElement>('#pet-manager-back')
+  const petManagerOpenDir = requireElement<HTMLButtonElement>('#pet-manager-open-dir')
+  const petManagerPickSpritesheet = requireElement<HTMLButtonElement>('#pet-manager-pick-spritesheet')
+  const petManagerSpritesheetName = requireElement<HTMLElement>('#pet-manager-spritesheet-name')
+  const petManagerCreateStatus = requireElement<HTMLElement>('#pet-manager-create-status')
+  const petManagerId = requireElement<HTMLInputElement>('#pet-manager-id')
+  const petManagerName = requireElement<HTMLInputElement>('#pet-manager-name')
+  const petManagerDescription = requireElement<HTMLInputElement>('#pet-manager-description')
   const skillContent = requireElement<HTMLElement>('#skill-content')
   const skillAddLocal = requireElement<HTMLButtonElement>('#skill-add-local')
   const skillRefresh = requireElement<HTMLButtonElement>('#skill-refresh')
@@ -146,6 +159,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const modelConfiguredStatus = requireElement<HTMLElement>('#model-configured-status')
   const modelSaveStatus = requireElement<HTMLElement>('#model-save-status')
   const settingsBack = requireElement<HTMLButtonElement>('#settings-back')
+  const settingsOpenPetManager = requireElement<HTMLButtonElement>('#settings-open-pet-manager')
   const settingsOpenWeb = requireElement<HTMLButtonElement>('#settings-open-web')
   const settingsOpenKnowledge = requireElement<HTMLButtonElement>('#settings-open-knowledge')
   const settingsOpenSkill = requireElement<HTMLButtonElement>('#settings-open-skill')
@@ -209,9 +223,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let memoryMode = false
   let settingsMode = false
   let returnToSettings = false
+  let petManagerMode = false
   let knowledgeMode = false
   let skillMode = false
   let webMode = false
+  let availablePets: AvailablePet[] = []
+  let currentPetId = 'hammer-dude'
+  let selectedPetSpritesheet: PetSpritesheetSelection | null = null
   let skillSnapshot: AssistantSkillSnapshot | null = null
   let webSnapshot: AssistantWebSettingsSnapshot | null = null
   let webBusy = false
@@ -245,6 +263,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   window.desktopPet.onAssistantStatus(renderRuntimeStatus)
   window.desktopPet.onAssistantLayout(applyLayout)
   window.desktopPet.onAssistantTheme(applyTheme)
+  window.desktopPet.onSwitchPet((petId) => {
+    currentPetId = petId
+    if (petManagerMode) {
+      renderPetManagerView()
+    }
+  })
   window.desktopPet.onAssistantAttachmentsStaged((result) => {
     addPendingAttachments(result.attachments)
   })
@@ -260,6 +284,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       } else {
         if (settingsMode) {
           closeSettingsView()
+        }
+        if (petManagerMode) {
+          closePetManagerView()
         }
         if (knowledgeMode) {
           closeKnowledgeView()
@@ -379,6 +406,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (memoryMode) {
         closeMemoryView()
       } else {
+        if (petManagerMode) {
+          closePetManagerView()
+        }
         if (settingsMode) {
           closeSettingsView()
         }
@@ -403,6 +433,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         if (memoryMode) {
           closeMemoryView()
         }
+        if (petManagerMode) {
+          closePetManagerView()
+        }
         if (skillMode) {
           closeSkillView()
         }
@@ -420,15 +453,24 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       return
     }
     if (memoryMode) closeMemoryView()
+    if (petManagerMode) closePetManagerView()
     if (knowledgeMode) closeKnowledgeView()
     if (skillMode) closeSkillView()
     if (webMode) closeWebView()
     void openSettingsView()
   })
   settingsBack.addEventListener('click', closeSettingsView)
+  settingsOpenPetManager.addEventListener('click', () => void openSettingsChild(openPetManagerView))
   settingsOpenWeb.addEventListener('click', () => void openSettingsChild(openWebView))
   settingsOpenKnowledge.addEventListener('click', () => void openSettingsChild(openKnowledgeView))
   settingsOpenSkill.addEventListener('click', () => void openSettingsChild(openSkillView))
+  petManagerBack.addEventListener('click', closePetManagerView)
+  petManagerOpenDir.addEventListener('click', () => void openUserPetsDirectory())
+  petManagerPickSpritesheet.addEventListener('click', () => void pickPetSpritesheet())
+  petManagerForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    void createPet()
+  })
   modelSettingsForm.addEventListener('submit', (event) => {
     event.preventDefault()
     void saveModelSettings()
@@ -441,6 +483,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       } else {
         if (memoryMode) {
           closeMemoryView()
+        }
+        if (petManagerMode) {
+          closePetManagerView()
         }
         if (knowledgeMode) {
           closeKnowledgeView()
@@ -462,6 +507,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     if (memoryMode) {
       closeMemoryView()
+    }
+    if (petManagerMode) {
+      closePetManagerView()
     }
     if (knowledgeMode) {
       closeKnowledgeView()
@@ -575,6 +623,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     skillSnapshot = skills
     webSnapshot = webSettings
     const existing = new Set(snapshot.libraries.map((library) => library.id))
+    currentPetId = settings.petId
     settings.assistantKnowledgeLibraryIds
       .filter((id) => existing.has(id))
       .forEach((id) => selectedKnowledgeIds.add(id))
@@ -685,6 +734,233 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     settingsButton.setAttribute('aria-pressed', 'false')
     document.body.dataset.assistantMode = 'chat'
     input.focus()
+  }
+
+  /** 打开桌宠管理页，统一展示创建表单和当前可用桌宠列表。 */
+  async function openPetManagerView(): Promise<void> {
+    clearError()
+    try {
+      await refreshPetManagerSnapshot()
+      petManagerMode = true
+      conversation.hidden = true
+      petManagerView.hidden = false
+      input.disabled = true
+      sendButton.disabled = true
+      newConversationButton.disabled = true
+      document.body.dataset.assistantMode = 'pet-manager'
+      renderPetManagerForm()
+      renderPetManagerView()
+      petManagerScroll.scrollTop = 0
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 关闭桌宠管理页，并按需返回统一设置页。 */
+  function closePetManagerView(): void {
+    const reopenSettings = returnToSettings
+    returnToSettings = false
+    petManagerMode = false
+    petManagerView.hidden = true
+    conversation.hidden = false
+    input.disabled = busy
+    sendButton.disabled = false
+    newConversationButton.disabled = busy
+    document.body.dataset.assistantMode = 'chat'
+    input.focus()
+    if (reopenSettings) void openSettingsView()
+  }
+
+  /** 使用当前选择结果刷新图集文件名和创建状态，不回填真实文件路径。 */
+  function renderPetManagerForm(statusText = '上传现成 sprite sheet'): void {
+    petManagerCreateStatus.textContent = statusText
+    petManagerSpritesheetName.textContent = selectedPetSpritesheet?.fileName ?? '未选择文件'
+  }
+
+  /** 以与现有管理页一致的卡片列表展示当前、内置和用户桌宠。 */
+  function renderPetManagerView(): void {
+    petManagerList.replaceChildren()
+    if (availablePets.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'memory-empty'
+      empty.textContent = '还没有可用桌宠。'
+      petManagerList.append(empty)
+      return
+    }
+
+    const current = availablePets.filter((pet) => pet.id === currentPetId)
+    const builtin = availablePets.filter((pet) => pet.source === 'builtin' && pet.id !== currentPetId)
+    const userPets = availablePets.filter((pet) => pet.source === 'user' && pet.id !== currentPetId)
+
+    appendPetSection('当前桌宠', current)
+    appendPetSection('内置桌宠', builtin)
+    appendPetSection('用户桌宠', userPets)
+  }
+
+  /** 为每个分组写入标题和条目，避免管理页布局偏离现有知识库/记忆页面。 */
+  function appendPetSection(title: string, pets: AvailablePet[]): void {
+    if (pets.length === 0) {
+      return
+    }
+    const label = document.createElement('p')
+    label.className = 'memory-section-label'
+    label.textContent = title
+    petManagerList.append(label)
+    pets.forEach((pet) => {
+      petManagerList.append(createPetRow(pet))
+    })
+  }
+
+  /** 复用现有卡片样式生成桌宠行，只暴露切换和删除两类操作。 */
+  function createPetRow(pet: AvailablePet): HTMLElement {
+    const row = document.createElement('article')
+    row.className = 'memory-row'
+
+    const main = document.createElement('div')
+    main.className = 'memory-row-main'
+    const title = document.createElement('strong')
+    title.textContent = pet.displayName
+    const source = document.createElement('span')
+    source.className = 'pet-manager-source'
+    source.textContent = pet.source === 'user' ? '用户桌宠' : '内置桌宠'
+    const description = document.createElement('small')
+    description.textContent = pet.id === currentPetId
+      ? (pet.description || '当前正在使用')
+      : (pet.description || `ID: ${pet.id}`)
+    main.append(title, source, description)
+
+    const actions = document.createElement('div')
+    actions.className = 'pet-manager-actions'
+    const switchButton = document.createElement('button')
+    switchButton.type = 'button'
+    switchButton.className = pet.id === currentPetId ? 'primary-button' : 'secondary-button'
+    switchButton.textContent = pet.id === currentPetId ? '当前' : '切换'
+    switchButton.disabled = pet.id === currentPetId
+    switchButton.addEventListener('click', () => void switchPet(pet.id))
+    actions.append(switchButton)
+
+    if (pet.source === 'user') {
+      const removeButton = document.createElement('button')
+      removeButton.type = 'button'
+      removeButton.className = 'secondary-button'
+      removeButton.textContent = '删除'
+      removeButton.addEventListener('click', () => void deletePet(pet))
+      actions.append(removeButton)
+    }
+
+    row.append(main, actions)
+    return row
+  }
+
+  /** 从 Main 读取最新桌宠列表和当前选择，保持设置页与托盘切换一致。 */
+  async function refreshPetManagerSnapshot(): Promise<void> {
+    const [pets, settings] = await Promise.all([
+      window.desktopPet.listAvailablePets(),
+      window.desktopPet.getSettings()
+    ])
+    availablePets = pets
+    currentPetId = settings.petId
+  }
+
+  /** 通过 Main 的原生文件选择器挑选图集，Renderer 仅保留一次性 token。 */
+  async function pickPetSpritesheet(): Promise<void> {
+    petManagerPickSpritesheet.disabled = true
+    try {
+      const selection = await window.desktopPet.pickPetSpritesheet()
+      if (selection) {
+        selectedPetSpritesheet = selection
+        renderPetManagerForm('图集已选择，创建后会复制到用户桌宠目录')
+      }
+    } catch (error) {
+      showError(error)
+    } finally {
+      petManagerPickSpritesheet.disabled = false
+    }
+  }
+
+  /** 创建用户桌宠并立即切换到该角色，成功后刷新管理列表。 */
+  async function createPet(): Promise<void> {
+    const id = petManagerId.value.trim()
+    const displayName = petManagerName.value.trim()
+    const description = petManagerDescription.value.trim()
+    if (!id) {
+      showError('请先填写桌宠 ID。')
+      petManagerId.focus()
+      return
+    }
+    if (!displayName) {
+      showError('请先填写桌宠名称。')
+      petManagerName.focus()
+      return
+    }
+    if (!selectedPetSpritesheet) {
+      showError('请先选择 sprite sheet 图集。')
+      return
+    }
+
+    petManagerPickSpritesheet.disabled = true
+    try {
+      await window.desktopPet.createPet({
+        id,
+        displayName,
+        description,
+        spritesheetToken: selectedPetSpritesheet.token,
+        makeCurrent: true
+      })
+      await refreshPetManagerSnapshot()
+      renderPetManagerView()
+      resetPetManagerForm()
+      renderPetManagerForm('桌宠已创建并切换')
+      clearError()
+    } catch (error) {
+      showError(error)
+    } finally {
+      petManagerPickSpritesheet.disabled = false
+    }
+  }
+
+  /** 切换当前桌宠后刷新管理列表，让“当前”状态立即生效。 */
+  async function switchPet(petId: string): Promise<void> {
+    try {
+      await window.desktopPet.setCurrentPet(petId)
+      currentPetId = petId
+      renderPetManagerView()
+      clearError()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 删除用户桌宠前做一次确认，避免误删手工导入的角色资源。 */
+  async function deletePet(pet: AvailablePet): Promise<void> {
+    if (!window.confirm(`确认删除“${pet.displayName}”？会移除用户桌宠目录中的 pet.json 和图集文件。`)) {
+      return
+    }
+    try {
+      await window.desktopPet.deleteUserPet(pet.id)
+      await refreshPetManagerSnapshot()
+      renderPetManagerView()
+      renderPetManagerForm('用户桌宠已删除')
+      clearError()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 打开用户桌宠目录，方便继续手工检查或替换资源。 */
+  async function openUserPetsDirectory(): Promise<void> {
+    try {
+      await window.desktopPet.openUserPetsDirectory()
+      clearError()
+    } catch (error) {
+      showError(error)
+    }
+  }
+
+  /** 创建成功后清空表单，避免旧 token 被重复提交。 */
+  function resetPetManagerForm(): void {
+    petManagerForm.reset()
+    selectedPetSpritesheet = null
   }
 
   /** 打开记忆管理视图，读取数据失败时保留聊天模式并显示错误。 */
@@ -3308,6 +3584,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       if (memoryMode) {
         closeMemoryView()
       }
+      if (petManagerMode) {
+        closePetManagerView()
+      }
       if (knowledgeMode) {
         closeKnowledgeView()
       }
@@ -3346,6 +3625,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     if (memoryMode) {
       closeMemoryView()
+    }
+    if (petManagerMode) {
+      closePetManagerView()
     }
     if (knowledgeMode) {
       closeKnowledgeView()

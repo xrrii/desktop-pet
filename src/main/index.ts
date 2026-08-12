@@ -8,6 +8,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent
 } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { basename, extname, resolve } from 'node:path'
 import type {
   AssistantAskInput,
@@ -25,12 +26,15 @@ import type {
   MemoryItemKind,
   AssistantPermissionResolution
 } from '../shared/assistant'
+import type { CreatePetInput, PetSpritesheetSelection } from '../shared/pet'
 import { AssistantManager } from './assistant/assistantManager'
 import { writeArtifactAtomically } from './assistant/artifactFileWriter'
 import { logError, logInfo } from './logger'
 import { ScreenshotManager } from './screenshotManager'
 import { setAssistantTheme } from './theme'
 import {
+  createUserPet,
+  deleteUserPet,
   ensureUserPetsRoot,
   isAvailablePet,
   listAvailablePets,
@@ -73,6 +77,7 @@ if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
 let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
 let smokeArtifactSaveCancelled = false
+const pendingPetSpritesheetSelections = new Map<string, { filePath: string; fileName: string }>()
 const assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
   (event) => petWindow?.webContents.send('assistant:event', event)
@@ -205,6 +210,27 @@ function registerIpc(): void {
     return listAvailablePets()
   })
 
+  ipcMain.handle('pet:pick-spritesheet', async (event) => {
+    const window = requirePetSender(event)
+    const selection = await dialog.showOpenDialog(window, {
+      title: '选择桌宠 spritesheet 图集',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: '图片文件',
+          extensions: ['png', 'jpg', 'jpeg', 'webp']
+        }
+      ]
+    })
+    const [selectedPath] = selection.filePaths
+    if (selection.canceled || !selectedPath) {
+      return null
+    }
+    const result = registerPetSpritesheetSelection(selectedPath)
+    logInfo('pet spritesheet selected', { fileName: result.fileName })
+    return result
+  })
+
   ipcMain.handle('pet:load-manifest', (event, petId: string) => {
     requirePetSender(event)
     requireString(petId)
@@ -224,6 +250,21 @@ function registerIpc(): void {
     return readPetSpritesheetDataUrl(petId, spritesheetPath)
   })
 
+  ipcMain.handle('pet:create', (event, input: CreatePetInput) => {
+    const window = requirePetSender(event)
+    const nextInput = requireCreatePetInput(input)
+    const selection = requirePetSpritesheetSelection(nextInput.spritesheetToken)
+    const pet = createUserPet(nextInput, selection.filePath, selection.fileName)
+    pendingPetSpritesheetSelections.delete(nextInput.spritesheetToken)
+    if (nextInput.makeCurrent) {
+      updateSettings({ petId: pet.id })
+      window.webContents.send('pet:switch', pet.id)
+    }
+    rebuildTrayMenu(window)
+    logInfo('user pet created', { petId: pet.id, source: pet.source, makeCurrent: Boolean(nextInput.makeCurrent) })
+    return pet
+  })
+
   ipcMain.handle('pet:set-current', (event, petId: string) => {
     const window = requirePetSender(event)
     requireString(petId)
@@ -234,6 +275,33 @@ function registerIpc(): void {
     window.webContents.send('pet:switch', petId)
     rebuildTrayMenu(window)
     return true
+  })
+
+  ipcMain.handle('pet:delete-user', (event, petId: string) => {
+    const window = requirePetSender(event)
+    requireString(petId)
+    const deleted = deleteUserPet(petId)
+    if (!deleted) {
+      return false
+    }
+    if (loadSettings().petId === petId) {
+      const [fallbackPet] = listAvailablePets()
+      if (fallbackPet) {
+        updateSettings({ petId: fallbackPet.id })
+        window.webContents.send('pet:switch', fallbackPet.id)
+      }
+    }
+    rebuildTrayMenu(window)
+    logInfo('user pet deleted', { petId })
+    return true
+  })
+
+  ipcMain.handle('pet:open-user-pets-dir', async (event) => {
+    requirePetSender(event)
+    const result = await shell.openPath(ensureUserPetsRoot())
+    if (result) {
+      throw new Error('桌宠目录打开失败，请稍后重试。')
+    }
   })
 
   ipcMain.handle('pet:show-context-menu', (event) => {
@@ -702,6 +770,59 @@ function requireBoolean(value: unknown): asserts value is boolean {
 function requireString(value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new TypeError('IPC value must be a non-empty string.')
+  }
+}
+
+/**
+ * 记录一次 Renderer 发起的图集选择结果，后续创建时只通过 token 回传。
+ */
+function registerPetSpritesheetSelection(filePath: string): PetSpritesheetSelection {
+  const token = randomUUID()
+  const fileName = basename(filePath)
+  pendingPetSpritesheetSelections.set(token, { filePath, fileName })
+  if (pendingPetSpritesheetSelections.size > 32) {
+    const [oldestToken] = pendingPetSpritesheetSelections.keys()
+    if (oldestToken) {
+      pendingPetSpritesheetSelections.delete(oldestToken)
+    }
+  }
+  return { token, fileName }
+}
+
+/**
+ * 校验图集选择 token 是否存在，只有创建成功后才真正删除该记录。
+ */
+function requirePetSpritesheetSelection(token: string): { filePath: string; fileName: string } {
+  const selection = pendingPetSpritesheetSelections.get(token)
+  if (!selection) {
+    throw new Error('图集选择已失效，请重新选择图片。')
+  }
+  return selection
+}
+
+/**
+ * 校验桌宠创建表单，只允许 Renderer 传入最小元数据和一次性 token。
+ */
+function requireCreatePetInput(value: unknown): CreatePetInput {
+  if (!value || typeof value !== 'object') {
+    throw new TypeError('桌宠创建参数无效。')
+  }
+  const input = value as Partial<CreatePetInput>
+  requireString(input.id)
+  requireString(input.displayName)
+  if (typeof input.description !== 'string') {
+    throw new TypeError('桌宠描述无效。')
+  }
+  requireString(input.spritesheetToken)
+  if (input.makeCurrent !== undefined && typeof input.makeCurrent !== 'boolean') {
+    throw new TypeError('桌宠切换参数无效。')
+  }
+  return {
+    id: input.id,
+    displayName: input.displayName,
+    description: input.description,
+    spritesheetToken: input.spritesheetToken,
+    ...(input.makeCurrent !== undefined ? { makeCurrent: input.makeCurrent } : {})
   }
 }
 

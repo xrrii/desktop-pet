@@ -39,9 +39,11 @@ import type { ScreenshotOverlayPayload, ScreenshotSelectionInput } from '../shar
 import type { AssistantThemeId } from '../shared/theme'
 import type {
   AvailablePet,
+  CreatePetInput,
   DragMoveResult,
   PetAction,
   PetManifestInput,
+  PetSpritesheetSelection,
   PetSettings
 } from '../shared/pet'
 
@@ -69,11 +71,16 @@ const api = {
     ipcRenderer.invoke('pet:reset-position'),
   getSettings: (): Promise<PetSettings> => ipcRenderer.invoke('pet:get-settings'),
   listAvailablePets: (): Promise<AvailablePet[]> => ipcRenderer.invoke('pet:list-available'),
+  pickPetSpritesheet: (): Promise<PetSpritesheetSelection | null> =>
+    ipcRenderer.invoke('pet:pick-spritesheet'),
   loadPetManifest: (petId: string): Promise<PetManifestInput | null> =>
     ipcRenderer.invoke('pet:load-manifest', petId),
   loadPetSpritesheet: (petId: string, spritesheetPath: string): Promise<string | null> =>
     ipcRenderer.invoke('pet:load-spritesheet', petId, spritesheetPath),
+  createPet: (input: CreatePetInput): Promise<AvailablePet> => ipcRenderer.invoke('pet:create', input),
   setCurrentPet: (petId: string): Promise<boolean> => ipcRenderer.invoke('pet:set-current', petId),
+  deleteUserPet: (petId: string): Promise<boolean> => ipcRenderer.invoke('pet:delete-user', petId),
+  openUserPetsDirectory: (): Promise<void> => ipcRenderer.invoke('pet:open-user-pets-dir'),
   setAlwaysOnTop: (value: boolean): Promise<boolean> =>
     ipcRenderer.invoke('pet:set-always-on-top', value),
   setClickThrough: (value: boolean): Promise<boolean> =>

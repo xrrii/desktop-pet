@@ -55,6 +55,20 @@ export interface AvailablePet {
   id: string
   displayName: string
   description: string
+  source: 'builtin' | 'user'
+}
+
+export interface PetSpritesheetSelection {
+  token: string
+  fileName: string
+}
+
+export interface CreatePetInput {
+  id: string
+  displayName: string
+  description: string
+  spritesheetToken: string
+  makeCurrent?: boolean
 }
 
 export interface WindowPosition {
