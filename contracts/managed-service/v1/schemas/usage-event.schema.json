@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/usage-event.schema.json",
+  "title": "UsageEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "usageEventId", "traceId", "requestId", "attemptId", "sessionId", "capability", "status", "inputUnits", "outputUnits", "occurredAt"],
+  "properties": {
+    "version": { "const": 1 },
+    "usageEventId": { "type": "string", "format": "uuid" },
+    "traceId": { "type": "string", "format": "uuid" },
+    "requestId": { "type": "string", "format": "uuid" },
+    "attemptId": { "type": "string", "format": "uuid" },
+    "sessionId": { "type": "string", "format": "uuid" },
+    "capability": { "enum": ["chat", "embedding", "vision", "rerank", "web_search"] },
+    "logicalModel": { "type": ["string", "null"], "maxLength": 64 },
+    "status": { "enum": ["reserved", "settled", "released", "failed"] },
+    "inputUnits": { "type": "integer", "minimum": 0 },
+    "outputUnits": { "type": "integer", "minimum": 0 },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

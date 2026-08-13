@@ -147,6 +147,7 @@ desktop-pet/
 | `npm.cmd run debug` | 启动开发模式并打开 DevTools |
 | `npm.cmd run typecheck` | TypeScript 类型检查 |
 | `npm.cmd test` | 运行 Vitest 单元测试 |
+| `npm.cmd run test:contracts` | 校验 Managed Service OpenAPI、Schema、样例和安全边界 |
 | `npm.cmd run test:runtime` | 运行 Python Runtime 测试 |
 | `npm.cmd run test:retrieval` | 运行检索评估 |
 | `npm.cmd run build` | 构建 Electron 应用代码 |

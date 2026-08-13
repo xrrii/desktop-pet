@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "errors": [
+    { "code": "invalid_request", "httpStatus": 400, "retryable": false, "message": "请求参数无效。" },
+    { "code": "authentication_required", "httpStatus": 401, "retryable": false, "message": "请先登录 PetDock 官方服务。" },
+    { "code": "token_expired", "httpStatus": 401, "retryable": true, "retryCondition": "before_output_once", "message": "登录凭据已过期。" },
+    { "code": "device_revoked", "httpStatus": 401, "retryable": false, "message": "当前设备授权已撤销。" },
+    { "code": "capability_disabled", "httpStatus": 403, "retryable": false, "message": "当前能力已关闭。" },
+    { "code": "capability_not_entitled", "httpStatus": 403, "retryable": false, "message": "当前套餐未授权此能力。" },
+    { "code": "quota_exhausted", "httpStatus": 429, "retryable": false, "message": "当前能力额度已用完。" },
+    { "code": "rate_limited", "httpStatus": 429, "retryable": true, "message": "请求过于频繁，请稍后重试。" },
+    { "code": "provider_unavailable", "httpStatus": 503, "retryable": true, "message": "官方能力暂时不可用。" },
+    { "code": "provider_timeout", "httpStatus": 504, "retryable": true, "message": "模型服务响应超时。" },
+    { "code": "provider_invalid_response", "httpStatus": 502, "retryable": false, "message": "模型服务返回了无效响应。" },
+    { "code": "request_cancelled", "httpStatus": 409, "retryable": false, "message": "请求已取消。" },
+    { "code": "request_too_large", "httpStatus": 413, "retryable": false, "message": "请求内容超过限制。" },
+    { "code": "unsupported_client_version", "httpStatus": 426, "retryable": false, "message": "当前 PetDock 版本不再受支持。" },
+    { "code": "authentication_expired_during_stream", "httpStatus": null, "retryable": false, "message": "回复期间登录凭据过期，请重新发送。" },
+    { "code": "internal_error", "httpStatus": 500, "retryable": false, "message": "官方服务发生内部错误。" }
+  ]
+}

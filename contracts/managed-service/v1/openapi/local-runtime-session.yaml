@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: PetDock Local Runtime Managed Session API
+  version: 1.0.0
+  description: Electron Main 通过现有本地 Runtime 启动令牌调用的 Managed Session 内存接口。
+x-petdock-contract-version: 1
+servers:
+  - url: http://127.0.0.1:{port}
+    variables:
+      port:
+        default: '0'
+security:
+  - localRuntimeBearer: []
+paths:
+  /v1/managed/session:
+    put:
+      operationId: updateManagedSession
+      summary: 更新 Runtime 内存中的官方短期 Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagedSessionUpdate'
+      responses:
+        '204': { description: Session 已更新 }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      operationId: clearManagedSession
+      summary: 清除 Runtime 内存中的官方 Session
+      responses:
+        '204': { description: Session 已清除 }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/managed/session/status:
+    get:
+      operationId: getManagedSessionStatus
+      summary: 获取不含 Token 的 Managed Session 状态
+      responses:
+        '200':
+          description: Session 脱敏状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedSessionStatus'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+  /v1/managed/auth-result:
+    post:
+      operationId: submitManagedAuthResult
+      summary: 提交 Main 刷新官方 Runtime Token 的结果
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/managed-auth-result.schema.json'
+      responses:
+        '202': { description: 结果已提交给等待中的任务 }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+components:
+  securitySchemes:
+    localRuntimeBearer:
+      type: http
+      scheme: bearer
+      description: 每次启动随机生成的 PETDOCK_RUNTIME_TOKEN，不是官方 Runtime Token。
+  responses:
+    ErrorResponse:
+      description: 本地稳定错误
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [detail]
+            properties:
+              detail: { type: string }
+  schemas:
+    ManagedSessionUpdate:
+      type: object
+      additionalProperties: false
+      required: [accessToken, expiresAt, capabilitySnapshotVersion]
+      properties:
+        accessToken: { type: string, minLength: 32 }
+        expiresAt: { type: string, format: date-time }
+        capabilitySnapshotVersion: { type: integer, minimum: 1 }
+    ManagedSessionStatus:
+      type: object
+      additionalProperties: false
+      required: [configured, expiresAt, capabilitySnapshotVersion]
+      properties:
+        configured: { type: boolean }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        capabilitySnapshotVersion: { type: [integer, 'null'], minimum: 1 }

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "capabilities": {
+    "chat": { "selectedSource": "managed", "effectiveSource": "managed", "status": "available", "reason": null },
+    "embedding": { "selectedSource": "local", "effectiveSource": "local", "status": "available", "reason": null },
+    "vision": { "selectedSource": "disabled", "effectiveSource": "disabled", "status": "disabled", "reason": "user_disabled" },
+    "rerank": { "selectedSource": "disabled", "effectiveSource": "disabled", "status": "disabled", "reason": "user_disabled" },
+    "web_search": { "selectedSource": "byok", "effectiveSource": "byok", "status": "available", "reason": null }
+  }
+}

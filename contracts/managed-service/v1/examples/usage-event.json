@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "usageEventId": "43faf58f-3dfe-42bb-b8ee-4e8c66eb428c",
+  "traceId": "dcecb768-9ff5-4ca4-a10b-6a725695ab5b",
+  "requestId": "54ca903e-23da-42bb-a69b-125f3669962b",
+  "attemptId": "33462e3c-68fb-41e4-8a92-fc8d56876463",
+  "sessionId": "039f8b64-dc93-4b7f-a94d-cf88400f2615",
+  "capability": "chat",
+  "logicalModel": "chat-standard",
+  "status": "settled",
+  "inputUnits": 420,
+  "outputUnits": 180,
+  "occurredAt": "2026-08-13T07:40:00Z"
+}

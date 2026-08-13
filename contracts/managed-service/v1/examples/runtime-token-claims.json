@@ -1,0 +1,13 @@
+{
+  "iss": "https://account.petdock.site",
+  "aud": "petdock-ai-data-plane",
+  "sub": "user_01K2N8A7Y0H3ZP1ZQ4N8KC7W9V",
+  "jti": "80f8599d-09ee-44e9-a1f5-02efdfb36d4a",
+  "sid": "039f8b64-dc93-4b7f-a94d-cf88400f2615",
+  "user_id": "user_01K2N8A7Y0H3ZP1ZQ4N8KC7W9V",
+  "device_id": "0560d3ba-8a88-42aa-b59b-62605234fb51",
+  "capabilities": ["chat", "embedding"],
+  "entitlement_version": 3,
+  "iat": 1786597200,
+  "exp": 1786598100
+}

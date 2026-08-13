@@ -22,7 +22,8 @@
 2. 阅读 [AI 助手总体架构](architecture/AI_ASSISTANT_ARCHITECTURE.md)，确认进程边界、安全边界和 Runtime 职责。
 3. 根据任务进入相应功能专项文档。
 4. 涉及 BYOK 与官方服务时，先阅读 [官方托管服务进度与交接记录](roadmap/MANAGED_SERVICE_PROGRESS.md)，再阅读 [双模式实施方案](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md)。
-5. 开始其他 AI 助手阶段开发或验收时，核对 [AI 助手进度记录](roadmap/AI_ASSISTANT_PROGRESS.md)。
+5. 涉及跨端协议时，读取仓库根目录的 `contracts/managed-service/v1`，不从架构文档重新猜测字段。
+6. 开始其他 AI 助手阶段开发或验收时，核对 [AI 助手进度记录](roadmap/AI_ASSISTANT_PROGRESS.md)。
 
 ## 4. 文档目录
 
@@ -32,6 +33,7 @@
 | --- | --- | --- |
 | [AI_ASSISTANT_ARCHITECTURE.md](architecture/AI_ASSISTANT_ARCHITECTURE.md) | Active | 本地助手总体架构、通信方式、权限和 Runtime 边界 |
 | [MANAGED_SERVICE_IMPLEMENTATION_PLAN.md](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md) | Active | BYOK 与官方托管服务的冻结决策和分阶段实施基线 |
+| [MANAGED_SERVICE_PROVIDER_INVENTORY.md](architecture/MANAGED_SERVICE_PROVIDER_INVENTORY.md) | Active | Phase 0 模型消费者、Provider、配置注入和 Phase 1 回归范围盘点 |
 
 ### 4.2 开发指南
 
@@ -55,6 +57,7 @@
 | --- | --- | --- |
 | [AI_ASSISTANT_PROGRESS.md](roadmap/AI_ASSISTANT_PROGRESS.md) | Tracking | 已完成阶段、测试结果、遗留项和后续工作 |
 | [MANAGED_SERVICE_PROGRESS.md](roadmap/MANAGED_SERVICE_PROGRESS.md) | Tracking | 官方托管服务当前阶段、跨仓库边界、验证事实和跨会话交接入口 |
+| [MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md](roadmap/MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md) | Tracking | Managed 开发前的 BYOK、打包态 Runtime、C3/C5 和检索基线证据 |
 
 ## 5. 按任务选择文档
 
@@ -63,6 +66,7 @@
 | 修改 Electron、Runtime 启动或打包 | 开发指南、AI 助手总体架构 |
 | 修改 Agent、工具协议或进程通信 | AI 助手总体架构、开发指南 |
 | 开发 BYOK 或官方托管服务 | 官方托管服务进度、双模式实施方案、AI 助手总体架构 |
+| 修改 Managed Service API、Token、错误码或 SSE | `contracts/managed-service/v1`、双模式实施方案、官方托管服务进度 |
 | 修改附件、文件生成、视觉或联网搜索 | 对话资源能力、AI 助手总体架构 |
 | 修改知识库、Embedding 或检索 | RAG 优化方案、Embedding 白名单 |
 | 修改 Skill | Skill 系统开发文档、AI 助手总体架构 |

@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: PetDock Desktop Control Plane API
+  version: 1.0.0
+  description: 桌面端登录后使用的设备、授权、Runtime Session 和用量摘要接口。官网 Web API 另行定义。
+x-petdock-contract-version: 1
+servers:
+  - url: https://api.petdock.site
+    description: PetDock Spring Boot 控制面规划入口，启用前必须完成域名和证书配置
+security:
+  - desktopOAuth: []
+paths:
+  /api/v1/devices:
+    post:
+      operationId: registerDevice
+      summary: 注册当前桌面设备
+      tags: [Device]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegistrationRequest'
+      responses:
+        '201':
+          description: 设备已注册
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/devices/current:
+    get:
+      operationId: getCurrentDevice
+      summary: 获取当前设备脱敏状态
+      tags: [Device]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 当前设备
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/devices/{deviceId}:
+    delete:
+      operationId: revokeDevice
+      summary: 撤销指定设备
+      tags: [Device]
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204': { description: 设备已撤销 }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/entitlements:
+    get:
+      operationId: getEntitlements
+      summary: 获取当前套餐和能力快照
+      tags: [Entitlement]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 脱敏能力快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitlementSnapshot'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/runtime-sessions:
+    post:
+      operationId: createRuntimeSession
+      summary: 为当前设备签发短期 Runtime Token
+      tags: [RuntimeSession]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeSessionRequest'
+      responses:
+        '201':
+          description: Runtime Session 已创建
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSessionResponse'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '426': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/runtime-sessions/{sessionId}:
+    delete:
+      operationId: revokeRuntimeSession
+      summary: 撤销 Runtime Session
+      tags: [RuntimeSession]
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204': { description: Session 已撤销 }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/usage/summary:
+    get:
+      operationId: getUsageSummary
+      summary: 获取桌面端展示所需的额度摘要
+      tags: [Usage]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 用量摘要，不包含完整账单明细
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+components:
+  securitySchemes:
+    desktopOAuth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://account.petdock.site/oauth2/authorize
+          tokenUrl: https://account.petdock.site/oauth2/token
+          scopes:
+            desktop.session: 管理当前桌面会话
+  parameters:
+    ClientVersion:
+      name: X-PetDock-Client-Version
+      in: header
+      required: true
+      schema: { type: string, pattern: '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' }
+    RequestId:
+      name: X-PetDock-Request-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    ErrorResponse:
+      description: 稳定错误响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    DeviceRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [deviceId, displayName, platform]
+      properties:
+        deviceId: { type: string, format: uuid }
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        platform: { type: string, const: windows }
+    Device:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, current, status, createdAt, lastSeenAt]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        current: { type: boolean }
+        status: { type: string, enum: [active, revoked] }
+        createdAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+    CapabilityEntitlement:
+      type: object
+      additionalProperties: false
+      required: [enabled, remaining, unit]
+      properties:
+        enabled: { type: boolean }
+        remaining: { type: integer, minimum: 0 }
+        unit: { type: string, enum: [tokens, requests] }
+    EntitlementSnapshot:
+      type: object
+      additionalProperties: false
+      required: [version, plan, capabilities, expiresAt]
+      properties:
+        version: { type: integer, minimum: 1 }
+        plan: { type: string, minLength: 1, maxLength: 64 }
+        capabilities:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CapabilityEntitlement'
+        expiresAt: { type: string, format: date-time }
+    RuntimeSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [deviceId]
+      properties:
+        deviceId: { type: string, format: uuid }
+    RuntimeSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [sessionId, accessToken, tokenType, issuedAt, expiresAt, entitlementVersion]
+      properties:
+        sessionId: { type: string, format: uuid }
+        accessToken: { type: string, minLength: 32 }
+        tokenType: { type: string, const: Bearer }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        entitlementVersion: { type: integer, minimum: 1 }
+    UsageCapabilitySummary:
+      type: object
+      additionalProperties: false
+      required: [used, remaining, unit]
+      properties:
+        used: { type: integer, minimum: 0 }
+        remaining: { type: integer, minimum: 0 }
+        unit: { type: string, enum: [tokens, requests] }
+    UsageSummary:
+      type: object
+      additionalProperties: false
+      required: [periodStart, periodEnd, capabilities]
+      properties:
+        periodStart: { type: string, format: date-time }
+        periodEnd: { type: string, format: date-time }
+        capabilities:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/UsageCapabilitySummary'
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, requestId, retryable, retryAfterSeconds]
+          properties:
+            code: { type: string, minLength: 1, maxLength: 100 }
+            message: { type: string, minLength: 1, maxLength: 300 }
+            requestId: { type: string, format: uuid }
+            retryable: { type: boolean }
+            retryAfterSeconds: { type: [integer, 'null'], minimum: 0 }

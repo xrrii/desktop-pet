@@ -1,0 +1,388 @@
+openapi: 3.1.0
+info:
+  title: PetDock AI Data Plane API
+  version: 1.0.0
+  description: 本地 Runtime 使用短期 Runtime Token 调用的官方 AI 能力接口。
+x-petdock-contract-version: 1
+servers:
+  - url: https://ai.petdock.site
+    description: PetDock FastAPI AI 数据面规划入口，启用前必须完成域名和证书配置
+security:
+  - runtimeBearer: []
+paths:
+  /ai/v1/chat/completions:
+    post:
+      operationId: createChatCompletion
+      summary: 创建流式 Chat 调用
+      tags: [Chat]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AttemptId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: 版本化 SSE 流
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            X-Accel-Buffering:
+              schema: { type: string, const: 'no' }
+          content:
+            text/event-stream:
+              schema: { type: string }
+              x-event-schema:
+                $ref: '../schemas/chat-stream-event.schema.json'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+        '502': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
+        '504': { $ref: '#/components/responses/ErrorResponse' }
+  /ai/v1/embeddings:
+    post:
+      operationId: createEmbeddings
+      summary: 创建批量 Embedding
+      tags: [Embedding]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AttemptId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbeddingRequest'
+      responses:
+        '200':
+          description: Embedding 结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
+  /ai/v1/vision/analyze:
+    post:
+      operationId: analyzeImage
+      summary: 分析用户明确加入会话的图片
+      tags: [Vision]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AttemptId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisionRequest'
+      responses:
+        '200':
+          description: 图片摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisionResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
+  /ai/v1/rerank:
+    post:
+      operationId: rerankCandidates
+      summary: 对本地混合召回候选进行受限重排
+      tags: [Rerank]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AttemptId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RerankRequest'
+      responses:
+        '200':
+          description: 重排结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RerankResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
+  /ai/v1/web/search:
+    post:
+      operationId: searchWeb
+      summary: 返回搜索候选，不抓取候选网页正文
+      tags: [WebSearch]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AttemptId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebSearchRequest'
+      responses:
+        '200':
+          description: 搜索候选
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebSearchResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
+  /ai/v1/capabilities:
+    get:
+      operationId: getDataPlaneCapabilities
+      summary: 获取数据面实时能力状态
+      tags: [System]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AttemptId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: 实时能力状态
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, capabilities]
+                properties:
+                  version: { type: integer, minimum: 1 }
+                  capabilities:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      additionalProperties: false
+                      required: [available]
+                      properties:
+                        available: { type: boolean }
+                        reason: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+  /ai/v1/health:
+    get:
+      operationId: getDataPlaneHealth
+      summary: 返回不含敏感信息的就绪状态
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: 数据面就绪
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, contractVersion]
+                properties:
+                  status: { type: string, const: ok }
+                  contractVersion: { type: integer, const: 1 }
+components:
+  securitySchemes:
+    runtimeBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TraceId:
+      name: X-PetDock-Trace-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    RequestId:
+      name: X-PetDock-Request-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    AttemptId:
+      name: X-PetDock-Attempt-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    DeviceId:
+      name: X-PetDock-Device-Id
+      in: header
+      required: true
+      description: 仅用于链路辅助，授权以 JWT 中签名的 device_id 为准。
+      schema: { type: string, format: uuid }
+    ClientVersion:
+      name: X-PetDock-Client-Version
+      in: header
+      required: true
+      schema: { type: string, pattern: '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' }
+  responses:
+    ErrorResponse:
+      description: 稳定错误响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    Message:
+      type: object
+      additionalProperties: false
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [system, user, assistant, tool] }
+        content: { type: string, maxLength: 200000 }
+        toolCallId: { type: [string, 'null'], maxLength: 100 }
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [logicalModel, messages, stream]
+      properties:
+        logicalModel: { type: string, minLength: 1, maxLength: 64 }
+        messages: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/Message' } }
+        stream: { type: boolean, const: true }
+        tools: { type: array, maxItems: 50, items: { type: object } }
+    EmbeddingRequest:
+      type: object
+      additionalProperties: false
+      required: [descriptorId, input]
+      properties:
+        descriptorId: { type: string, minLength: 1, maxLength: 100 }
+        input: { type: array, minItems: 1, maxItems: 128, items: { type: string, maxLength: 50000 } }
+    EmbeddingResponse:
+      type: object
+      additionalProperties: false
+      required: [descriptorId, revision, dimensions, vectors, usage]
+      properties:
+        descriptorId: { type: string }
+        revision: { type: string }
+        dimensions: { type: integer, minimum: 1 }
+        vectors:
+          type: array
+          items:
+            type: array
+            items: { type: number }
+        usage: { $ref: '#/components/schemas/Usage' }
+    VisionRequest:
+      type: object
+      additionalProperties: false
+      required: [logicalModel, mimeType, dataBase64]
+      properties:
+        logicalModel: { type: string, minLength: 1, maxLength: 64 }
+        mimeType: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        dataBase64: { type: string, minLength: 1, maxLength: 30000000 }
+    VisionResponse:
+      type: object
+      additionalProperties: false
+      required: [summary, usage]
+      properties:
+        summary: { type: string, maxLength: 20000 }
+        usage: { $ref: '#/components/schemas/Usage' }
+    RerankCandidate:
+      type: object
+      additionalProperties: false
+      required: [id, content]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        content: { type: string, maxLength: 20000 }
+    RerankRequest:
+      type: object
+      additionalProperties: false
+      required: [logicalModel, query, candidates]
+      properties:
+        logicalModel: { type: string, minLength: 1, maxLength: 64 }
+        query: { type: string, minLength: 1, maxLength: 10000 }
+        candidates: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/RerankCandidate' } }
+    RerankResponse:
+      type: object
+      additionalProperties: false
+      required: [results, usage]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, score]
+            properties:
+              id: { type: string }
+              score: { type: number }
+        usage: { $ref: '#/components/schemas/Usage' }
+    WebSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [query, maxResults]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 1000 }
+        maxResults: { type: integer, minimum: 1, maximum: 10 }
+    WebSearchResult:
+      type: object
+      additionalProperties: false
+      required: [title, url, excerpt, publishedAt]
+      properties:
+        title: { type: string, maxLength: 500 }
+        url: { type: string, format: uri, maxLength: 4096 }
+        excerpt: { type: string, maxLength: 5000 }
+        publishedAt: { type: [string, 'null'], format: date-time }
+    WebSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [results, usage]
+      properties:
+        results: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/WebSearchResult' } }
+        usage: { $ref: '#/components/schemas/Usage' }
+    Usage:
+      type: object
+      additionalProperties: false
+      required: [inputUnits, outputUnits]
+      properties:
+        inputUnits: { type: integer, minimum: 0 }
+        outputUnits: { type: integer, minimum: 0 }
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, requestId, retryable, retryAfterSeconds]
+          properties:
+            code: { type: string, minLength: 1, maxLength: 100 }
+            message: { type: string, minLength: 1, maxLength: 300 }
+            requestId: { type: string, format: uuid }
+            retryable: { type: boolean }
+            retryAfterSeconds: { type: [integer, 'null'], minimum: 0 }

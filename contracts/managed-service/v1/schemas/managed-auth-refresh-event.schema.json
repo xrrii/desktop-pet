@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/managed-auth-refresh-event.schema.json",
+  "title": "ManagedAuthRefreshRequiredEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventVersion", "type", "sequence", "taskId", "traceId", "requestId", "reason", "outputStarted"],
+  "properties": {
+    "eventVersion": { "const": 1 },
+    "type": { "const": "managed_auth_refresh_required" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "taskId": { "type": "string", "format": "uuid" },
+    "traceId": { "type": "string", "format": "uuid" },
+    "requestId": { "type": "string", "format": "uuid" },
+    "reason": { "const": "token_expired" },
+    "outputStarted": { "const": false }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/request-context.schema.json",
+  "title": "ManagedRequestContext",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["traceId", "requestId", "attemptId", "clientVersion"],
+  "properties": {
+    "traceId": { "type": "string", "format": "uuid" },
+    "requestId": { "type": "string", "format": "uuid" },
+    "attemptId": { "type": "string", "format": "uuid" },
+    "clientVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$" }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/chat-stream-event.schema.json",
+  "title": "ManagedChatStreamEvent",
+  "oneOf": [
+    { "$ref": "#/$defs/delta" },
+    { "$ref": "#/$defs/toolCall" },
+    { "$ref": "#/$defs/usage" },
+    { "$ref": "#/$defs/completed" },
+    { "$ref": "#/$defs/error" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["eventVersion", "type", "sequence", "traceId", "requestId"],
+      "properties": {
+        "eventVersion": { "const": 1 },
+        "type": { "type": "string" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "traceId": { "type": "string", "format": "uuid" },
+        "requestId": { "type": "string", "format": "uuid" }
+      }
+    },
+    "delta": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventVersion", "type", "sequence", "traceId", "requestId", "text"],
+          "properties": {
+            "eventVersion": { "const": 1 },
+            "type": { "const": "delta" },
+            "sequence": { "type": "integer", "minimum": 1 },
+            "traceId": { "type": "string", "format": "uuid" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "text": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "toolCall": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventVersion", "type", "sequence", "traceId", "requestId", "toolCallId", "name", "arguments"],
+          "properties": {
+            "eventVersion": { "const": 1 },
+            "type": { "const": "tool_call" },
+            "sequence": { "type": "integer", "minimum": 1 },
+            "traceId": { "type": "string", "format": "uuid" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "toolCallId": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "arguments": { "type": "object" }
+          }
+        }
+      ]
+    },
+    "usage": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventVersion", "type", "sequence", "traceId", "requestId", "inputUnits", "outputUnits"],
+          "properties": {
+            "eventVersion": { "const": 1 },
+            "type": { "const": "usage" },
+            "sequence": { "type": "integer", "minimum": 1 },
+            "traceId": { "type": "string", "format": "uuid" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "inputUnits": { "type": "integer", "minimum": 0 },
+            "outputUnits": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "completed": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventVersion", "type", "sequence", "traceId", "requestId", "finishReason"],
+          "properties": {
+            "eventVersion": { "const": 1 },
+            "type": { "const": "completed" },
+            "sequence": { "type": "integer", "minimum": 1 },
+            "traceId": { "type": "string", "format": "uuid" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "finishReason": { "enum": ["stop", "tool_calls", "cancelled"] }
+          }
+        }
+      ]
+    },
+    "error": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventVersion", "type", "sequence", "traceId", "requestId", "code", "message", "retryable"],
+          "properties": {
+            "eventVersion": { "const": 1 },
+            "type": { "const": "error" },
+            "sequence": { "type": "integer", "minimum": 1 },
+            "traceId": { "type": "string", "format": "uuid" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "code": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "message": { "type": "string", "minLength": 1, "maxLength": 300 },
+            "retryable": { "type": "boolean" }
+          }
+        }
+      ]
+    }
+  }
+}

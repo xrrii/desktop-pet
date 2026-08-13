@@ -461,6 +461,7 @@ Electron 安装脚本仍会使用 npm 包内的官方 checksum 校验下载内�
 npm.cmd run dev
 npm.cmd run typecheck
 npm.cmd test
+npm.cmd run test:contracts
 npm.cmd run build
 npm.cmd run check
 ```
@@ -528,7 +529,7 @@ npm.cmd run pack
 
 - `dist`、`release`、`python-runtime\build`、`python-runtime\dist` 和 `outputs` 是构建产物，不应提交到 Git；提交前用 `git status --short` 检查待提交文件。
 
-提交功能代码前至少运行 `npm.cmd run check`，该命令依次执行严格类型检查、单元测试和生产构建。
+提交功能代码前至少运行 `npm.cmd run check`，该命令依次执行严格类型检查、TypeScript 单元测试、Managed Service 契约测试、Python Runtime 测试、检索评测和生产构建。
 
 安全基线：
 
@@ -577,7 +578,7 @@ npm.cmd run test:e2e:assistant:c5
 npm.cmd run test:e2e:assistant:c5:packaged
 ```
 
-`npm.cmd run check` 会执行 TypeScript 类型检查、TypeScript 单元测试、Python Runtime 测试和 Electron 生产构建。
+`npm.cmd run check` 会执行 TypeScript 类型检查、TypeScript 单元测试、Managed Service 契约测试、Python Runtime 测试、检索评测和 Electron 生产构建。
 
 C2 离线 Mock 可使用以下明确指令生成 Artifact：
 

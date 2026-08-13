@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/capability-settings.schema.json",
+  "title": "CapabilitySettings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "capabilities"],
+  "properties": {
+    "version": { "const": 1 },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chat", "embedding", "vision", "rerank", "web_search"],
+      "properties": {
+        "chat": { "$ref": "#/$defs/chat" },
+        "embedding": { "$ref": "#/$defs/embedding" },
+        "vision": { "$ref": "#/$defs/vision" },
+        "rerank": { "$ref": "#/$defs/rerank" },
+        "web_search": { "$ref": "#/$defs/webSearch" }
+      }
+    }
+  },
+  "$defs": {
+    "status": { "enum": ["available", "disabled", "not_configured", "not_authenticated", "not_entitled", "provider_unavailable", "unsupported_client"] },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selectedSource", "effectiveSource", "status", "reason"],
+      "properties": {
+        "selectedSource": { "type": "string" },
+        "effectiveSource": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "reason": { "type": ["string", "null"], "maxLength": 100 }
+      }
+    },
+    "chat": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "properties": { "selectedSource": { "enum": ["byok", "managed", "disabled"] }, "effectiveSource": { "enum": ["byok", "managed", "disabled", "mock"] } } }
+      ]
+    },
+    "embedding": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "properties": { "selectedSource": { "enum": ["byok", "managed", "local"] }, "effectiveSource": { "enum": ["byok", "managed", "local"] } } }
+      ]
+    },
+    "vision": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "properties": { "selectedSource": { "enum": ["byok", "managed", "disabled"] }, "effectiveSource": { "enum": ["byok", "managed", "disabled"] } } }
+      ]
+    },
+    "rerank": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "properties": { "selectedSource": { "enum": ["managed", "disabled"] }, "effectiveSource": { "enum": ["managed", "disabled"] } } }
+      ]
+    },
+    "webSearch": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "properties": { "selectedSource": { "enum": ["byok", "managed", "disabled"] }, "effectiveSource": { "enum": ["byok", "managed", "disabled"] } } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/runtime-token-header.schema.json",
+  "title": "RuntimeTokenHeader",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["alg", "typ", "kid"],
+  "properties": {
+    "alg": { "const": "RS256" },
+    "typ": { "const": "JWT" },
+    "kid": { "type": "string", "minLength": 1, "maxLength": 100 }
+  }
+}

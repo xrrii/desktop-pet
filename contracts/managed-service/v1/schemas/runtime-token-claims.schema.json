@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/runtime-token-claims.schema.json",
+  "title": "RuntimeTokenClaims",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["iss", "aud", "sub", "jti", "sid", "user_id", "device_id", "capabilities", "entitlement_version", "iat", "exp"],
+  "properties": {
+    "iss": { "const": "https://account.petdock.site" },
+    "aud": { "const": "petdock-ai-data-plane" },
+    "sub": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "jti": { "type": "string", "format": "uuid" },
+    "sid": { "type": "string", "format": "uuid" },
+    "user_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "device_id": { "type": "string", "format": "uuid" },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["chat", "embedding", "vision", "rerank", "web_search"] }
+    },
+    "entitlement_version": { "type": "integer", "minimum": 1 },
+    "iat": { "type": "integer", "minimum": 0 },
+    "exp": { "type": "integer", "minimum": 1 }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.invalid/managed-service/v1/managed-auth-result.schema.json",
+  "title": "ManagedAuthResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["taskId", "requestId", "result", "errorCode"],
+  "properties": {
+    "taskId": { "type": "string", "format": "uuid" },
+    "requestId": { "type": "string", "format": "uuid" },
+    "result": { "enum": ["refreshed", "failed"] },
+    "errorCode": { "type": ["string", "null"], "maxLength": 100 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "result": { "const": "refreshed" } } },
+      "then": { "properties": { "errorCode": { "type": "null" } } },
+      "else": { "properties": { "errorCode": { "type": "string", "minLength": 1 } } }
+    }
+  ]
+}

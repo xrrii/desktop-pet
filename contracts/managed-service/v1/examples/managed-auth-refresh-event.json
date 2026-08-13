@@ -1,0 +1,10 @@
+{
+  "eventVersion": 1,
+  "type": "managed_auth_refresh_required",
+  "sequence": 4,
+  "taskId": "7a70c803-f62f-4418-81c6-905f848322f1",
+  "traceId": "dcecb768-9ff5-4ca4-a10b-6a725695ab5b",
+  "requestId": "54ca903e-23da-42bb-a69b-125f3669962b",
+  "reason": "token_expired",
+  "outputStarted": false
+}

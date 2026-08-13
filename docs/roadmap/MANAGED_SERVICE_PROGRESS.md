@@ -53,11 +53,11 @@
 独立官网前端：Not Started（不在当前仓库）
 Spring Boot 控制面：Not Started（不在当前仓库）
 FastAPI AI 数据面：Not Started（不在当前仓库）
-当前阻塞：无；部分 Phase 0 产品和基础设施参数待确认
-下一建议工作项：P0-03 跨端契约骨架，或在仅有桌面仓库时执行 P0-04 BYOK 基线留档
+当前阻塞：P0-03 尚缺 Spring/TypeScript 同样例契约测试和可追溯契约制品
+下一建议工作项：在 petdock-cloud 补齐 Spring/TypeScript 同样例契约测试
 ```
 
-当前只完成方案审阅和冻结规则对齐，尚未实现登录、设备、Runtime Token、Managed Provider、配额或官网功能。
+当前已完成方案冻结、BYOK 基线和权威契约迁移，尚未实现登录、设备、Runtime Token、Managed Provider、配额或官网功能。
 
 ## 4. 产品与仓库边界
 
@@ -108,19 +108,19 @@ FastAPI AI 数据面：Not Started（不在当前仓库）
 
 | 工作项 | 状态 | 当前结果 | 下一动作 |
 | --- | --- | --- | --- |
-| `P0-01` Capability 与来源规则 | `Decision Frozen` | 允许来源、有效来源和 Main 所有权已写入实施方案 | 形成 JSON Schema 和跨端样例 |
-| `P0-02` Runtime Token Claims 与吊销 | `Decision Frozen` | TTL、Claims、撤销时效和失败关闭已冻结 | 形成 Claims Schema、签名和撤销契约测试 |
-| `P0-03` OpenAPI、错误码与兼容规则 | `Not Started` | 实施方案中只有接口草案 | 在 `petdock-cloud/contracts` 建立版本化契约源 |
-| `P0-04` BYOK 基线和端到端结果 | `Not Started` | 现有项目有测试命令，尚未为本计划重新留档 | 在干净基线上执行最低验证并记录日期、提交和结果 |
-| `P0-05` 数据、日志与保留策略 | `Decision Frozen` | 默认禁止记录正文和敏感凭据 | 确认部署区域、保留期限及隐私文本 |
-| `P0-06` 身份、域名和证书 | `In Progress` | PKCE + loopback 已冻结 | 确认身份服务、正式域名和证书策略 |
-| `P0-07` 产品、仓库与部署职责 | `Decision Frozen` | Desktop、Web、Cloud 已明确独立 | 创建外部仓库时登记实际地址和负责人 |
-| `P0-08` 链路标识和幂等 | `Decision Frozen` | 四类 ID 的语义已冻结 | 写入 Header、SSE 和 Usage Schema 测试 |
-| `P0-09` Token 刷新与任务恢复 | `Decision Frozen` | 本地接口、事件和重试边界已冻结 | 形成时序契约及 TypeScript/Python 样例 |
-| `P0-10` Web Search/Fetch 边界 | `Decision Frozen` | 云端搜索、Main 抓取已冻结 | 在数据面 OpenAPI 中禁止 `/web/fetch` |
-| `P0-11` 模型消费者与 Provider 盘点 | `In Progress` | 已确认主要代码入口和已有 Embedding 基线 | 开工前再用代码搜索形成正式清单和回归范围 |
+| `P0-01` Capability 与来源规则 | `Done` | Schema、允许来源、快照样例和自动测试已完成 | Phase 1 生成或手写类型时保持一致 |
+| `P0-02` Runtime Token Claims 与吊销 | `Done` | RS256、Claims、TTL、刷新、撤销、Issuer/JWKS 和轮换规则及测试已完成 | Phase 2 按契约实现 |
+| `P0-03` OpenAPI、错误码与兼容规则 | `In Progress` | `petdock-cloud` 权威源、桌面快照、12 项 Python 校验和 28 文件一致性检查已建立 | 补 Spring/TypeScript 同样例测试，并发布可追溯契约制品 |
+| `P0-04` BYOK 基线和端到端结果 | `Done` | 完整验证通过，见 `MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md` | Phase 1 后使用同一门槛回归 |
+| `P0-05` 数据、日志与保留策略 | `Done` | 中国大陆驻留、禁止跨境、正文不持久化及日志/用量保留期已冻结 | 实现时补自动化审计测试 |
+| `P0-06` 身份、域名和证书 | `Done` | 自建 OIDC、30 天轮换 Refresh Token、退出语义和已购买的 `petdock.site` 正式入口已冻结 | 公网灰度前完成 DNS 解析和证书签发 |
+| `P0-07` 产品、仓库与部署职责 | `Done` | Desktop、Web、Cloud 已明确为独立仓库；Cloud 仓库名为 `petdock-cloud` | 建立远程仓库时登记 URL 和负责人 |
+| `P0-08` 链路标识和幂等 | `Done` | Header、SSE、Request Context 和 Usage Event Schema 及测试已完成 | 各端实现时消费同一契约 |
+| `P0-09` Token 刷新与任务恢复 | `Done` | 本地 OpenAPI、刷新事件、结果 Schema 和重试边界已完成 | Phase 2/3 按契约实现 |
+| `P0-10` Web Search/Fetch 边界 | `Done` | 数据面仅有 `/web/search`，测试禁止 `/web/fetch` | Phase 4 保留 Main 抓取路径 |
+| `P0-11` 模型消费者与 Provider 盘点 | `Done` | 已形成 `MANAGED_SERVICE_PROVIDER_INVENTORY.md` | Phase 1 按清单实施和回归 |
 
-Phase 0 总状态保持 `In Progress`。在 `P0-03`、`P0-04` 及必要契约测试完成前，不得标记为 `Done`。
+Phase 0 的产品、基础设施和数据治理决定已经全部冻结；整体状态保持 `In Progress`，只剩 `P0-03` 的 Spring/TypeScript 同样例测试和可追溯契约制品，完成后才能标记为 `Done`。
 
 ## 8. 后续阶段状态
 
@@ -135,18 +135,21 @@ Phase 0 总状态保持 `In Progress`。在 `P0-03`、`P0-04` 及必要契约测
 
 ## 9. 下一步建议
 
-### 具备 `petdock-cloud` 仓库时
+### 当前优先事项
 
-优先执行 `P0-03`：
+在 `petdock-cloud` 中补齐 Spring/TypeScript 同样例契约测试和可追溯契约制品，再同步并验证桌面消费快照。
 
-1. 建立 `contracts/openapi`、`contracts/schemas` 和 `contracts/error-codes`。
-2. 先定义 Capability、Runtime Token Claims、统一错误和链路 Header。
-3. 再定义桌面 OAuth/设备/Entitlement/Runtime Session 及 Managed Chat 契约。
-4. 为 TypeScript、Python 和 Spring 增加相同样例的序列化测试。
+### `petdock-cloud` 契约同步规则
 
-### 当前只有 `desktop-pet` 仓库时
+1. 权威源固定为 `petdock-cloud` 仓库内的 `contracts/managed-service/v1`。
+2. 所有契约变更先在云端仓库修改和验证，再整体同步到桌面消费快照。
+3. 使用云端 `tools/compare_contract_snapshot.py` 对两个 v1 目录做逐文件 SHA-256 校验。
+4. 后续为 TypeScript 和 Spring 消费端增加与 Python 相同的固定样例序列化测试。
+5. 建立发布流水线后，桌面仓库改为消费带版本、提交和完整性信息的契约制品。
 
-优先执行 `P0-04`，不要在本仓库临时创建云端实现：
+### Phase 1 准备
+
+Phase 1 可以开始实施本地抽象，但不要接入真实 Managed 网络流量。Phase 1 完成后仍运行以下回归：
 
 ```powershell
 npm.cmd run check
@@ -156,26 +159,27 @@ npm.cmd run test:e2e:assistant:c3
 npm.cmd run test:e2e:assistant:c5
 ```
 
-记录提交 SHA、Windows/Node/Python 版本、命令结果和失败日志位置。基线完成后可开始 `P1-01` 至 `P1-03`，但不得提前接入真实 Managed 网络流量。
+基线详情见 `MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md`。
 
 ## 10. 当前待确认事项
 
-- 官网正式域名和 API 域名。
-- OIDC/OAuth2 身份服务采用自建还是托管方案。
-- 首批套餐、免费额度和能力授权规则。
-- 首个官方模型 Provider 和逻辑模型档位。
-- 官方服务部署区域和数据跨境要求。
-- Prompt、图片、搜索词和用量日志的保留期限。
-- 支付、退款、欠费和套餐降级规则。
-- 最低支持桌面版本和服务端契约兼容周期。
-
-这些事项不阻塞 BYOK 基线验证和 Phase 1 本地抽象，但会阻塞 Phase 2、3 的正式上线实现。
+Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已完成购买；DNS 解析和证书签发、实际 Provider/模型安全配置，以及 Beta 免费额度数值属于后续上线配置前置条件，不改变已冻结契约。
 
 ## 11. 验证记录
 
 | 日期 | 提交/工作区 | 范围 | 结果 | 备注 |
 | --- | --- | --- | --- | --- |
-| 2026-08-13 | 当前工作区 | 文档一致性 | 通过 | `git diff --check` 通过；未运行代码测试 |
+| 2026-08-13 | `e778eec` + 文档改动 | `npm.cmd run check` | 通过 | TS 74 项、Python 74 项、检索六项指标 1.0、生产构建成功 |
+| 2026-08-13 | `e778eec` + 文档改动 | `npm.cmd run build:runtime` | 通过 | Runtime 99,104,267 字节，PyInstaller 6.21.0 |
+| 2026-08-13 | `e778eec` + 文档改动 | `test:runtime:packaged` | 通过 | 冷启动 6494 ms，`RUNTIME_SMOKE_OK` |
+| 2026-08-13 | `e778eec` + 文档改动 | C3/C5 E2E | 通过 | `ASSISTANT_C3_SMOKE_OK`、`ASSISTANT_C5_SMOKE_OK` |
+| 2026-08-13 | 当前工作区 | `npm.cmd run test:contracts` | 通过 | 10 项 Schema、样例、OpenAPI、安全与边界测试 |
+| 2026-08-13 | 当前工作区 | 最终 `npm.cmd run check` | 通过 | TS 74、契约 10、Runtime 74、检索六项指标 1.0、生产构建成功 |
+| 2026-08-13 | `petdock-cloud` 初始工作区 | Python 契约测试 | 通过 | 10 项测试通过，未创建业务服务 |
+| 2026-08-13 | Desktop/Cloud v1 契约 | SHA-256 逐文件比对 | 通过 | 27 个受控文件一致 |
+| 2026-08-13 | `petdock-cloud` 决策冻结工作区 | Python 契约测试 | 通过 | 12 项测试通过，覆盖域名一致性、D-P0-01 至 D-P0-16 和单机部署基线 |
+| 2026-08-13 | Desktop/Cloud 决策冻结工作区 | SHA-256 逐文件比对 | 通过 | 28 个受控文件一致 |
+| 2026-08-13 | 当前工作区 | 决策冻结后 `npm.cmd run check` | 通过 | TS 74、契约 12、Runtime 74、检索六项指标 1.0、生产构建成功 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -212,3 +216,12 @@ npm.cmd run test:e2e:assistant:c5
 - 冻结独立 `petdock-web`、`desktop-pet` 和 `petdock-cloud` 的产品、仓库与部署边界。
 - 将 Capability 所有权、旧配置迁移、Chat Factory、Token 刷新与吊销、Web Search 边界、链路标识和 Phase 3/5 配额职责对齐到实施方案。
 - 新建本进度与交接文档；当前仍处于 Phase 0，尚无 Managed 功能代码实现。
+- 完成 `P0-04` BYOK 完整基线，源码测试、检索评测、构建、Runtime 打包态和 C3/C5 冒烟全部通过。
+- 完成 `P0-11` Provider 与模型消费者正式盘点，确认 Chat 的两个调用点及 Embedding、Vision、Web Search 的保留边界。
+- 建立 Managed Service v1 契约快照，覆盖控制面、AI 数据面、本地 Session、Capability、JWT、OAuth、错误码、SSE、链路、用量、兼容与安全边界。
+- 将 10 项契约自动测试接入 `npm.cmd run check`；P0-03 仍需补 Spring/TypeScript 同样例测试和可追溯契约制品。
+- 初始化独立 `petdock-cloud` Git 仓库，并将 Managed Service v1 迁移为权威契约源；桌面目录改为消费快照。
+- 初始迁移时云端权威契约 10 项测试通过，云端与桌面 27 个受控文件 SHA-256 比对一致；随后已完成决策冻结和契约扩展。
+- 冻结 D-P0-09 至 D-P0-15，并新增 D-P0-16：首期使用单台中国大陆云服务器，不建设集群和自动容灾，保留主机外备份与手工恢复底线。
+- 决策冻结后云端与桌面契约各 12 项测试通过、28 个受控文件一致，桌面完整 `npm.cmd run check` 通过。
+- 确认 `petdock.site` 已完成购买，公网启用前仍需完成 DNS 解析和 TLS 证书签发。

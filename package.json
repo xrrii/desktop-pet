@@ -12,6 +12,7 @@
     "debug": "cross-env DESKTOP_PET_DEVTOOLS=1 electron-vite dev",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:contracts": "python-runtime\\.venv\\Scripts\\python.exe -m pytest -q contracts\\managed-service\\v1\\tests",
     "test:runtime": "python-runtime\\.venv\\Scripts\\python.exe -m pytest -q python-runtime\\tests --basetemp temp\\pytest-runtime",
     "test:retrieval": "python-runtime\\.venv\\Scripts\\python.exe tools\\evaluate_retrieval.py",
     "test:runtime:packaged": "node tools/runtime_smoke.mjs",
@@ -28,7 +29,7 @@
     "build": "electron-vite build",
     "build:runtime": "node tools/build_runtime.mjs",
     "licenses": "node tools/generate_third_party_notices.mjs",
-    "check": "npm run typecheck && npm test && npm run test:runtime && npm run test:retrieval && npm run build",
+    "check": "npm run typecheck && npm test && npm run test:contracts && npm run test:runtime && npm run test:retrieval && npm run build",
     "preview": "electron-vite preview",
     "pack": "npm run licenses && npm run build && npm run build:runtime && electron-builder --dir",
     "dist": "npm run licenses && npm run build && npm run build:runtime && electron-builder"

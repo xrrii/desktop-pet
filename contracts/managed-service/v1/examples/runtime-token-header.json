@@ -1,0 +1,5 @@
+{
+  "alg": "RS256",
+  "typ": "JWT",
+  "kid": "runtime-signing-2026-08"
+}
