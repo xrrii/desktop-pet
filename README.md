@@ -190,6 +190,7 @@ assets/pets/<pet-id>/
 - [文档索引](docs/README.md)
 - [开发指南](docs/guides/DEVELOPMENT.md)
 - [AI 助手架构](docs/architecture/AI_ASSISTANT_ARCHITECTURE.md)
+- [官方托管服务进度与交接](docs/roadmap/MANAGED_SERVICE_PROGRESS.md)
 - [附件、Artifact 与联网能力](docs/features/CONVERSATION_RESOURCE_CAPABILITIES.md)
 - [RAG 检索设计](docs/features/RAG_RETRIEVAL_OPTIMIZATION.md)
 - [Skill 系统](docs/features/SKILL_SYSTEM_DEVELOPMENT.md)

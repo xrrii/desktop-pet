@@ -4,7 +4,7 @@
 
 本目录按文档职责组织。开始开发前，先根据任务类型找到对应基线；当多份文档存在交叉时，总体架构和开发规范优先，功能专项负责补充领域细节。
 
-最后审阅日期：2026-08-11。
+最后审阅日期：2026-08-13。
 
 ## 2. 状态说明
 
@@ -21,8 +21,8 @@
 1. 阅读 [开发指南](guides/DEVELOPMENT.md)，了解环境、命令、测试和打包要求。
 2. 阅读 [AI 助手总体架构](architecture/AI_ASSISTANT_ARCHITECTURE.md)，确认进程边界、安全边界和 Runtime 职责。
 3. 根据任务进入相应功能专项文档。
-4. 涉及 BYOK 与官方服务时，阅读 [双模式实施方案](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md)。
-5. 开始阶段开发或验收时，核对 [AI 助手进度记录](roadmap/AI_ASSISTANT_PROGRESS.md)。
+4. 涉及 BYOK 与官方服务时，先阅读 [官方托管服务进度与交接记录](roadmap/MANAGED_SERVICE_PROGRESS.md)，再阅读 [双模式实施方案](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md)。
+5. 开始其他 AI 助手阶段开发或验收时，核对 [AI 助手进度记录](roadmap/AI_ASSISTANT_PROGRESS.md)。
 
 ## 4. 文档目录
 
@@ -31,7 +31,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [AI_ASSISTANT_ARCHITECTURE.md](architecture/AI_ASSISTANT_ARCHITECTURE.md) | Active | 本地助手总体架构、通信方式、权限和 Runtime 边界 |
-| [MANAGED_SERVICE_IMPLEMENTATION_PLAN.md](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md) | Draft | BYOK 与官方托管服务的分阶段实施基线 |
+| [MANAGED_SERVICE_IMPLEMENTATION_PLAN.md](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md) | Active | BYOK 与官方托管服务的冻结决策和分阶段实施基线 |
 
 ### 4.2 开发指南
 
@@ -54,6 +54,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [AI_ASSISTANT_PROGRESS.md](roadmap/AI_ASSISTANT_PROGRESS.md) | Tracking | 已完成阶段、测试结果、遗留项和后续工作 |
+| [MANAGED_SERVICE_PROGRESS.md](roadmap/MANAGED_SERVICE_PROGRESS.md) | Tracking | 官方托管服务当前阶段、跨仓库边界、验证事实和跨会话交接入口 |
 
 ## 5. 按任务选择文档
 
@@ -61,12 +62,12 @@
 | --- | --- |
 | 修改 Electron、Runtime 启动或打包 | 开发指南、AI 助手总体架构 |
 | 修改 Agent、工具协议或进程通信 | AI 助手总体架构、开发指南 |
-| 开发 BYOK 或官方托管服务 | 双模式实施方案、AI 助手总体架构 |
+| 开发 BYOK 或官方托管服务 | 官方托管服务进度、双模式实施方案、AI 助手总体架构 |
 | 修改附件、文件生成、视觉或联网搜索 | 对话资源能力、AI 助手总体架构 |
 | 修改知识库、Embedding 或检索 | RAG 优化方案、Embedding 白名单 |
 | 修改 Skill | Skill 系统开发文档、AI 助手总体架构 |
 | 修改 Renderer UI | UI 风格约定、开发指南 |
-| 更新阶段状态或验收数据 | AI 助手进度记录及对应专项文档 |
+| 更新阶段状态或验收数据 | 对应进度记录及专项文档；官方托管服务必须更新专用进度文档 |
 
 ## 6. 维护规则
 
