@@ -79,18 +79,9 @@ desktop.ini
 # Local pet assets can be large and user-specific. Existing built-in pets remain versioned.
 assets/pets/**
 !assets/pets/.gitkeep
-!assets/pets/doubao/
-!assets/pets/doubao/pet.json
-!assets/pets/doubao/spritesheet.webp
-!assets/pets/hammer-dude/
-!assets/pets/hammer-dude/pet.json
-!assets/pets/hammer-dude/spritesheet.webp
-!assets/pets/jianjieshi/
-!assets/pets/jianjieshi/pet.json
-!assets/pets/jianjieshi/spritesheet.webp
-!assets/pets/little-ameath/
-!assets/pets/little-ameath/pet.json
-!assets/pets/little-ameath/spritesheet.webp
+!assets/pets/litte-black/
+!assets/pets/litte-black/pet.json
+!assets/pets/litte-black/spritesheet.webp
 
 # Temporary asset backups remain local even inside built-in pet folders.
 assets/pets/*/spritesheet.before-*.webp
