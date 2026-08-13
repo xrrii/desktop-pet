@@ -47,8 +47,29 @@ function createRuntimeChild(): EventEmitter & {
 
 describe('AssistantRuntimeProcess', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     mocks.spawn.mockReset()
+  })
+
+  it('开发模式下等待 Runtime 就绪最多三十秒', async () => {
+    vi.useFakeTimers()
+    const child = createRuntimeChild()
+    mocks.spawn.mockReturnValue(child)
+    const statuses: string[] = []
+    const runtime = new AssistantRuntimeProcess((status) => statuses.push(status.state))
+
+    const starting = runtime.start()
+    const rejection = expect(starting).rejects.toThrow('Assistant Runtime startup timed out.')
+
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(child.kill).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    await rejection
+
+    expect(child.kill).toHaveBeenCalledOnce()
+    expect(statuses.at(-1)).toBe('failed')
   })
 
   it('冷启动期间停止时等待 client 就绪并执行优雅关闭', async () => {

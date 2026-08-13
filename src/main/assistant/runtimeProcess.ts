@@ -12,8 +12,8 @@ import { logError, logInfo } from '../logger'
 import { AssistantRuntimeClient } from './runtimeClient'
 import { normalizeRuntimeEnvironment } from './runtimeEnvironment'
 
-// PyInstaller 单文件在 Windows 上需要先解包依赖，冷启动时间明显长于开发环境。
-const START_TIMEOUT_MS = app.isPackaged ? 30_000 : 10_000
+// Runtime 首次加载 Python 依赖、数据库和向量索引时可能较慢，开发版与安装版统一预留启动时间。
+const START_TIMEOUT_MS = 30_000
 const STOP_TIMEOUT_MS = 3_000
 
 export class AssistantRuntimeProcess {
