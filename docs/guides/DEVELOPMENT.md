@@ -539,6 +539,32 @@ npm.cmd run pack
 - IPC handler 必须校验调用窗口身份并验证外部输入。
 - 密钥和用户隐私数据不得写入仓库、普通配置文件或日志。
 
+### 提交前与阶段收尾检查
+
+每次提交功能、契约或阶段性工作前，必须完成以下检查；检查结果应记录在对应进度文档中：
+
+1. **敏感数据检查**
+   - 查看 `git diff --stat`、`git diff --cached --stat` 和 `git status --short`，确认只包含本次工作范围。
+   - 对待提交文件检查 API Key、密码、Token、Cookie、Bearer、私钥、证书、绝对路径、用户正文和真实 Provider 凭据。
+   - 契约中的字段名、合成 UUID、测试域名和脱敏占位符可以提交；真实凭据、真实用户数据和生产日志不能提交。
+   - 不要把密钥写入 `settings.json`、环境文件、命令输出、截图、测试样例或进度文档。
+
+2. **忽略规则检查**
+   - 用 `git status --short --ignored` 和 `git check-ignore -v <path>` 验证 `node_modules`、Python 虚拟环境、`dist`、`release`、`target`、`*.class`、`outputs`、Runtime 数据库、日志和临时目录已被忽略。
+   - 契约、Schema、固定样例、源码测试、锁文件和必要的文档不能通过扩大 `.gitignore` 被隐藏。
+   - 新增构建工具或跨语言测试时，同时补充其构建输出的忽略规则，并在干净工作区验证拉取后可重建。
+
+3. **多端协作检查**
+   - Managed Service 契约只在 `petdock-cloud/contracts/managed-service/v1` 权威源修改；`desktop-pet/contracts/managed-service/v1` 只能整体同步消费快照。
+   - 云端契约变更先运行 Python、TypeScript、Spring/JUnit 契约测试和制品完整性校验，再运行 `tools/compare_contract_snapshot.py` 同步桌面快照。
+   - 桌面端运行 `npm.cmd run test:contracts` 和 `npm.cmd run check`；不能只在单一语言或单一仓库验证通过后提交。
+   - 不提交 `target`、ZIP 解包目录、制品临时目录或本机缓存；新开发者从仓库拉取后应能按 README 命令重新生成这些文件。
+
+4. **阶段收尾记录**
+   - 更新进度文档的当前状态、阻塞项、下一工作项、验证命令、实际结果和未运行项。
+   - 记录契约版本、源提交、快照文件数和 SHA-256 比对结果；不要记录 API Key、Token、用户正文或附件内容。
+   - 阶段只有在代码/契约、测试、构建、敏感数据检查和跨端同步均完成后才能标记为 `Done`。
+
 AI 助手后续开发以 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md` 和 `docs/roadmap/AI_ASSISTANT_PROGRESS.md` 为准；附件对话、基础文件输出、联网搜索、复杂文档输入、多文件只读分析以及后续受控执行与复杂输出必须遵循 `docs/features/CONVERSATION_RESOURCE_CAPABILITIES.md`；阶段 5 Skill 系统必须遵循 `docs/features/SKILL_SYSTEM_DEVELOPMENT.md`；涉及 RAG 检索优化时还必须遵循 `docs/features/RAG_RETRIEVAL_OPTIMIZATION.md`，本地模型来源以 `docs/features/EMBEDDING_MODEL_WHITELIST.md` 和机器可读白名单为准。
 
 对话资源能力当前进度：C1 至 C5 已完成；C6 规划受控 Python 执行和复杂文档输出/修改，状态为 Deferred。C4 不新增 PDF、Office 或图片 Artifact 输出，也不执行本地 OCR；图片只在独立 Vision Analyzer 的能力探测通过后启用，默认继承主模型配置但不共享主 Agent 的工具、记忆或 Skill 上下文。C5 在会话附件总解析量不超过 12,000 tokens 时直接注入，超出后使用独立临时索引并将本轮检索上下文限制为 8,000 tokens；临时索引复用活动 Embedding Profile，但不与长期知识库共用数据库、目录或 collection。附件开发和回归可使用 `npm.cmd run test:e2e:assistant`；该脚本包含不支持格式投放后自动展开与错误提示、真实文本文件拖拽、草稿/历史预览、只附件发送、来源展示、联网设置脱敏状态以及视觉配置字段/状态验证，打包后使用 `npm.cmd run test:e2e:assistant:packaged` 验证同一链路。C2 可使用 `npm.cmd run test:e2e:assistant:c2` 验证开发版生成、预览、取消保存、实际保存内容和删除，`npm.cmd run test:e2e:assistant:c2:packaged` 验证解包版；C3 可使用 `npm.cmd run test:e2e:assistant:c3` 与 `npm.cmd run test:e2e:assistant:c3:packaged` 验证本地可控 Provider 的搜索、抓取和引用；C5 使用 `npm.cmd run test:e2e:assistant:c5` 与 `npm.cmd run test:e2e:assistant:c5:packaged` 验证大资料集双文件命中、位置来源和跨轮复用。C3 默认使用火山引擎豆包搜索，Brave Search 作为兼容 Provider；可用 `$env:PETDOCK_SMOKE_REAL_WEB='1'; $env:PETDOCK_SMOKE_EXECUTABLE='release\win-unpacked\PetDock.exe'; node tools\assistant_smoke.mjs` 复验当前脱敏配置的真实连接。

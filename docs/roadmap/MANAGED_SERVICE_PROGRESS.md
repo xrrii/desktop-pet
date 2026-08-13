@@ -46,15 +46,15 @@
 ## 3. 当前总览
 
 ```text
-总体状态：In Progress
+总体状态：Done
 当前阶段：Phase 0 契约与基线冻结
 架构对齐：Decision Frozen
 桌面端 Managed 实现：Not Started
 独立官网前端：Not Started（不在当前仓库）
 Spring Boot 控制面：Not Started（不在当前仓库）
 FastAPI AI 数据面：Not Started（不在当前仓库）
-当前阻塞：P0-03 尚缺 Spring/TypeScript 同样例契约测试和可追溯契约制品
-下一建议工作项：在 petdock-cloud 补齐 Spring/TypeScript 同样例契约测试
+当前阻塞：无
+下一建议工作项：进入 Phase 1 `P1-01`，建立本地 ChatModelFactory，不接入真实 Managed 网络流量
 ```
 
 当前已完成方案冻结、BYOK 基线和权威契约迁移，尚未实现登录、设备、Runtime Token、Managed Provider、配额或官网功能。
@@ -110,7 +110,7 @@ FastAPI AI 数据面：Not Started（不在当前仓库）
 | --- | --- | --- | --- |
 | `P0-01` Capability 与来源规则 | `Done` | Schema、允许来源、快照样例和自动测试已完成 | Phase 1 生成或手写类型时保持一致 |
 | `P0-02` Runtime Token Claims 与吊销 | `Done` | RS256、Claims、TTL、刷新、撤销、Issuer/JWKS 和轮换规则及测试已完成 | Phase 2 按契约实现 |
-| `P0-03` OpenAPI、错误码与兼容规则 | `In Progress` | `petdock-cloud` 权威源、桌面快照、12 项 Python 校验和 28 文件一致性检查已建立 | 补 Spring/TypeScript 同样例测试，并发布可追溯契约制品 |
+| `P0-03` OpenAPI、错误码与兼容规则 | `Done` | 云端权威源、桌面快照、Python/TypeScript/Spring 同样例测试、可追溯契约制品和 32 文件 SHA-256 比对均完成 | Phase 1 消费 v1 契约 |
 | `P0-04` BYOK 基线和端到端结果 | `Done` | 完整验证通过，见 `MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md` | Phase 1 后使用同一门槛回归 |
 | `P0-05` 数据、日志与保留策略 | `Done` | 中国大陆驻留、禁止跨境、正文不持久化及日志/用量保留期已冻结 | 实现时补自动化审计测试 |
 | `P0-06` 身份、域名和证书 | `Done` | 自建 OIDC、30 天轮换 Refresh Token、退出语义和已购买的 `petdock.site` 正式入口已冻结 | 公网灰度前完成 DNS 解析和证书签发 |
@@ -120,7 +120,7 @@ FastAPI AI 数据面：Not Started（不在当前仓库）
 | `P0-10` Web Search/Fetch 边界 | `Done` | 数据面仅有 `/web/search`，测试禁止 `/web/fetch` | Phase 4 保留 Main 抓取路径 |
 | `P0-11` 模型消费者与 Provider 盘点 | `Done` | 已形成 `MANAGED_SERVICE_PROVIDER_INVENTORY.md` | Phase 1 按清单实施和回归 |
 
-Phase 0 的产品、基础设施和数据治理决定已经全部冻结；整体状态保持 `In Progress`，只剩 `P0-03` 的 Spring/TypeScript 同样例测试和可追溯契约制品，完成后才能标记为 `Done`。
+Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经全部完成，整体状态为 `Done`；后续进入 Phase 1 本地 Chat 路由与能力配置抽象。
 
 ## 8. 后续阶段状态
 
@@ -225,3 +225,10 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 - 冻结 D-P0-09 至 D-P0-15，并新增 D-P0-16：首期使用单台中国大陆云服务器，不建设集群和自动容灾，保留主机外备份与手工恢复底线。
 - 决策冻结后云端与桌面契约各 12 项测试通过、28 个受控文件一致，桌面完整 `npm.cmd run check` 通过。
 - 确认 `petdock.site` 已完成购买，公网启用前仍需完成 DNS 解析和 TLS 证书签发。
+
+### 2026-08-13（Managed Phase 0 收尾）
+
+- 同步云端权威 `contracts/managed-service/v1`，当前消费快照共 32 个受控文件。
+- 云端已补齐 TypeScript 与 Spring/JUnit 同样例消费测试，并生成带 SHA-256 provenance 的 v1 契约制品。
+- 云端 Python 12 项、TypeScript 1 项、Spring/JUnit 1 项契约测试及制品校验均通过；Desktop/Cloud 32 个文件 SHA-256 比对一致。
+- Phase 0 已完成；桌面端下一工作项进入 Phase 1 `P1-01`，仅做本地 Chat Factory 和能力来源抽象，不接入真实 Managed 网络流量。

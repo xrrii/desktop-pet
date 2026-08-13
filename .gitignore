@@ -50,6 +50,8 @@ skills.db*
 dist/
 release/
 release-*/
+target/
+*.class
 temp/
 tmp/
 
