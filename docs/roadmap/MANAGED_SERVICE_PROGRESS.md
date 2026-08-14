@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-13
+最后更新时间：2026-08-14
 
 ## 1. 新会话快速开始
 
@@ -137,15 +137,15 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-在 `petdock-cloud` 中补齐 Spring/TypeScript 同样例契约测试和可追溯契约制品，再同步并验证桌面消费快照。
+进入 Phase 1 `P1-01`，在 `desktop-pet` 中建立本地 `ChatModelFactory` 和能力来源抽象，不接入真实 Managed 网络流量。
 
 ### `petdock-cloud` 契约同步规则
 
 1. 权威源固定为 `petdock-cloud` 仓库内的 `contracts/managed-service/v1`。
 2. 所有契约变更先在云端仓库修改和验证，再整体同步到桌面消费快照。
 3. 使用云端 `tools/compare_contract_snapshot.py` 对两个 v1 目录做逐文件 SHA-256 校验。
-4. 后续为 TypeScript 和 Spring 消费端增加与 Python 相同的固定样例序列化测试。
-5. 建立发布流水线后，桌面仓库改为消费带版本、提交和完整性信息的契约制品。
+4. 同步前在云端运行 Python、TypeScript、Spring/JUnit 测试，并生成和校验可追溯契约制品。
+5. 建立发布流水线后，桌面仓库改为消费带版本、源提交和完整性信息的契约制品。
 
 ### Phase 1 准备
 
@@ -180,6 +180,8 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 | 2026-08-13 | `petdock-cloud` 决策冻结工作区 | Python 契约测试 | 通过 | 12 项测试通过，覆盖域名一致性、D-P0-01 至 D-P0-16 和单机部署基线 |
 | 2026-08-13 | Desktop/Cloud 决策冻结工作区 | SHA-256 逐文件比对 | 通过 | 28 个受控文件一致 |
 | 2026-08-13 | 当前工作区 | 决策冻结后 `npm.cmd run check` | 通过 | TS 74、契约 12、Runtime 74、检索六项指标 1.0、生产构建成功 |
+| 2026-08-14 | Desktop/Cloud 修复工作区 | Phase 0 退出门禁复验 | 通过 | 云端 Python 13 项、TypeScript 1 项、Spring/JUnit 1 项通过；含 Maven `target` 时制品仍为 32 个文件且校验通过；桌面快照 32 个文件一致 |
+| 2026-08-14 | Desktop 修复工作区 | `npm.cmd run check` | 通过 | TS 74、契约 12、Runtime 74、检索六项指标 1.0、生产构建成功 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -219,7 +221,7 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 - 完成 `P0-04` BYOK 完整基线，源码测试、检索评测、构建、Runtime 打包态和 C3/C5 冒烟全部通过。
 - 完成 `P0-11` Provider 与模型消费者正式盘点，确认 Chat 的两个调用点及 Embedding、Vision、Web Search 的保留边界。
 - 建立 Managed Service v1 契约快照，覆盖控制面、AI 数据面、本地 Session、Capability、JWT、OAuth、错误码、SSE、链路、用量、兼容与安全边界。
-- 将 10 项契约自动测试接入 `npm.cmd run check`；P0-03 仍需补 Spring/TypeScript 同样例测试和可追溯契约制品。
+- 将 10 项契约自动测试接入 `npm.cmd run check`；当时尚待补齐的 Spring/TypeScript 同样例测试和可追溯契约制品已在 P0-03 收尾完成。
 - 初始化独立 `petdock-cloud` Git 仓库，并将 Managed Service v1 迁移为权威契约源；桌面目录改为消费快照。
 - 初始迁移时云端权威契约 10 项测试通过，云端与桌面 27 个受控文件 SHA-256 比对一致；随后已完成决策冻结和契约扩展。
 - 冻结 D-P0-09 至 D-P0-15，并新增 D-P0-16：首期使用单台中国大陆云服务器，不建设集群和自动容灾，保留主机外备份与手工恢复底线。
@@ -232,3 +234,9 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 - 云端已补齐 TypeScript 与 Spring/JUnit 同样例消费测试，并生成带 SHA-256 provenance 的 v1 契约制品。
 - 云端 Python 12 项、TypeScript 1 项、Spring/JUnit 1 项契约测试及制品校验均通过；Desktop/Cloud 32 个文件 SHA-256 比对一致。
 - Phase 0 已完成；桌面端下一工作项进入 Phase 1 `P1-01`，仅做本地 Chat Factory 和能力来源抽象，不接入真实 Managed 网络流量。
+
+### 2026-08-14（Phase 0 门禁修复）
+
+- 新增仓库级换行规则，确保 Windows 拉取后的桌面契约快照保持 LF，避免仅因 CRLF 造成 SHA-256 漂移。
+- 云端契约制品收集器排除 Maven `target` 和 Python 缓存，并新增工具测试防止生成物进入发布制品。
+- 在 Maven `target` 已存在的条件下完成 32 文件制品生成、离线校验和 Desktop/Cloud 快照比对；两项 Phase 0 收尾问题均已关闭。
