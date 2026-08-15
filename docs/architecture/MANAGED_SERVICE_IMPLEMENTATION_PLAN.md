@@ -711,6 +711,8 @@ python-runtime/petdock_runtime/
 
 ### Phase 2：独立官网、身份、设备和会话基础设施
 
+Phase 2 的详细模块、共享开发环境、跨仓库顺序和验收方案见 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`。本节继续作为冻结目标、工作项和回滚边界，不重复维护易变化的开发细节。
+
 #### 目标
 
 完成独立官网基础页面、系统浏览器登录、设备注册、Refresh Token 安全存储和短期 Runtime Token 签发，但尚不向普通用户开放模型流量。

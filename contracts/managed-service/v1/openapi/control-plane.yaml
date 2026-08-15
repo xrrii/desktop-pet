@@ -10,6 +10,23 @@ servers:
 security:
   - desktopOAuth: []
 paths:
+  /api/v1/features:
+    get:
+      operationId: getFeatureFlags
+      summary: 获取桌面端官方能力开关
+      tags: [Feature]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 当前客户端可消费的服务端开关
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlagSnapshot'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '426': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/devices:
     post:
       operationId: registerDevice
@@ -215,6 +232,14 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/CapabilityEntitlement'
         expiresAt: { type: string, format: date-time }
+    FeatureFlagSnapshot:
+      type: object
+      additionalProperties: false
+      required: [version, managed_login_enabled, minimum_client_version]
+      properties:
+        version: { type: integer, const: 1 }
+        managed_login_enabled: { type: boolean }
+        minimum_client_version: { type: string, pattern: '^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$' }
     RuntimeSessionRequest:
       type: object
       additionalProperties: false

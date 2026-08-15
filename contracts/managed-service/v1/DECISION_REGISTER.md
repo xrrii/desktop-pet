@@ -123,3 +123,76 @@
 4. 整体同步桌面消费快照，再在 `desktop-pet` 运行 `npm.cmd run test:contracts` 和 `npm.cmd run check`。
 
 涉及法律、支付和数据跨境的决定必须经过对应专业评审；本登记表只记录工程执行口径，不代替法律意见。
+
+## 4. Phase 2 身份与共享开发决定
+
+以下决定冻结 `P2-00` 的契约缺口。它们只补充实现口径，不改变 Phase 0 已发布的公网域名、信任边界和 Token 生命周期。
+
+### `D-P2-01` OIDC Discovery、UserInfo 与 Token Response
+
+状态：`Frozen`
+
+- Issuer 固定为 `https://account.petdock.site`；Discovery 使用 `/.well-known/openid-configuration`，JWKS 使用 `/.well-known/jwks.json`。
+- Discovery 至少公布 `issuer`、`authorization_endpoint`、`token_endpoint`、`revocation_endpoint`、`userinfo_endpoint`、`jwks_uri`、`response_types_supported`、`grant_types_supported`、`scopes_supported`、`token_endpoint_auth_methods_supported` 和 `code_challenge_methods_supported`。
+- 桌面端请求 `openid desktop.session`，可选 `profile email`；只允许 `code`、`authorization_code` 和 `refresh_token` 流程，客户端认证方式为 `none`，PKCE 仅允许 `S256`。
+- UserInfo 最小字段为 `sub`、`email`、`email_verified`、`preferred_username` 和 `name`。不在 v1 UserInfo 中返回手机号、头像、地址、Provider 信息或用量正文。
+- 标准 Token Response 使用 RFC 6749 与 OIDC Core 字段：`access_token`、`token_type`、`expires_in`、`refresh_token`、`scope`，登录授权时附带 `id_token`。不得添加 Provider 凭据或未评审的长期凭据字段。
+
+### `D-P2-02` 账号快照来源
+
+状态：`Frozen`
+
+- 桌面端账号脱敏快照以 OIDC UserInfo 为唯一身份资料来源；控制面不新增同义账号资料接口。
+- 控制面业务接口只返回设备、Entitlement、Runtime Session 和用量摘要等业务数据。账号展示字段由 Main 在 UserInfo 响应中提取后再脱敏传给 Renderer。
+- UserInfo 请求只由 Electron Main 携带桌面 Access Token 发起，Renderer 和 Python Runtime 不得直接访问。
+
+### `D-P2-03` Refresh Token 主动撤销
+
+状态：`Frozen`
+
+- 身份服务提供 RFC 7009 `POST /oauth2/revoke`，请求字段为 `token` 和可选 `token_type_hint`，Public Client 额外提交 `client_id`；成功统一返回 HTTP 200 且不返回 Token 内容。
+- 官网单设备撤销、全部设备退出和设备删除最终调用同一撤销服务；撤销设备时同时撤销该设备的 Refresh Token Family、Access Token 关联会话和 Runtime Session。
+- 重复撤销必须幂等，不向客户端泄露 Token 是否曾经存在。Redis 只做不超过 30 秒的可重建缓存，PostgreSQL 记录最终事实。
+
+### `D-P2-04` `managed_login_enabled` 下发
+
+状态：`Frozen`
+
+- 控制面提供需要桌面认证的 `GET /api/v1/features`，返回 `version`、`managed_login_enabled` 和 `minimum_client_version`。
+- 服务端默认关闭 `managed_login_enabled`；只有服务端配置明确开启且客户端版本满足最低版本时，桌面端才展示官方登录入口。
+- 桌面端本地默认值固定为 `false`。服务不可用、响应字段缺失或版本不兼容时必须按 `false` 处理，不影响 BYOK。
+
+### `D-P2-05` 开发端点覆盖
+
+状态：`Frozen`
+
+- `local-mock` 和 `shared-dev` 允许通过未提交的环境变量覆盖 Issuer、控制面和数据面地址；覆盖值只能指向回环地址、服务器内网地址或 SSH 隧道端口。
+- `staging` 与 `production` 构建固定官方端点，启动时拒绝任何覆盖；生产 Issuer 必须为 `https://account.petdock.site`，控制面和数据面分别为 `https://api.petdock.site` 与 `https://ai.petdock.site`。
+- 端点覆盖不进入 Renderer、契约样例、日志或错误消息；构建校验必须阻止生产包携带开发端点。
+
+### `D-P2-06` 设备显示名与重复注册
+
+状态：`Frozen`
+
+- 客户端首次注册必须提交 `displayName`；服务端去除首尾空白、折叠连续空白并拒绝控制字符，长度按契约限制为 1 至 100 个 Unicode 字符。
+- 客户端未能提供可用名称时使用固定本地化默认名 `Windows Desktop`，服务端不读取硬件序列号、用户名或文件路径生成名称。
+- 同一用户重复提交同一 `deviceId` 时执行幂等更新并刷新 `lastSeenAt`；若设备 ID 已属于其他用户，返回稳定的冲突错误，不转移设备所有权。
+- 设备显示名只用于设备列表展示，不参与授权、Token 签名或设备身份判断。
+
+### `D-P2-07` 服务端时间
+
+状态：`Frozen`
+
+- 控制面所有 HTTP 响应使用标准 HTTP `Date` Header 表示服务端 UTC 时间，不新增业务 `serverTime` 字段。
+- 客户端只使用 `Date` Header 估算本机时钟偏差；时间头缺失时不得延长 Token、撤销或配额窗口。
+- 数据库、JWT、审计时间和内部调度统一使用 UTC；Ubuntu 主机展示时区可为 `Asia/Shanghai`。
+
+### `D-P2-08` 共享开发数据与环境隔离
+
+状态：`Frozen`
+
+- `shared-dev` 使用 PostgreSQL 17 数据库 `petdock_shared_dev` 和 Redis 8.0 逻辑库 0；容器端口只绑定服务器回环地址，本地开发通过 SSH 隧道接入。
+- Spring Boot 通过 Flyway 管理 Schema；PostgreSQL 是用户、设备、授权、Entitlement、Runtime Session、撤销和审计的事实来源，Redis 只保存 Session、限流和可重建撤销缓存。
+- `local-mock` 默认使用本机或测试容器，`shared-dev`、`staging`、`production` 使用独立数据库、Redis 命名空间、凭据、卷和备份目标，禁止跨环境复用数据。
+- 正式环境数据库 URL、用户名、密码、Redis URL、签名密钥和主机外加密备份目标只通过受控环境变量或密钥管理系统注入；仓库只提供无敏感值的 `.env.example`。
+- 备份目标必须位于中国大陆境内的主机外存储；备案完成前只进行内部/隧道验收，不开放普通用户公网登录流量。

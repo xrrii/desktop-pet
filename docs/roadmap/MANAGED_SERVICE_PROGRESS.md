@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-14
+最后更新时间：2026-08-15
 
 ## 1. 新会话快速开始
 
@@ -10,10 +10,11 @@
 
 1. 阅读本文档，确认当前阶段、下一工作项和阻塞项。
 2. 阅读 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md`，以其中冻结的架构、安全和阶段要求为准。
-3. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
-4. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
-5. 执行 `git status --short`，区分已有用户改动和本次改动。
-6. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
+3. 进入 Phase 2 时阅读 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`，确认开发环境、身份、设备和 Token 细节。
+4. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
+5. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
+6. 执行 `git status --short`，区分已有用户改动和本次改动。
+7. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
 
 文档优先级：
 
@@ -23,6 +24,9 @@
 
 当前状态、下一步和验证事实
   docs/roadmap/MANAGED_SERVICE_PROGRESS.md
+
+Phase 2 详细开发方案
+  docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md
 
 现有本地 Assistant 设计
   docs/architecture/AI_ASSISTANT_ARCHITECTURE.md
@@ -46,18 +50,20 @@
 ## 3. 当前总览
 
 ```text
-总体状态：Done
-当前阶段：Phase 1 Chat 路由与能力配置抽象
+总体状态：In Progress
+当前阶段：Phase 2 方案细化与基础设施准备
 架构对齐：Decision Frozen
 桌面端 Managed 实现：Phase 1 Done（仅本地 BYOK/Mock 抽象，未接入 Managed 网络流量）
 独立官网前端：Not Started（不在当前仓库）
-Spring Boot 控制面：Not Started（不在当前仓库）
+Spring Boot 控制面：P2-01 基础骨架已建立（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
-当前阻塞：无
-下一建议工作项：进入 Phase 2 `P2-06`，实现系统浏览器 PKCE 登录和 loopback 回调
+云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
+共享开发依赖：计划部署在服务器内部网络，本地开发机通过 SSH 隧道或自建私网接入
+当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
+下一建议工作项：联调 `petdock-cloud` 的 P2-01 控制面基础工程，再进入 P2-02 用户、设备和授权持久化
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象；尚未实现登录、设备、Runtime Token、Managed Provider、配额或官网功能。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。服务器与域名已就绪但备案仍在审核中；P2-00 契约缺口已在 `petdock-cloud` 冻结，控制面基础工程已建立，但尚未完成正式用户、设备、Runtime Token、Managed Provider、配额或官网功能。
 
 ## 4. 产品与仓库边界
 
@@ -127,7 +133,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | 阶段 | 状态 | 开始条件 | 首个桌面工作项 |
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
-| Phase 2 官网、身份、设备和会话 | `Not Started` | 身份服务、域名、证书和 Token 契约确认 | `P2-06` PKCE + loopback 登录 |
+| Phase 2 官网、身份、设备和会话 | `In Progress` | 服务器与域名已就绪；备案只阻塞正式公网联调 | `P2-02` 用户、设备、授权记录与持久化 |
 | Phase 3 Managed Chat MVP | `Not Started` | Phase 1、2 完成 | `P3-10` `ManagedChatProvider` |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
@@ -137,7 +143,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-进入 Phase 2 `P2-06`，在桌面端实现系统浏览器 PKCE 登录和 loopback 回调；继续保持未登录状态下的 BYOK 可用。
+Phase 2 数据组件已确认使用 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose 和 Nginx，开发机通过 SSH 隧道接入。UserInfo、Token 撤销、Feature Flag、开发端点覆盖、设备显示名和服务端时间已由 `petdock-cloud` 的 `D-P2-01` 至 `D-P2-08` 冻结；下一步联调 P2-01 控制面基础工程，再进入 `P2-02`。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -163,7 +169,9 @@ npm.cmd run test:e2e:assistant:c5
 
 ## 10. 当前待确认事项
 
-Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已完成购买；DNS 解析和证书签发、实际 Provider/模型安全配置，以及 Beta 免费额度数值属于后续上线配置前置条件，不改变已冻结契约。
+服务器与 `petdock.site` 域名已经就绪，ICP 备案仍在审核中。备案完成前不开放普通用户公网登录流量，但允许在服务器内部部署共享开发数据库、中间件和服务，并通过 SSH 隧道或自建私网受控接入；数据库和中间件端口不得直接暴露公网。
+
+Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose、Nginx 和 SSH 隧道开发接入。UserInfo/账号快照、Refresh Token 主动撤销、Feature Flag 下发、开发环境端点覆盖、设备显示名和服务端时间已由 `petdock-cloud` 的 `D-P2-01` 至 `D-P2-08` 冻结；实际 Provider/模型安全配置和 Beta 免费额度仍属于后续上线配置前置条件。
 
 ## 11. 验证记录
 
@@ -186,6 +194,7 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 | 2026-08-15 | 当前工作区 | `npm.cmd run build:runtime`、`test:runtime:packaged` | 通过 | PyInstaller Runtime 构建成功，`RUNTIME_SMOKE_OK` |
 | 2026-08-15 | 当前工作区 | C3/C5 开发版与解包版 E2E | 通过 | `ASSISTANT_C3_SMOKE_OK`、`ASSISTANT_C5_SMOKE_OK` |
 | 2026-08-15 | 当前工作区 | 提交前敏感数据与忽略规则检查 | 通过 | 复核 21 个待提交文件；规则命中均为合成占位符、保留测试域名、回环地址或拒绝测试，无真实凭据、个人绝对路径、用户正文和生产日志；构建产物、虚拟环境、Runtime 数据及临时目录保持忽略 |
+| 2026-08-15 | `petdock-cloud` P2-00/P2-01 工作区 | 云端 Python 契约 14 项、TypeScript 1 项、Spring/JUnit 1 项、制品校验、Desktop/Cloud 快照比对 | 通过 | 新增身份与会话契约、Feature Flag 接口和 Spring Boot 控制面基础工程；消费快照共 33 个文件 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -253,3 +262,18 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 - 新增 8 项 Runtime Factory/Selector 测试和 6 项 Main 能力配置测试；最终 TypeScript 80 项、Runtime 82 项、Managed 契约 12 项通过。
 - `test:runtime:packaged`、C3/C5 开发版和解包版冒烟均通过；Phase 1 未接入任何真实 Managed 网络流量。
 - 已按开发指南完成提交前脱敏检查：待提交源码、测试和文档不含真实 API Key、Token、Cookie、私钥、证书、个人绝对路径、用户正文或生产 Provider 凭据；测试凭据均为明确合成占位符。
+
+### 2026-08-15（Phase 2 方案与环境同步）
+
+- 新增 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`，承载 Phase 2 身份、设备、会话、Token、共享开发环境和跨仓库实施细节。
+- 服务器与域名已就绪，ICP 备案仍在审核中；备案只阻塞正式公网登录联调，不阻塞本地 Mock 和受控开发环境建设。
+- 开发数据库和中间件优先部署在服务器内部网络，多台个人电脑通过 SSH 隧道或自建私网接入；不直接暴露数据库和中间件公网端口。
+- 下一工作项调整为 `P2-00` 契约缺口与开发环境基线确认，完成后进入桌面端 `P2-06`。
+- `P2-00` 数据组件选型确认使用 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose 和 Nginx；开发机使用 SSH 隧道受控接入。
+- 新增 `docs/guides/MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md`，提供服务器安装、回环端口绑定、数据库角色、SSH 隧道、验证和备份指令。
+
+### 2026-08-15（P2-00 契约冻结与 P2-01 云端基础工程）
+
+- 在 `petdock-cloud` 权威契约中冻结 `D-P2-01` 至 `D-P2-08`，新增 OIDC/UserInfo/Token Response、RFC 7009 撤销、Feature Flag、端点覆盖、设备命名、HTTP `Date` 和环境隔离规则。
+- `petdock-cloud` 新增 Spring Boot 控制面基础工程、开发配置模板、Flyway V1 迁移、Redis/PostgreSQL 连接和健康检查；正式用户、设备和 Runtime 业务仍未完成。
+- 已将权威契约整体同步到桌面消费快照并完成 33 个文件 SHA-256 比对；下一工作项进入云端 P2-02，桌面 P2-06 等待控制面协议可联调后开始。

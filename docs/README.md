@@ -4,7 +4,7 @@
 
 本目录按文档职责组织。开始开发前，先根据任务类型找到对应基线；当多份文档存在交叉时，总体架构和开发规范优先，功能专项负责补充领域细节。
 
-最后审阅日期：2026-08-13。
+最后审阅日期：2026-08-15。
 
 ## 2. 状态说明
 
@@ -40,6 +40,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [DEVELOPMENT.md](guides/DEVELOPMENT.md) | Active | 开发环境、代码规范、测试、构建和打包说明 |
+| [MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md](guides/MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md) | Active | Phase 2 PostgreSQL、Redis、SSH 隧道和备份部署步骤 |
 | [UI_STYLE_GUIDELINES.md](guides/UI_STYLE_GUIDELINES.md) | Active | Renderer 界面布局、组件和视觉风格约定 |
 
 ### 4.3 功能专项
@@ -50,6 +51,7 @@
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |
+| [MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md](features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md) | Active | Phase 2 身份、设备、会话、共享开发环境和跨仓库实施细节 |
 
 ### 4.4 路线与进度
 
@@ -66,6 +68,8 @@
 | 修改 Electron、Runtime 启动或打包 | 开发指南、AI 助手总体架构 |
 | 修改 Agent、工具协议或进程通信 | AI 助手总体架构、开发指南 |
 | 开发 BYOK 或官方托管服务 | 官方托管服务进度、双模式实施方案、AI 助手总体架构 |
+| 开发 Managed Phase 2 登录、设备或 Token | Phase 2 身份与会话方案、Managed v1 契约、双模式实施方案 |
+| 部署 Managed Phase 2 共享开发依赖 | Phase 2 身份与会话方案、Shared Dev 部署指南、部署基线契约 |
 | 修改 Managed Service API、Token、错误码或 SSE | `contracts/managed-service/v1`、双模式实施方案、官方托管服务进度 |
 | 修改附件、文件生成、视觉或联网搜索 | 对话资源能力、AI 助手总体架构 |
 | 修改知识库、Embedding 或检索 | RAG 优化方案、Embedding 白名单 |

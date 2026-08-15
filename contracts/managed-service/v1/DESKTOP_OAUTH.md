@@ -47,7 +47,7 @@ state=<high-entropy-random>
 
 ## 5. 身份与会话参数
 
-- 身份服务由 PetDock 自建，并提供标准 OIDC/OAuth2 接口。
+- 身份服务由 PetDock 自建，并提供标准 OIDC/OAuth2 接口。Discovery、UserInfo、Token Response 和 RFC 7009 撤销字段以 `IDENTITY_AND_SESSION.md` 为准。
 - Issuer 固定为 `https://account.petdock.site`，桌面 Public Client ID 固定为 `petdock-desktop`。
 - 桌面 Refresh Token 的绝对有效期为 30 天，每次使用都必须轮换。
 - 已轮换 Refresh Token 再次出现时，撤销当前设备对应的整个 Token Family。

@@ -238,7 +238,37 @@ def test_phase_zero_decisions_and_single_host_baseline_are_frozen() -> None:
     assert "Pending Confirmation" not in register
     for number in range(1, 17):
         assert f"`D-P0-{number:02d}`" in register
-    assert register.count("状态：`Frozen`") == 8
+    phase_zero_register = register.split("## 4. Phase 2 身份与共享开发决定", 1)[0]
+    assert phase_zero_register.count("状态：`Frozen`") == 8
     assert "一台位于中国大陆的云服务器" in deployment
     assert "不建设集群" in deployment
     assert "主机外存储" in deployment
+
+
+def test_phase_two_identity_decisions_are_frozen() -> None:
+    """确保 P2-00 的身份、撤销、端点和共享开发约束不会回退。"""
+    register = (CONTRACT_ROOT / "DECISION_REGISTER.md").read_text(encoding="utf-8")
+    identity = (CONTRACT_ROOT / "IDENTITY_AND_SESSION.md").read_text(encoding="utf-8")
+
+    for number in range(1, 9):
+        assert f"`D-P2-{number:02d}`" in register
+    assert "RFC 7009" in identity
+    assert "managed_login_enabled" in identity
+    assert "Date` Header" in identity
+    assert "PostgreSQL 17" in register
+    assert "Redis 8.0" in register
+    assert "不读取硬件序列号" in register
+
+
+def test_control_plane_feature_flag_contract_is_present() -> None:
+    """确保桌面端 Feature Flag 有明确的认证接口和蛇形字段。"""
+    document = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
+    operation = document["paths"]["/api/v1/features"]["get"]
+    assert operation["operationId"] == "getFeatureFlags"
+    schema = document["components"]["schemas"]["FeatureFlagSnapshot"]
+    assert set(schema["required"]) == {
+        "version",
+        "managed_login_enabled",
+        "minimum_client_version",
+    }
+    assert schema["properties"]["version"]["const"] == 1
