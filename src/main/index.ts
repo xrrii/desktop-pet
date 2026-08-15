@@ -407,6 +407,11 @@ function registerIpc(): void {
     return assistantManager.getModelSettings()
   })
 
+  ipcMain.handle('assistant:get-capability-settings', (event) => {
+    requirePetSender(event)
+    return assistantManager.getCapabilitySettings()
+  })
+
   ipcMain.handle('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {
     requirePetSender(event)
     return assistantManager.configureModelSettings(input)

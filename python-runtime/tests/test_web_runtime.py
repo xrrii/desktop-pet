@@ -5,7 +5,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from petdock_runtime.agent.langchain_backend import LangChainBackend
-from petdock_runtime.config import RuntimeConfig
 from petdock_runtime.providers.embeddings import LocalHashEmbedding
 from petdock_runtime.knowledge.service import KnowledgeService
 from petdock_runtime.knowledge.store import KnowledgeStore
@@ -53,19 +52,6 @@ def test_web_tool_loop_emits_only_referenced_sources_without_persisting_page_bod
         str(tmp_path / "skills" / "packages"),
         SkillStore(str(tmp_path / "skills.db")),
     )
-    backend = LangChainBackend(
-        RuntimeConfig(
-            token=TOKEN,
-            resolved_backend="langchain",
-            api_key="test-key",
-            base_url="http://127.0.0.1:1/v1",
-            model="fake-model",
-        ),
-        memory,
-        knowledge,
-        skills,
-    )
-
     class FakeModel:
         """在同一响应请求搜索和网页读取，再返回带单一引用的回答。"""
 
@@ -100,7 +86,7 @@ def test_web_tool_loop_emits_only_referenced_sources_without_persisting_page_bod
                 )
 
     fake_model = FakeModel()
-    backend._model = fake_model  # type: ignore[assignment]  # 测试替换真实网络模型。
+    backend = LangChainBackend(fake_model, memory, knowledge, skills)
     request = AssistantRequest(
         protocolVersion=1,
         taskId="web-task",

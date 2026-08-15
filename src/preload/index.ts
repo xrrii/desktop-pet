@@ -11,6 +11,7 @@ import type {
   AssistantArtifactSaveResult,
   AssistantAskInput,
   AssistantAskResult,
+  AssistantCapabilitySettingsSnapshot,
   AssistantConversationMessage,
   AssistantDocumentCapabilities,
   AssistantEvent,
@@ -118,6 +119,8 @@ const api = {
   ): Promise<AssistantVisionSettingsSnapshot> => ipcRenderer.invoke('assistant:set-vision-settings', input),
   getAssistantModelSettings: (): Promise<AssistantModelSettingsSnapshot> =>
     ipcRenderer.invoke('assistant:get-model-settings'),
+  getAssistantCapabilitySettings: (): Promise<AssistantCapabilitySettingsSnapshot> =>
+    ipcRenderer.invoke('assistant:get-capability-settings'),
   setAssistantModelSettings: (
     input: AssistantModelSettingsInput
   ): Promise<AssistantModelSettingsSnapshot> => ipcRenderer.invoke('assistant:set-model-settings', input),

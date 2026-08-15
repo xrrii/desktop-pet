@@ -5,10 +5,8 @@ import json
 import re
 from typing import Any
 
-from langchain_openai import ChatOpenAI
-
-from ..config import RuntimeConfig
 from ..protocol import AssistantRequest
+from ..providers.chat import ChatModelFactory, TextChatModel
 from .store import MemoryStore
 
 """异步长期记忆候选分析器。
@@ -20,7 +18,7 @@ from .store import MemoryStore
 class MemoryExtractor:
     """在主任务结束后异步分析对话，只写入待确认候选。"""
 
-    def __init__(self, store: MemoryStore, model: ChatOpenAI | None = None) -> None:
+    def __init__(self, store: MemoryStore, model: TextChatModel | None = None) -> None:
         """绑定 SQLite 存储和可选的在线分析模型。"""
         self._store = store
         self._model = model
@@ -50,7 +48,7 @@ class MemoryExtractor:
         )
         try:
             response = await self._model.ainvoke(prompt)
-            content = _content_to_text(response.content)
+            content = _content_to_text(getattr(response, "content", ""))
             for item in _parse_candidates(content):
                 self._store.add_candidate(
                     request.conversationId,
@@ -64,18 +62,9 @@ class MemoryExtractor:
             return
 
 
-def create_memory_extractor(config: RuntimeConfig, store: MemoryStore) -> MemoryExtractor:
-    """根据 Runtime 后端配置创建在线分析器或离线兜底分析器。"""
-    if config.resolved_backend != "langchain" or not config.api_key:
-        return MemoryExtractor(store)
-    model = ChatOpenAI(
-        api_key=config.api_key,
-        base_url=config.base_url,
-        model=config.model,
-        temperature=0,
-        streaming=False,
-    )
-    return MemoryExtractor(store, model)
+def create_memory_extractor(chat_models: ChatModelFactory, store: MemoryStore) -> MemoryExtractor:
+    """通过统一 Factory 创建后台模型；不可用来源固定使用本地规则。"""
+    return MemoryExtractor(store, chat_models.create_text_model("memory"))
 
 
 def _fallback_candidate(text: str) -> str | None:

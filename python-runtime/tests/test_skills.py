@@ -261,15 +261,6 @@ def test_langchain_progressive_disclosure_and_permission_denial(tmp_path: Path) 
         KnowledgeStore(str(tmp_path / "knowledge.db")),
         ChromaVectorStore(str(tmp_path / "chroma"), LocalHashEmbedding()),
     )
-    config = RuntimeConfig(
-        token=TOKEN,
-        resolved_backend="langchain",
-        api_key="test-key",
-        base_url="http://127.0.0.1:1/v1",
-        model="fake-model",
-    )
-    backend = LangChainBackend(config, memory, knowledge, registry)
-
     class FakeModel:
         """按激活、越权工具和最终回复三轮返回固定流片段。"""
 
@@ -297,7 +288,7 @@ def test_langchain_progressive_disclosure_and_permission_denial(tmp_path: Path) 
                 yield SimpleNamespace(content="权限已拒绝，已继续整理周报。", tool_call_chunks=[])
 
     fake_model = FakeModel()
-    backend._model = fake_model  # type: ignore[assignment]  # 测试替换真实网络模型。
+    backend = LangChainBackend(fake_model, memory, knowledge, registry)
     request = AssistantRequest(
         protocolVersion=1,
         taskId="agent-skill-task",

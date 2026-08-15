@@ -46,6 +46,15 @@ export interface EmbeddingConfigurationBackup {
 export class EmbeddingModelManager {
   private readonly downloads = new Map<string, DownloadState>()
 
+  /** 返回能力来源计算所需的同步脱敏状态。 */
+  capabilityState(): { provider: EmbeddingProfile['provider']; configured: boolean } {
+    const profile = this.loadProfile()
+    return {
+      provider: profile.provider,
+      configured: profile.provider !== 'online' || this.hasOnlineApiKey()
+    }
+  }
+
   /** 返回 Renderer 可见的脱敏模型状态。 */
   async snapshot(): Promise<AssistantEmbeddingSnapshot> {
     const profile = this.loadProfile()

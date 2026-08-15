@@ -16,6 +16,15 @@ interface ModelProfile {
 
 /** 管理主模型的非敏感配置和 safeStorage 加密密钥，并为 Runtime 提供受控环境覆盖。 */
 export class ModelSettingsManager {
+  /** 返回开发、CI 和故障排查使用的旧后端选择，供能力迁移保持兼容。 */
+  backendPreference(): 'auto' | 'mock' | 'langchain' {
+    const value = process.env.PETDOCK_ASSISTANT_BACKEND?.trim().toLowerCase()
+    if (value === 'mock' || value === 'langchain') {
+      return value
+    }
+    return 'auto'
+  }
+
   /** 返回脱敏快照；没有本地配置时显示当前进程环境的默认值。 */
   snapshot(): AssistantModelSettingsSnapshot {
     const profile = this.readProfile()

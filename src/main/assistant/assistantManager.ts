@@ -11,6 +11,7 @@ import type {
   AssistantArtifactSummary,
   AssistantAskInput,
   AssistantAskResult,
+  AssistantCapabilitySettingsSnapshot,
   AssistantConversationMessage,
   AssistantDocumentCapabilities,
   AssistantEvent,
@@ -46,6 +47,7 @@ import { WebSearchService } from './webSearchService'
 import { WebSettingsManager } from './webSettingsManager'
 import { VisionSettingsManager } from './visionSettingsManager'
 import { ModelSettingsManager } from './modelSettingsManager'
+import { CapabilitySettingsManager } from './capabilitySettingsManager'
 import {
   AssistantAttachmentManager,
   isAttachmentSummary,
@@ -76,6 +78,13 @@ export class AssistantManager {
   private readonly webSearch = new WebSearchService(this.webSettings)
   private readonly visionSettings = new VisionSettingsManager()
   private readonly modelSettings = new ModelSettingsManager()
+  private readonly capabilitySettings = new CapabilitySettingsManager(() => ({
+    chat: this.modelSettings.snapshot(),
+    chatBackend: this.modelSettings.backendPreference(),
+    embedding: this.embeddingModels.capabilityState(),
+    vision: this.visionSettings.snapshot(),
+    webSearch: this.webSettings.snapshot()
+  }))
   private readonly runtime: AssistantRuntimeProcess
   private readonly toolHost = new AssistantToolHost(this.webSearch)
   private readonly activeTasks = new Map<string, ActiveTask>()
@@ -88,11 +97,7 @@ export class AssistantManager {
   ) {
     this.runtime = new AssistantRuntimeProcess(
       onStatus,
-      () => ({
-        ...this.modelSettings.runtimeEnvironment(),
-        ...this.embeddingModels.runtimeEnvironment(),
-        ...this.visionSettings.runtimeEnvironment()
-      })
+      () => this.runtimeEnvironment()
     )
   }
 
@@ -109,7 +114,17 @@ export class AssistantManager {
   }
 
   async configureWebSettings(input: AssistantWebSettingsInput): Promise<AssistantWebSettingsSnapshot> {
-    return this.webSettings.configure(input)
+    const snapshot = await this.webSettings.configure(input)
+    this.capabilitySettings.setSelectedSource(
+      'web_search',
+      snapshot.enabled && snapshot.configured ? 'byok' : 'disabled'
+    )
+    return snapshot
+  }
+
+  /** 返回 Main 计算后的版本化能力来源快照。 */
+  getCapabilitySettings(): AssistantCapabilitySettingsSnapshot {
+    return this.capabilitySettings.snapshot()
   }
 
   async testWebSearch(): Promise<number> {
@@ -143,6 +158,7 @@ export class AssistantManager {
   /** 保存主模型配置；只有实际变化时才重启 Runtime。 */
   async configureModelSettings(input: AssistantModelSettingsInput): Promise<AssistantModelSettingsSnapshot> {
     const changed = await this.modelSettings.configure(input)
+    this.capabilitySettings.setSelectedSource('chat', 'byok')
     logInfo('assistant model settings configured', { changed, model: input.model.trim().slice(0, 80) })
     if (changed) {
       await this.cancelAll()
@@ -154,6 +170,11 @@ export class AssistantManager {
   /** 保存视觉设置；仅在配置实际变化时重启 Runtime，避免重复保存清空已探测状态。 */
   async configureVisionSettings(input: AssistantVisionSettingsInput): Promise<AssistantVisionSettingsSnapshot> {
     const changed = await this.visionSettings.configure(input)
+    const inheritedConfigured = input.mode === 'inherit' && this.modelSettings.snapshot().configuredKey
+    this.capabilitySettings.setSelectedSource(
+      'vision',
+      input.mode === 'custom' || inheritedConfigured ? 'byok' : 'disabled'
+    )
     logInfo('assistant vision settings configured', { changed, mode: input.mode })
     if (changed) {
       await this.cancelAll()
@@ -527,12 +548,15 @@ export class AssistantManager {
     }
     await this.cancelAll()
     const backup = this.embeddingModels.captureConfiguration()
+    const capabilityBackup = this.capabilitySettings.captureConfiguration()
     try {
       await this.embeddingModels.selectLocal(modelId)
+      this.capabilitySettings.setSelectedSource('embedding', 'local')
       const client = await this.runtime.restart()
       return await client.reindexAllKnowledge()
     } catch (error) {
       await this.embeddingModels.restoreConfiguration(backup)
+      this.capabilitySettings.restoreConfiguration(capabilityBackup)
       await this.runtime.restart().catch((rollbackError: unknown) => {
         logError('embedding provider rollback failed', rollbackError)
       })
@@ -546,12 +570,15 @@ export class AssistantManager {
     }
     await this.cancelAll()
     const backup = this.embeddingModels.captureConfiguration()
+    const capabilityBackup = this.capabilitySettings.captureConfiguration()
     try {
       await this.embeddingModels.configureOnline(input)
+      this.capabilitySettings.setSelectedSource('embedding', 'byok')
       const client = await this.runtime.restart()
       return await client.reindexAllKnowledge()
     } catch (error) {
       await this.embeddingModels.restoreConfiguration(backup)
+      this.capabilitySettings.restoreConfiguration(capabilityBackup)
       await this.runtime.restart().catch((rollbackError: unknown) => {
         logError('online embedding provider rollback failed', rollbackError)
       })
@@ -815,6 +842,54 @@ export class AssistantManager {
   /** 按需创建附件暂存器，确保 app userData 已在 Electron Ready 后解析。 */
   private createAttachmentManager(): AssistantAttachmentManager {
     return new AssistantAttachmentManager(join(app.getPath('userData'), 'assistant', 'attachments'))
+  }
+
+  /** 按有效能力来源构造 Runtime 环境，禁止无关 BYOK 凭据进入子进程。 */
+  private runtimeEnvironment(): Record<string, string> {
+    if (process.env.PETDOCK_CAPABILITY_SELECTOR?.trim().toLowerCase() === 'legacy') {
+      return {
+        ...this.modelSettings.runtimeEnvironment(),
+        ...this.embeddingModels.runtimeEnvironment(),
+        ...this.visionSettings.runtimeEnvironment(),
+        PETDOCK_RUNTIME_CAPABILITIES_JSON: ''
+      }
+    }
+    const capabilities = this.capabilitySettings.snapshot()
+    const chatByok = capabilities.capabilities.chat.effectiveSource === 'byok'
+    const visionByok = capabilities.capabilities.vision.effectiveSource === 'byok'
+    const embeddingByok = capabilities.capabilities.embedding.effectiveSource === 'byok'
+    const embeddingState = this.embeddingModels.capabilityState()
+
+    const modelEnvironment = chatByok || visionByok
+      ? this.modelSettings.runtimeEnvironment()
+      : {
+          PETDOCK_LLM_API_KEY: '',
+          PETDOCK_LLM_BASE_URL: '',
+          PETDOCK_LLM_MODEL: this.modelSettings.snapshot().model
+        }
+    const embeddingEnvironment = embeddingByok
+      ? this.embeddingModels.runtimeEnvironment()
+      : {
+          PETDOCK_EMBEDDING_PROVIDER: 'hash',
+          PETDOCK_EMBEDDING_API_KEY: '',
+          PETDOCK_EMBEDDING_BASE_URL: '',
+          PETDOCK_EMBEDDING_MODEL: '',
+          PETDOCK_EMBEDDING_DIMENSIONS: '',
+          ...(embeddingState.provider !== 'online' ? this.embeddingModels.runtimeEnvironment() : {})
+        }
+    const visionEnvironment = visionByok
+      ? this.visionSettings.runtimeEnvironment()
+      : {
+          PETDOCK_VISION_API_KEY: '',
+          PETDOCK_VISION_BASE_URL: '',
+          PETDOCK_VISION_MODEL: ''
+        }
+    return {
+      ...modelEnvironment,
+      ...embeddingEnvironment,
+      ...visionEnvironment,
+      ...this.capabilitySettings.runtimeEnvironment()
+    }
   }
 }
 

@@ -9,16 +9,14 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_openai import ChatOpenAI
-
 from ..artifacts.store import ArtifactRecord, ArtifactStore
 from ..attachments.analysis import AttachmentAnalysisService
 from ..attachments.models import AttachmentDatasetContext
 from ..attachments.store import AttachmentStore
-from ..config import RuntimeConfig
 from ..knowledge.service import KnowledgeService, RetrievalSource
 from ..memory.store import MemoryStore
 from ..protocol import AssistantRequest, ToolResultRequest
+from ..providers.chat import AgentChatModel
 from ..skills.manifest import SkillActivation, SkillManifestError
 from ..skills.registry import SkillRegistry
 from .context import (
@@ -41,7 +39,7 @@ from .contracts import (
     WebSourcesContext,
 )
 from .memory_tools import execute_memory_tool
-from .tool_catalog import MEMORY_TOOL_NAMES, TOOL_DEFINITIONS
+from .tool_catalog import MEMORY_TOOL_NAMES
 
 """LangChain 在线模型后端与有限工具调用循环。"""
 
@@ -54,7 +52,7 @@ class LangChainBackend(AssistantBackend):
 
     def __init__(
         self,
-        config: RuntimeConfig,
+        model: AgentChatModel,
         store: MemoryStore,
         knowledge: KnowledgeService,
         skills: SkillRegistry,
@@ -62,14 +60,8 @@ class LangChainBackend(AssistantBackend):
         artifacts: ArtifactStore | None = None,
         attachment_analysis: AttachmentAnalysisService | None = None,
     ) -> None:
-        """创建只注册固定工具定义的 OpenAI-compatible 模型。"""
-        self._model = ChatOpenAI(
-            api_key=config.api_key,
-            base_url=config.base_url,
-            model=config.model,
-            temperature=0.2,
-            streaming=True,
-        ).bind_tools(TOOL_DEFINITIONS)
+        """绑定已由 ChatModelFactory 创建并注册固定工具的模型。"""
+        self._model = model
         self._store = store
         self._knowledge = knowledge
         self._skills = skills

@@ -4,6 +4,13 @@ import os
 from dataclasses import dataclass
 from typing import Literal
 
+from .providers.selector import (
+    ChatSource,
+    parse_runtime_capabilities,
+    resolve_backend,
+    validate_embedding_source,
+)
+
 """Runtime 启动配置及环境变量解析。"""
 
 BackendName = Literal["mock", "langchain"]
@@ -37,6 +44,7 @@ class RuntimeConfig:
     vision_base_url: str | None = None
     vision_model: str | None = None
     vision_source: Literal["inherited", "custom"] = "inherited"
+    chat_source: ChatSource | None = None
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -106,17 +114,24 @@ class RuntimeConfig:
         ):
             raise ValueError("在线 Embedding 配置不完整。")
 
-        if requested_backend == "auto":
-            backend: BackendName = "langchain" if api_key else "mock"
-        elif requested_backend in {"mock", "langchain"}:
-            backend = requested_backend  # type: ignore[assignment]
-        else:
-            raise ValueError("PETDOCK_ASSISTANT_BACKEND must be auto, mock, or langchain.")
-
-        if backend == "langchain" and not api_key:
-            raise ValueError("PETDOCK_LLM_API_KEY is required for the langchain backend.")
+        capabilities = parse_runtime_capabilities(
+            os.environ.get("PETDOCK_RUNTIME_CAPABILITIES_JSON", "").strip() or None,
+            requested_backend=requested_backend,
+            has_chat_api_key=api_key is not None,
+            embedding_provider=embedding_provider,
+            has_vision_configuration=vision_api_key is not None and vision_model is not None,
+        )
+        backend: BackendName = resolve_backend(capabilities.chat, api_key is not None)
+        validate_embedding_source(capabilities.embedding, embedding_provider)
         if not model:
             raise ValueError("PETDOCK_LLM_MODEL cannot be empty.")
+
+        if capabilities.vision == "managed":
+            raise ValueError("Phase 1 尚未启用 Managed Vision 网络适配器。")
+        if capabilities.vision == "disabled":
+            vision_api_key = None
+            vision_base_url = None
+            vision_model = None
 
         return cls(
             token=token,
@@ -143,4 +158,5 @@ class RuntimeConfig:
             vision_base_url=vision_base_url,
             vision_model=vision_model,
             vision_source="custom" if custom_vision else "inherited",
+            chat_source=capabilities.chat,
         )

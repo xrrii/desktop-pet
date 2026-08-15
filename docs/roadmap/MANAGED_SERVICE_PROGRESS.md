@@ -47,17 +47,17 @@
 
 ```text
 总体状态：Done
-当前阶段：Phase 0 契约与基线冻结
+当前阶段：Phase 1 Chat 路由与能力配置抽象
 架构对齐：Decision Frozen
-桌面端 Managed 实现：Not Started
+桌面端 Managed 实现：Phase 1 Done（仅本地 BYOK/Mock 抽象，未接入 Managed 网络流量）
 独立官网前端：Not Started（不在当前仓库）
 Spring Boot 控制面：Not Started（不在当前仓库）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 当前阻塞：无
-下一建议工作项：进入 Phase 1 `P1-01`，建立本地 ChatModelFactory，不接入真实 Managed 网络流量
+下一建议工作项：进入 Phase 2 `P2-06`，实现系统浏览器 PKCE 登录和 loopback 回调
 ```
 
-当前已完成方案冻结、BYOK 基线和权威契约迁移，尚未实现登录、设备、Runtime Token、Managed Provider、配额或官网功能。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象；尚未实现登录、设备、Runtime Token、Managed Provider、配额或官网功能。
 
 ## 4. 产品与仓库边界
 
@@ -78,7 +78,7 @@ FastAPI AI 数据面：Not Started（不在当前仓库）
 
 | 领域 | 当前事实 | 主要入口 |
 | --- | --- | --- |
-| Chat | `LangChainBackend` 和 `MemoryExtractor` 分别直接创建 `ChatOpenAI`，尚无统一 `ChatModelFactory` | `python-runtime/petdock_runtime/agent/langchain_backend.py`、`python-runtime/petdock_runtime/memory/extractor.py` |
+| Chat | `ChatModelFactory` 统一创建 BYOK Agent/后台模型；`LangChainBackend` 和记忆提取器只消费窄模型端口 | `python-runtime/petdock_runtime/providers/chat.py`、`python-runtime/petdock_runtime/providers/selector.py` |
 | Agent 编排 | 本地 Runtime 负责任务、SSE、工具循环、Memory、RAG 和 Skill | `python-runtime/petdock_runtime/agent/service.py` |
 | Runtime 装配 | 长生命周期资源集中创建，适合作为 Provider 注入点 | `python-runtime/petdock_runtime/api/resources.py` |
 | 本地鉴权 | Main 每次启动生成 `PETDOCK_RUNTIME_TOKEN`，与未来官方 Runtime Token 属于不同信任域 | `src/main/assistant/runtimeProcess.ts`、`python-runtime/petdock_runtime/api/server.py` |
@@ -120,13 +120,13 @@ FastAPI AI 数据面：Not Started（不在当前仓库）
 | `P0-10` Web Search/Fetch 边界 | `Done` | 数据面仅有 `/web/search`，测试禁止 `/web/fetch` | Phase 4 保留 Main 抓取路径 |
 | `P0-11` 模型消费者与 Provider 盘点 | `Done` | 已形成 `MANAGED_SERVICE_PROVIDER_INVENTORY.md` | Phase 1 按清单实施和回归 |
 
-Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经全部完成，整体状态为 `Done`；后续进入 Phase 1 本地 Chat 路由与能力配置抽象。
+Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经全部完成，Phase 1 本地 Chat 路由与能力配置抽象也已完成；下一阶段进入 Phase 2 身份与设备基础设施。
 
 ## 8. 后续阶段状态
 
 | 阶段 | 状态 | 开始条件 | 首个桌面工作项 |
 | --- | --- | --- | --- |
-| Phase 1 Chat 路由与能力配置 | `Not Started` | Phase 0 的相关协议和 BYOK 基线可用 | `P1-01` 定义 `ChatModelFactory` |
+| Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
 | Phase 2 官网、身份、设备和会话 | `Not Started` | 身份服务、域名、证书和 Token 契约确认 | `P2-06` PKCE + loopback 登录 |
 | Phase 3 Managed Chat MVP | `Not Started` | Phase 1、2 完成 | `P3-10` `ManagedChatProvider` |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
@@ -137,7 +137,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-进入 Phase 1 `P1-01`，在 `desktop-pet` 中建立本地 `ChatModelFactory` 和能力来源抽象，不接入真实 Managed 网络流量。
+进入 Phase 2 `P2-06`，在桌面端实现系统浏览器 PKCE 登录和 loopback 回调；继续保持未登录状态下的 BYOK 可用。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -147,9 +147,9 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 4. 同步前在云端运行 Python、TypeScript、Spring/JUnit 测试，并生成和校验可追溯契约制品。
 5. 建立发布流水线后，桌面仓库改为消费带版本、源提交和完整性信息的契约制品。
 
-### Phase 1 准备
+### Phase 1 验证结果
 
-Phase 1 可以开始实施本地抽象，但不要接入真实 Managed 网络流量。Phase 1 完成后仍运行以下回归：
+Phase 1 已完成本地 Chat 路由与能力来源抽象，未接入真实 Managed 网络流量。完成门禁使用以下命令：
 
 ```powershell
 npm.cmd run check
@@ -182,6 +182,10 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 | 2026-08-13 | 当前工作区 | 决策冻结后 `npm.cmd run check` | 通过 | TS 74、契约 12、Runtime 74、检索六项指标 1.0、生产构建成功 |
 | 2026-08-14 | Desktop/Cloud 修复工作区 | Phase 0 退出门禁复验 | 通过 | 云端 Python 13 项、TypeScript 1 项、Spring/JUnit 1 项通过；含 Maven `target` 时制品仍为 32 个文件且校验通过；桌面快照 32 个文件一致 |
 | 2026-08-14 | Desktop 修复工作区 | `npm.cmd run check` | 通过 | TS 74、契约 12、Runtime 74、检索六项指标 1.0、生产构建成功 |
+| 2026-08-15 | 当前工作区 | Phase 1 `P1-01` 至 `P1-08` 实现与 `npm.cmd run check` | 通过 | TS 80、契约 12、Runtime 82、检索六项指标 1.0、生产构建成功 |
+| 2026-08-15 | 当前工作区 | `npm.cmd run build:runtime`、`test:runtime:packaged` | 通过 | PyInstaller Runtime 构建成功，`RUNTIME_SMOKE_OK` |
+| 2026-08-15 | 当前工作区 | C3/C5 开发版与解包版 E2E | 通过 | `ASSISTANT_C3_SMOKE_OK`、`ASSISTANT_C5_SMOKE_OK` |
+| 2026-08-15 | 当前工作区 | 提交前敏感数据与忽略规则检查 | 通过 | 复核 21 个待提交文件；规则命中均为合成占位符、保留测试域名、回环地址或拒绝测试，无真实凭据、个人绝对路径、用户正文和生产日志；构建产物、虚拟环境、Runtime 数据及临时目录保持忽略 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -240,3 +244,12 @@ Phase 0 当前没有待确认的产品或基础设施决策。`petdock.site` 已
 - 新增仓库级换行规则，确保 Windows 拉取后的桌面契约快照保持 LF，避免仅因 CRLF 造成 SHA-256 漂移。
 - 云端契约制品收集器排除 Maven `target` 和 Python 缓存，并新增工具测试防止生成物进入发布制品。
 - 在 Maven `target` 已存在的条件下完成 32 文件制品生成、离线校验和 Desktop/Cloud 快照比对；两项 Phase 0 收尾问题均已关闭。
+
+### 2026-08-15（Phase 1 完成）
+
+- 完成 `P1-01` 至 `P1-03`：新增 Python `ChatModelFactory` 与 Runtime Capability Selector，主 Agent 和后台记忆提取统一通过 Factory 创建 Chat 模型；Managed/Mock 后台记忆固定使用本地规则。
+- 完成 `P1-04` 至 `P1-06`：新增 Electron Main `CapabilitySettingsManager`、版本化脱敏能力快照、旧配置迁移和原子写入；现有 `safeStorage` 密钥路径未改变。
+- 完成 `P1-07` 至 `P1-08`：Embedding、Vision、Web Search 领域实现保持原边界，Runtime 只接收 Main 计算的有效来源；显式 Mock 后端优先于自动 BYOK 迁移，并补齐回滚与来源选择测试。
+- 新增 8 项 Runtime Factory/Selector 测试和 6 项 Main 能力配置测试；最终 TypeScript 80 项、Runtime 82 项、Managed 契约 12 项通过。
+- `test:runtime:packaged`、C3/C5 开发版和解包版冒烟均通过；Phase 1 未接入任何真实 Managed 网络流量。
+- 已按开发指南完成提交前脱敏检查：待提交源码、测试和文档不含真实 API Key、Token、Cookie、私钥、证书、个人绝对路径、用户正文或生产 Provider 凭据；测试凭据均为明确合成占位符。

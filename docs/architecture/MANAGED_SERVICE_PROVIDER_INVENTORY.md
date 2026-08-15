@@ -8,7 +8,7 @@
 
 | 能力 | 所有进程 | 当前实现 | Phase 1 处理 |
 | --- | --- | --- | --- |
-| Chat | Python Runtime | `LangChainBackend`、`MemoryExtractor` 分别创建 `ChatOpenAI` | 建立统一 `ChatModelFactory`，覆盖两个消费者 |
+| Chat | Python Runtime | `ChatModelFactory` 集中创建 BYOK Agent/后台模型，两个消费者通过窄端口使用 | Phase 1 已完成；Managed 适配器仍未接入 |
 | Embedding | Python Runtime | Hash、本地 ONNX、OpenAI-compatible Provider | 保留现有协议，只预留 Managed 装配点 |
 | Vision | Python Runtime | `VisionAnalyzer` 直接调用 OpenAI-compatible HTTP 接口 | 保留探测、摘要和缓存，只在 Phase 4 抽离远程适配器 |
 | Web Search | Electron Main | 火山引擎、Brave 和 Smoke Provider | 保留 Main 所有权，Phase 4 增加 Managed Provider |
@@ -20,7 +20,7 @@
 ### 2.1 主 Agent
 
 - 入口：`python-runtime/petdock_runtime/agent/langchain_backend.py`
-- 当前行为：构造 `ChatOpenAI` 后绑定固定工具，通过 `astream()` 执行最多六轮有限工具循环。
+- 当前行为：由 `ChatModelFactory` 创建并绑定固定工具的模型，通过 `astream()` 执行最多六轮有限工具循环。
 - 输入：系统 Prompt、本地会话历史、RAG 片段、附件上下文和 Skill 指令。
 - 输出：文本、ToolCall、引用、Artifact 和 Skill 生命周期事件。
 - 约束：Phase 1 只替换模型创建依赖，不改变工具循环、Prompt、历史格式和 SSE 事件。
@@ -28,13 +28,13 @@
 ### 2.2 后台记忆提取
 
 - 入口：`python-runtime/petdock_runtime/memory/extractor.py`
-- 当前行为：在线模式单独创建无流式 `ChatOpenAI`，主任务完成后异步提取待确认记忆；不可用时使用本地规则。
+- 当前行为：在线 BYOK 模式由同一 `ChatModelFactory` 创建无流式模型，主任务完成后异步提取待确认记忆；Mock、Managed 或不可用时使用本地规则。
 - 风险：如果只重构主 Agent，Managed Chat 会被后台 BYOK 调用绕过，或形成未计量的官方调用。
 - 冻结处理：纳入同一 `ChatModelFactory`；Managed Chat MVP 中固定使用现有本地规则兜底，不产生隐式 Managed 用量。
 
 ### 2.3 装配位置
 
-- `python-runtime/petdock_runtime/agent/factory.py` 当前根据 `RuntimeConfig.resolved_backend` 创建 `LangChainBackend` 或 `MockBackend`。
+- `python-runtime/petdock_runtime/agent/factory.py` 当前根据 `ChatModelFactory.backend_name` 创建 `LangChainBackend` 或 `MockBackend`。
 - `python-runtime/petdock_runtime/api/resources.py` 同时装配 Backend 和 `MemoryExtractor`，是注入统一 Chat Factory 的唯一首选位置。
 - `python-runtime/petdock_runtime/config.py` 当前直接持有 BYOK Chat 地址、模型和密钥；Phase 1 后这些值只应由 BYOK Factory 消费。
 
@@ -114,7 +114,7 @@ Main 继续负责：
 | Vision | `VisionSettingsManager` | `PETDOCK_VISION_*` | 独立 Key 使用 `safeStorage` |
 | Web Search | `WebSettingsManager` | 不下发 Runtime | 每个 Provider 独立 `safeStorage` 密文文件 |
 
-`AssistantManager` 当前在启动 Runtime 前合并 Chat、Embedding 和 Vision 环境覆盖。Phase 1 不改变现有密钥路径；新增 `CapabilitySettingsManager` 只保存来源和开关，不保存或复制密钥。
+`AssistantManager` 当前在启动 Runtime 前由 `CapabilitySettingsManager` 计算有效来源，再合并 Chat、Embedding 和 Vision 环境覆盖。Phase 1 不改变现有密钥路径；`CapabilitySettingsManager` 只保存来源和开关，不保存或复制密钥。
 
 ## 7. 非 Managed AI Provider 网络调用
 
@@ -140,7 +140,7 @@ Main 继续负责：
 - `npm.cmd run test:runtime:packaged`
 - `npm.cmd run test:e2e:assistant:c3`
 - `npm.cmd run test:e2e:assistant:c5`
-- Phase 1 完成后增加旧配置迁移和未登录启动的专用冒烟。
+- Phase 1 已增加旧配置迁移、显式 Mock 优先级和未登录/本地 Runtime 启动回归。
 
 ## 9. Phase 1 禁止事项
 

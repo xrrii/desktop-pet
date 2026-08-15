@@ -16,6 +16,7 @@ from ..knowledge.store import KnowledgeStore
 from ..memory.extractor import create_memory_extractor
 from ..memory.store import MemoryStore
 from ..protocol import AssistantRequest
+from ..providers.chat import ChatModelFactory
 from ..providers.embeddings import EmbeddingProvider, LocalHashEmbedding, create_embedding_provider
 from ..rag.vector_store import ChromaVectorStore
 from ..skills.installer import SkillInstaller
@@ -92,6 +93,12 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
     skill_store = SkillStore(config.skills_db_path)
     skills = SkillRegistry(config.skills_root, skill_store)
     skill_installer = SkillInstaller(config.skills_root, skills)
+    chat_models = ChatModelFactory(
+        config.chat_source or ("byok" if config.resolved_backend == "langchain" else "mock"),
+        api_key=config.api_key,
+        base_url=config.base_url,
+        model=config.model,
+    )
 
     async def prepare_attachments(request: AssistantRequest) -> None:
         """发送任务开始后生成图片视觉摘要，登记阶段不调用外部视觉端点。"""
@@ -107,7 +114,7 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
 
     assistant = AssistantService(
         create_backend(
-            config,
+            chat_models,
             memory,
             knowledge,
             skills,
@@ -115,7 +122,7 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
             artifacts,
             attachment_analysis,
         ),
-        create_memory_extractor(config, memory),
+        create_memory_extractor(chat_models, memory),
         prepare_attachments,
     )
     LOGGER.info(

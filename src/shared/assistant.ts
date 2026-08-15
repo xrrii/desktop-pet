@@ -171,6 +171,45 @@ export interface AssistantModelSettingsSnapshot {
   source: 'environment' | 'saved'
 }
 
+export type AssistantCapabilityStatus =
+  | 'available'
+  | 'disabled'
+  | 'not_configured'
+  | 'not_authenticated'
+  | 'not_entitled'
+  | 'provider_unavailable'
+  | 'unsupported_client'
+
+export type AssistantCapabilityName = 'chat' | 'embedding' | 'vision' | 'rerank' | 'web_search'
+export type AssistantChatSelectedSource = 'byok' | 'managed' | 'disabled'
+export type AssistantChatEffectiveSource = 'byok' | 'managed' | 'disabled' | 'mock'
+export type AssistantEmbeddingSelectedSource = 'byok' | 'managed' | 'local'
+export type AssistantEmbeddingEffectiveSource = 'byok' | 'managed' | 'local'
+export type AssistantVisionSelectedSource = 'byok' | 'managed' | 'disabled'
+export type AssistantVisionEffectiveSource = 'byok' | 'managed' | 'disabled'
+export type AssistantRerankSelectedSource = 'managed' | 'disabled'
+export type AssistantRerankEffectiveSource = 'managed' | 'disabled'
+export type AssistantWebSearchSelectedSource = 'byok' | 'managed' | 'disabled'
+export type AssistantWebSearchEffectiveSource = 'byok' | 'managed' | 'disabled'
+
+export interface AssistantCapabilityResolution<SelectedSource extends string, EffectiveSource extends string> {
+  selectedSource: SelectedSource
+  effectiveSource: EffectiveSource
+  status: AssistantCapabilityStatus
+  reason: string | null
+}
+
+export interface AssistantCapabilitySettingsSnapshot {
+  version: 1
+  capabilities: {
+    chat: AssistantCapabilityResolution<AssistantChatSelectedSource, AssistantChatEffectiveSource>
+    embedding: AssistantCapabilityResolution<AssistantEmbeddingSelectedSource, AssistantEmbeddingEffectiveSource>
+    vision: AssistantCapabilityResolution<AssistantVisionSelectedSource, AssistantVisionEffectiveSource>
+    rerank: AssistantCapabilityResolution<AssistantRerankSelectedSource, AssistantRerankEffectiveSource>
+    web_search: AssistantCapabilityResolution<AssistantWebSearchSelectedSource, AssistantWebSearchEffectiveSource>
+  }
+}
+
 /** 主模型设置输入；空白 API Key 表示沿用已保存密钥。 */
 export interface AssistantModelSettingsInput {
   baseUrl?: string

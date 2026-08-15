@@ -1084,8 +1084,8 @@ Feature Flag 必须能按环境、用户组、客户端版本和百分比灰度�
 ## 19. 实施检查表
 
 ```text
-[ ] Phase 0 契约与安全边界冻结
-[ ] Phase 1 本地 Provider 抽象完成，BYOK 零回归
+[x] Phase 0 契约与安全边界冻结
+[x] Phase 1 本地 Provider 抽象完成，BYOK 零回归
 [ ] Phase 2 登录、设备、Token 和 Entitlement 完成
 [ ] Phase 3 Managed Chat MVP 完成
 [ ] Phase 4-E Managed Embedding 完成
