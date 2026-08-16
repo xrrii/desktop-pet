@@ -4,7 +4,7 @@
 
 | 凭据 | 持有者 | 持久化 | 禁止暴露给 |
 | --- | --- | --- | --- |
-| 官网 Web Session | 系统浏览器、控制面 | HttpOnly 安全 Cookie | Electron、Python Runtime |
+| 官网 Web Session | 系统浏览器、控制面 | `__Host-petdock_web_session` HttpOnly 安全 Cookie，Session 状态可在 Redis | Electron、Python Runtime |
 | 桌面 Refresh Token | Electron Main | `safeStorage` | Renderer、Python Runtime、官网前端 |
 | 官方 Runtime Token | Electron Main、Python Runtime 内存 | 不持久化 | Renderer、日志、官网前端 |
 | 本地 Runtime Token | Electron Main、Python Runtime | 每次启动临时值 | Renderer、云端 |
@@ -20,6 +20,8 @@
 | Vision | 用户明确加入会话的图片或派生图片 | 图片、Base64 和视觉 Prompt 正文 |
 | Rerank | 查询和候选片段 | 查询及候选正文 |
 | Web Search | 搜索关键词和必要搜索选项 | 搜索关键词正文日志 |
+
+官网 Web API 只接受来自 `https://petdock.site` 的受控浏览器请求，使用 HttpOnly Session Cookie 和 `X-PetDock-CSRF` Header；Cookie、CSRF Token、密码和完整 username 不进入日志。官网 Web Session 不是桌面 OAuth Token，也不能换取 Runtime Token 或 Provider Key。
 
 Managed Web Search 第一版不接收网页正文读取 URL，也不提供 `/ai/v1/web/fetch`。URL 校验、DNS 固定、SSRF 防护和正文抓取由 Electron Main 执行。
 

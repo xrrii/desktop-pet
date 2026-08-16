@@ -37,7 +37,21 @@ class ManagedServiceExamplesTest {
         JsonNode stream = read("chat-stream-event.json");
         assertEquals("delta", stream.path("type").asText());
         assertEquals(1, stream.path("sequence").asInt());
+        JsonNode anonymousWebSession = read("web-session-anonymous.json");
+        assertEquals(1, anonymousWebSession.path("version").asInt());
+        assertFalse(anonymousWebSession.path("authenticated").asBoolean());
+        assertTrue(anonymousWebSession.path("expiresAt").isNull());
+        assertTrue(anonymousWebSession.path("user").isNull());
+        JsonNode authenticatedWebSession = read("web-session-authenticated.json");
+        assertTrue(authenticatedWebSession.path("authenticated").asBoolean());
+        assertEquals("demo_user", authenticatedWebSession.path("user").path("username").asText());
+        assertTrue(authenticatedWebSession.path("user").path("passwordEnabled").asBoolean());
         for (String name : List.of("runtime-token-header.json", "request-context.json", "managed-auth-refresh-event.json", "managed-auth-result.json")) {
+            JsonNode value = read(name);
+            assertTrue(value.isObject() && value.size() > 0);
+            assertEquals(value, mapper.readTree(mapper.writeValueAsBytes(value)));
+        }
+        for (String name : List.of("web-session-anonymous.json", "web-session-authenticated.json")) {
             JsonNode value = read(name);
             assertTrue(value.isObject() && value.size() > 0);
             assertEquals(value, mapper.readTree(mapper.writeValueAsBytes(value)));

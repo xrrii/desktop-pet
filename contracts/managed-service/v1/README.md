@@ -7,10 +7,12 @@
 ```text
 openapi/
   control-plane.yaml               桌面端控制面业务接口
+  web-control-plane.yaml            官网 Web Session 与账号接口
   ai-data-plane.yaml               官方 AI 能力接口
   local-runtime-session.yaml       Main 与本地 Runtime 的 Managed Session 接口
 schemas/
   capability-settings.schema.json
+  web-session-snapshot.schema.json
   runtime-token-header.schema.json
   runtime-token-claims.schema.json
   request-context.schema.json
@@ -30,6 +32,7 @@ DESKTOP_OAUTH.md
 SECURITY_AND_DATA_BOUNDARIES.md
   TOKEN_AND_REVOCATION.md
   IDENTITY_AND_SESSION.md
+  WEB_IDENTITY_AND_SESSION.md
 ```
 
 ## 版本规则
@@ -48,4 +51,4 @@ python -m pytest contracts/managed-service/v1/tests
 
 验证会检查 OpenAPI 可解析性、Schema 和引用合法性、样例、错误码一致性、禁止的云端 Web Fetch 路由，以及 Runtime Token 的固定安全约束。
 
-Phase 0 和 Phase 2 的产品、身份与基础设施决定统一记录在 `DECISION_REGISTER.md`，身份字段与端点细节见 `IDENTITY_AND_SESSION.md`，单机部署边界见 `DEPLOYMENT_BASELINE.md`。实际 Provider、模型、密钥和可调整额度属于服务端安全配置，不得写入公开契约或客户端。
+Phase 0 和 Phase 2 的产品、身份与基础设施决定统一记录在 `DECISION_REGISTER.md`，桌面身份字段与端点细节见 `IDENTITY_AND_SESSION.md`，官网 Session、CSRF 与账号字段见 `WEB_IDENTITY_AND_SESSION.md`，单机部署边界见 `DEPLOYMENT_BASELINE.md`。实际 Provider、模型、密钥和可调整额度属于服务端安全配置，不得写入公开契约或客户端。

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.petdock.site/managed-service/v1/web-session-snapshot.schema.json",
+  "title": "PetDock Web Session Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "authenticated", "csrfToken", "expiresAt", "user"],
+  "properties": {
+    "version": { "const": 1 },
+    "authenticated": { "type": "boolean" },
+    "csrfToken": { "type": "string", "minLength": 32, "maxLength": 256 },
+    "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+    "user": {
+      "anyOf": [
+        { "$ref": "#/$defs/webProfile" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "authenticated": { "const": true } } },
+      "then": {
+        "properties": {
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "user": { "$ref": "#/$defs/webProfile" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "authenticated": { "const": false } } },
+      "then": {
+        "properties": {
+          "expiresAt": { "type": "null" },
+          "user": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "username": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 32,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,30}[A-Za-z0-9])?$"
+    },
+    "webProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["username", "displayName", "email", "emailVerified", "passwordEnabled"],
+      "properties": {
+        "username": { "$ref": "#/$defs/username" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "email": { "type": ["string", "null"], "format": "email", "maxLength": 320 },
+        "emailVerified": { "type": "boolean" },
+        "passwordEnabled": { "type": "boolean" }
+      }
+    }
+  }
+}

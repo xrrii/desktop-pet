@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "authenticated": true,
+  "csrfToken": "11111111111111111111111111111111",
+  "expiresAt": "2030-01-02T03:04:05Z",
+  "user": {
+    "username": "demo_user",
+    "displayName": "合成用户",
+    "email": "demo@example.invalid",
+    "emailVerified": false,
+    "passwordEnabled": true
+  }
+}

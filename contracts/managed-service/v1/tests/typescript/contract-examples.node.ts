@@ -32,7 +32,18 @@ test('Managed Service v1 固定样例兼容 TypeScript', async () => {
   assert.equal(stream.sequence, 1)
   assert.match(stream.traceId, /^[0-9a-f-]{36}$/)
 
-  for (const name of ['runtime-token-header.json', 'request-context.json', 'managed-auth-refresh-event.json', 'managed-auth-result.json']) {
+  const anonymousWebSession = await example<any>('web-session-anonymous.json')
+  assert.equal(anonymousWebSession.version, 1)
+  assert.equal(anonymousWebSession.authenticated, false)
+  assert.equal(anonymousWebSession.expiresAt, null)
+  assert.equal(anonymousWebSession.user, null)
+
+  const authenticatedWebSession = await example<any>('web-session-authenticated.json')
+  assert.equal(authenticatedWebSession.authenticated, true)
+  assert.equal(authenticatedWebSession.user.username, 'demo_user')
+  assert.equal(authenticatedWebSession.user.passwordEnabled, true)
+
+  for (const name of ['runtime-token-header.json', 'request-context.json', 'managed-auth-refresh-event.json', 'managed-auth-result.json', 'web-session-anonymous.json', 'web-session-authenticated.json']) {
     const value = await example<Record<string, unknown>>(name)
     assert.ok(Object.keys(value).length > 0)
     assert.deepEqual(JSON.parse(JSON.stringify(value)), value)

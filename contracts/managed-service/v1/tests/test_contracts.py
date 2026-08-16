@@ -23,6 +23,8 @@ EXAMPLE_SCHEMAS = {
     "managed-auth-result.json": "managed-auth-result.schema.json",
     "usage-event.json": "usage-event.schema.json",
     "chat-stream-event.json": "chat-stream-event.schema.json",
+    "web-session-anonymous.json": "web-session-snapshot.schema.json",
+    "web-session-authenticated.json": "web-session-snapshot.schema.json",
 }
 
 
@@ -116,6 +118,12 @@ def test_error_catalog_is_unique_and_has_required_codes() -> None:
     assert len(codes) == len(set(codes))
     assert {
         "authentication_required",
+        "invalid_credentials",
+        "username_unavailable",
+        "csrf_invalid",
+        "password_policy_violation",
+        "current_password_invalid",
+        "password_authentication_unavailable",
         "token_expired",
         "device_revoked",
         "device_access_denied",
@@ -141,13 +149,14 @@ def test_error_catalog_is_unique_and_has_required_codes() -> None:
 
 
 def test_openapi_documents_have_v1_metadata_and_operations() -> None:
-    """确保三份 OpenAPI 可解析、版本一致且 operationId 不重复。"""
+    """确保四份 OpenAPI 可解析、版本一致且 operationId 不重复。"""
     operation_ids: list[str] = []
     documents = sorted(OPENAPI_ROOT.glob("*.yaml"))
     assert {path.name for path in documents} == {
         "ai-data-plane.yaml",
         "control-plane.yaml",
         "local-runtime-session.yaml",
+        "web-control-plane.yaml",
     }
     for path in documents:
         document = _read_yaml(path)
@@ -222,12 +231,14 @@ def test_frozen_public_domains_are_consistent() -> None:
     """确保控制面、数据面、OAuth 和 Token 使用同一组已冻结域名。"""
     control_plane = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
     ai_data_plane = _read_yaml(OPENAPI_ROOT / "ai-data-plane.yaml")
+    web_control_plane = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
     oauth = control_plane["components"]["securitySchemes"]["desktopOAuth"]["flows"]["authorizationCode"]
     claims = _read_json(EXAMPLE_ROOT / "runtime-token-claims.json")
     claims_schema = _read_json(SCHEMA_ROOT / "runtime-token-claims.schema.json")
 
     assert control_plane["servers"][0]["url"] == "https://api.petdock.site"
     assert ai_data_plane["servers"][0]["url"] == "https://ai.petdock.site"
+    assert web_control_plane["servers"][0]["url"] == "https://api.petdock.site"
     assert oauth["authorizationUrl"] == "https://account.petdock.site/oauth2/authorize"
     assert oauth["tokenUrl"] == "https://account.petdock.site/oauth2/token"
     assert claims["iss"] == "https://account.petdock.site"
@@ -254,9 +265,8 @@ def test_phase_two_identity_decisions_are_frozen() -> None:
     register = (CONTRACT_ROOT / "DECISION_REGISTER.md").read_text(encoding="utf-8")
     identity = (CONTRACT_ROOT / "IDENTITY_AND_SESSION.md").read_text(encoding="utf-8")
 
-    for number in range(1, 9):
+    for number in range(1, 14):
         assert f"`D-P2-{number:02d}`" in register
-    assert "`D-P2-09`" in register
     assert "RFC 7009" in identity
     assert "managed_login_enabled" in identity
     assert "Date` Header" in identity
@@ -264,6 +274,8 @@ def test_phase_two_identity_decisions_are_frozen() -> None:
     assert "Redis 8.0" in register
     assert "不读取硬件序列号" in register
     assert "不新增客户端设备 Header" in register
+    assert "__Host-petdock_web_session" in register
+    assert "authorization_consent_enabled" in register
 
 
 def test_control_plane_feature_flag_contract_is_present() -> None:
@@ -280,3 +292,35 @@ def test_control_plane_feature_flag_contract_is_present() -> None:
         "minimum_client_version",
     }
     assert schema["properties"]["version"]["const"] == 1
+
+
+def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
+    """确保官网契约使用独立 Session/CSRF 边界，并不混用桌面 Bearer API。"""
+    document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    assert document["x-petdock-contract-version"] == 1
+    assert set(document["paths"]) == {
+        "/api/v1/web/session",
+        "/api/v1/web/auth/register",
+        "/api/v1/web/auth/login",
+        "/api/v1/web/auth/logout",
+        "/api/v1/web/profile",
+        "/api/v1/web/account/password",
+    }
+    security_scheme = document["components"]["securitySchemes"]["webSession"]
+    assert security_scheme["type"] == "apiKey"
+    assert security_scheme["in"] == "cookie"
+    assert security_scheme["name"] == "__Host-petdock_web_session"
+    assert document["paths"]["/api/v1/web/session"]["get"]["security"] == []
+    for path in document["paths"]:
+        for method, operation in document["paths"][path].items():
+            if method.lower() not in {"get", "post", "put", "patch"}:
+                continue
+            references = {
+                parameter["$ref"]
+                for parameter in operation.get("parameters", [])
+                if isinstance(parameter, dict) and "$ref" in parameter
+            }
+            assert "#/components/parameters/RequestId" in references
+            if method.lower() in {"post", "put", "patch"}:
+                assert "#/components/parameters/CsrfToken" in references
+    assert "desktopOAuth" not in document["components"]["securitySchemes"]

@@ -204,3 +204,42 @@
 - 当前设备由服务端 OAuth 授权记录绑定关系解析，不新增客户端设备 Header，也不允许客户端覆盖当前设备身份。
 - 首次成功注册设备时，一个尚未绑定的 OAuth 授权只能绑定一个 `deviceId`；已绑定授权不能改绑其他设备。
 - Refresh Token 轮换保持同一个 Token Family 和设备绑定；授权尚未绑定设备时，当前设备查询返回 `device_not_found`。
+
+## 5. Phase 2 官网 Web 契约决定
+
+### `D-P2-10` 官网 Web API 与接口边界
+
+状态：`Frozen`
+
+- 官网 Web API 由 Spring Boot 控制面提供，正式入口为 `https://api.petdock.site`，业务路径统一使用 `/api/v1/web/*`。
+- 官网前端正式 Origin 只允许精确的 `https://petdock.site`；生产 CORS 不使用通配符，开发 Origin 只通过未提交环境配置受控增加。
+- 官网 Web API 与桌面 `control-plane.yaml` 分离定义；官网不得复用桌面 Bearer API，也不得调用 FastAPI AI 数据面。
+- 本轮只冻结 Session、注册、登录、退出、资料读取/显示名更新和密码修改；套餐、充值、订单、设备、Entitlement、Usage 和支付回调不在本轮接口范围内。
+
+### `D-P2-11` 官网 Session 与 CSRF
+
+状态：`Frozen`
+
+- Session Cookie 固定为 `__Host-petdock_web_session`，必须使用 `Secure`、`HttpOnly`、`SameSite=Lax`、`Path=/`，且不得设置 `Domain`。
+- `GET /api/v1/web/session` 登录前可访问；缺少 Cookie 时创建匿名 Session，并返回绑定当前 Session 的随机 `csrfToken`。
+- 所有注册、登录、退出、资料写入和密码写入请求必须携带 `X-PetDock-CSRF`；CSRF Token 不得放入 Cookie、LocalStorage、URL、日志或错误消息。
+- Web Session 只保存可丢失的登录态，Redis 不作为用户或撤销事实来源；官网普通退出不影响桌面设备、Refresh Token Family 或 Runtime Session。
+- 服务端使用 Spring Session 默认空闲过期口径，响应返回 `expiresAt`；会话和资料响应必须使用 `Cache-Control: no-store`。
+
+### `D-P2-12` 官网账号字段与密码凭据
+
+状态：`Frozen`
+
+- 登录标识使用独立 `username`，长度 3 至 32，只允许 ASCII 字母、数字、`.`、`_`、`-`，首尾必须是字母或数字；服务端按小写形式判断唯一性。
+- 注册和修改密码要求 10 至 128 个字符，不强制字符类型组合；密码哈希算法与成本由服务端成熟框架和安全配置决定。
+- `users.password_hash` 允许为空；没有密码凭据的历史或外部身份用户不能使用 username/密码登录，绑定密码的流程延后。
+- 注册必须提交 `displayName`；资料接口本轮只允许更新显示名。邮箱绑定、验证、修改、忘记密码、MFA 和账号删除延后。
+- 登录失败统一返回 `invalid_credentials`，不得通过响应区分用户名不存在、密码错误、账号暂停或密码凭据不可用。
+
+### `D-P2-13` OAuth Consent 与官网设备授权
+
+状态：`Frozen`
+
+- 当前 `authorization_consent_enabled` 继续关闭，不新增自定义 Consent API。
+- P2-W02 复用 Spring Authorization Server 标准 `/oauth2/authorize` 与官网登录 Session；交互式设备授权确认必须在单独开启 Consent 前再次评审。
+- 官网 Web Session 与桌面 Access/Refresh Token 完全隔离；P2-W01~W04 完成后再实施 Desktop `P2-11` 管理入口。

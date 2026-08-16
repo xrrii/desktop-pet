@@ -31,3 +31,10 @@
 - 常规升级先提示；仅安全漏洞、协议不兼容或重大服务事故允许提高最低版本并强制升级。
 - 最低版本和 Managed 紧急开关由服务端配置；关闭 Managed 不得影响本地 BYOK。
 - 破坏性变更使用新 URL 主版本和新契约目录，不原地覆盖 v1。
+
+## 5. 官网 Web Session
+
+- 官网 Web API 与桌面 Bearer API 分文件定义，使用 `/api/v1/web/*` 路径和 `__Host-petdock_web_session` HttpOnly Cookie。
+- Web Session、CSRF Header、登录态和资料响应中的未知可选字段必须按通用降级处理；Session ID、CSRF Token 和密码不得进入日志或前端持久化。
+- 官网普通退出只结束当前 Web Session，不改变桌面 Access/Refresh Token、Token Family、设备或 Runtime Session。
+- 官网账号字段和接口可以在 v1 内增加可选字段，但不得改变 username 规范、CSRF 要求、Cookie 安全属性或桌面/官网信任域边界。

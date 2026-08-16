@@ -1,0 +1,400 @@
+openapi: 3.1.0
+info:
+  title: PetDock Web Control Plane API
+  version: 1.0.0
+  description: 官网使用的 Web Session、账号和资料接口。桌面 Bearer API 由 control-plane.yaml 单独定义。
+x-petdock-contract-version: 1
+servers:
+  - url: https://api.petdock.site
+    description: PetDock Spring Boot 控制面规划入口，启用前必须完成域名和证书配置
+tags:
+  - name: Web Session
+    description: 官网 HttpOnly Session 与登录生命周期
+  - name: Web Profile
+    description: 官网当前用户资料与密码
+paths:
+  /api/v1/web/session:
+    get:
+      tags: [Web Session]
+      summary: 获取官网会话快照
+      description: |
+        登录前可调用。服务端在缺少官网 Session Cookie 时创建匿名 Session，并返回绑定该 Session 的 CSRF Token。
+        响应不得被浏览器或代理缓存。
+      operationId: getWebSession
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 官网会话快照
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebSessionSnapshot'
+  /api/v1/web/auth/register:
+    post:
+      tags: [Web Session]
+      summary: 注册官网账号并建立 Session
+      description: 需要先通过 GET /api/v1/web/session 建立匿名 Session；成功后 Session ID 和 CSRF Token 必须轮换。
+      operationId: registerWebAccount
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功并建立已登录 Session
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebSessionSnapshot'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+        '409':
+          $ref: '#/components/responses/UsernameUnavailable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/web/auth/login:
+    post:
+      tags: [Web Session]
+      summary: 使用 username 和密码登录官网
+      description: 需要先通过 GET /api/v1/web/session 建立匿名 Session；错误凭据不得泄露用户名是否存在。
+      operationId: loginWebAccount
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功并建立已登录 Session
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebSessionSnapshot'
+        '401':
+          $ref: '#/components/responses/InvalidCredentials'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/web/auth/logout:
+    post:
+      tags: [Web Session]
+      summary: 退出当前官网 Session
+      description: 只结束当前官网 Web Session，不撤销桌面 Refresh Token、Token Family、设备或 Runtime Session。
+      operationId: logoutWebSession
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: 退出成功，服务端清理官网 Session Cookie
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+  /api/v1/web/profile:
+    get:
+      tags: [Web Profile]
+      summary: 获取当前官网用户资料
+      operationId: getWebProfile
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 当前用户资料
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebProfile'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+    patch:
+      tags: [Web Profile]
+      summary: 更新当前用户显示名
+      operationId: updateWebProfile
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+      responses:
+        '200':
+          description: 更新后的用户资料
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebProfile'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+  /api/v1/web/account/password:
+    put:
+      tags: [Web Profile]
+      summary: 修改当前用户密码
+      description: 修改成功后服务端撤销其他官网 Web Session；当前 Session 也失效，客户端必须重新登录。
+      operationId: changeWebPassword
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: 密码修改成功，当前官网 Session 已失效
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+        '409':
+          $ref: '#/components/responses/PasswordAuthenticationUnavailable'
+components:
+  securitySchemes:
+    webSession:
+      type: apiKey
+      in: cookie
+      name: __Host-petdock_web_session
+      description: Secure、HttpOnly、SameSite=Lax、Path=/ 且不设置 Domain 的官网 Session Cookie。
+  parameters:
+    RequestId:
+      name: X-PetDock-Request-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CsrfToken:
+      name: X-PetDock-CSRF
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+  headers:
+    NoStore:
+      description: 禁止浏览器和中间代理缓存会话或资料响应。
+      schema:
+        type: string
+        const: no-store
+  responses:
+    InvalidRequest:
+      description: 请求参数无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    AuthenticationRequired:
+      description: 缺少、过期或已失效的官网 Session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InvalidCredentials:
+      description: username 或密码错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    CsrfInvalid:
+      description: CSRF Token 缺失、失效或与 Session 不匹配
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UsernameUnavailable:
+      description: username 已被占用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimited:
+      description: 请求频率超过服务端限制
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    PasswordAuthenticationUnavailable:
+      description: 当前账号没有可用的密码凭据
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    WebSessionSnapshot:
+      type: object
+      additionalProperties: false
+      required: [version, authenticated, csrfToken, expiresAt, user]
+      properties:
+        version:
+          type: integer
+          const: 1
+        authenticated:
+          type: boolean
+        csrfToken:
+          type: string
+          minLength: 32
+          maxLength: 256
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+        user:
+          anyOf:
+            - $ref: '#/components/schemas/WebProfile'
+            - type: 'null'
+    WebProfile:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, email, emailVerified, passwordEnabled]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: [string, 'null']
+          format: email
+          maxLength: 320
+        emailVerified:
+          type: boolean
+        passwordEnabled:
+          type: boolean
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password, displayName]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        password:
+          $ref: '#/components/schemas/NewPassword'
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+    ProfileUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          $ref: '#/components/schemas/NewPassword'
+    Username:
+      type: string
+      minLength: 3
+      maxLength: 32
+      pattern: '^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,30}[A-Za-z0-9])?$'
+      description: 独立登录标识，服务端按小写形式做唯一性判断。
+    NewPassword:
+      type: string
+      minLength: 10
+      maxLength: 128
+      description: 不要求字符类型组合；服务端不得记录明文，密码哈希算法由控制面安全配置决定。
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, requestId, retryable, retryAfterSeconds]
+          properties:
+            code:
+              type: string
+              minLength: 1
+              maxLength: 100
+            message:
+              type: string
+              minLength: 1
+              maxLength: 300
+            requestId:
+              type: string
+              format: uuid
+            retryable:
+              type: boolean
+            retryAfterSeconds:
+              type: [integer, 'null']
+              minimum: 0
