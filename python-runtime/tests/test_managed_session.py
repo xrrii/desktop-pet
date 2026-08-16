@@ -33,7 +33,7 @@ def test_managed_session_routes_keep_only_redacted_memory_status(tmp_path) -> No
                 headers=headers,
                 json={
                     "accessToken": RUNTIME_TOKEN,
-                    "expiresAt": "2026-08-16T00:15:00Z",
+                    "expiresAt": "2099-08-16T00:15:00Z",
                     "capabilitySnapshotVersion": 3,
                 },
             )
@@ -50,7 +50,7 @@ def test_managed_session_routes_keep_only_redacted_memory_status(tmp_path) -> No
     assert updated == 204
     assert status == {
         "configured": True,
-        "expiresAt": "2026-08-16T00:15:00Z",
+        "expiresAt": "2099-08-16T00:15:00Z",
         "capabilitySnapshotVersion": 3,
     }
     assert RUNTIME_TOKEN not in str(status)
@@ -120,11 +120,25 @@ def test_managed_auth_result_matches_one_waiting_request() -> None:
 
 def test_managed_session_repr_hides_token() -> None:
     """即使异常日志误用 repr，也不能输出官方 Runtime Token。"""
-    store = ManagedSessionStore()
+    store = ManagedSessionStore(lambda: datetime(2026, 8, 16, 0, 0, tzinfo=UTC))
     store.update(RUNTIME_TOKEN, datetime(2026, 8, 16, 0, 15, tzinfo=UTC), 3)
 
     assert RUNTIME_TOKEN not in repr(store.lease())
     assert store.status()["configured"] is True
+
+
+def test_managed_session_expiry_is_cleared_from_lease_and_status() -> None:
+    """Lease 到期后 Provider 读取和脱敏状态都必须视为未配置。"""
+    current = datetime(2026, 8, 16, 0, 15, tzinfo=UTC)
+    store = ManagedSessionStore(lambda: current)
+    store.update(RUNTIME_TOKEN, current, 3)
+
+    assert store.lease() is None
+    assert store.status() == {
+        "configured": False,
+        "expiresAt": None,
+        "capabilitySnapshotVersion": None,
+    }
 
 
 def runtime_config(tmp_path) -> RuntimeConfig:

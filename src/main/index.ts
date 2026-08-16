@@ -35,6 +35,8 @@ import { ManagedControlPlaneClient } from './managed/managedControlPlaneClient'
 import { resolveManagedEndpointPolicy } from './managed/managedEndpointPolicy'
 import { ManagedRuntimeSessionBridge } from './managed/managedRuntimeSessionBridge'
 import { ManagedRuntimeTokenBroker } from './managed/managedRuntimeTokenBroker'
+import { ManagedRuntimeAuthRefreshHandler } from './managed/managedRuntimeAuthRefreshHandler'
+import { ManagedServerClock } from './managed/managedServerClock'
 import { ScreenshotManager } from './screenshotManager'
 import { setAssistantTheme } from './theme'
 import {
@@ -84,18 +86,22 @@ let quitAfterRuntimeStops = false
 let smokeArtifactSaveCancelled = false
 const pendingPetSpritesheetSelections = new Map<string, { filePath: string; fileName: string }>()
 const managedEndpointPolicy = resolveManagedEndpointPolicy()
+const managedServerClock = new ManagedServerClock()
 const managedRuntimeSessionBridge = new ManagedRuntimeSessionBridge()
 const managedRuntimeTokenBroker = new ManagedRuntimeTokenBroker(
-  new ManagedControlPlaneClient(managedEndpointPolicy, app.getVersion()),
-  managedRuntimeSessionBridge
+  new ManagedControlPlaneClient(managedEndpointPolicy, app.getVersion(), undefined, managedServerClock),
+  managedRuntimeSessionBridge,
+  { now: () => managedServerClock.now() }
 )
+const managedRuntimeAuthRefreshHandler = new ManagedRuntimeAuthRefreshHandler(managedRuntimeTokenBroker)
 const assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
   (event) => petWindow?.webContents.send('assistant:event', event),
   {
     onReady: (client) => managedRuntimeTokenBroker.attachRuntime(client),
     onStopped: (client) => managedRuntimeTokenBroker.detachRuntime(client)
-  }
+  },
+  (event, client) => managedRuntimeAuthRefreshHandler.handle(event, client)
 )
 const screenshotManager = new ScreenshotManager(
   () => petWindow,
@@ -106,6 +112,7 @@ const screenshotManager = new ScreenshotManager(
 )
 const managedAuthManager = new ManagedAuthManager(managedEndpointPolicy, app.getVersion(), {
   runtimeTokenBroker: managedRuntimeTokenBroker,
+  serverClock: managedServerClock,
   onStatusChange: (status) => petWindow?.webContents.send('managed:status-changed', status)
 })
 

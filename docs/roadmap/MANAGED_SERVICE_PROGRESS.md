@@ -317,3 +317,14 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Cloud 复核 Runtime Session Controller 与应用服务回归覆盖：撤销返回 204、无 Entitlement、设备绑定不匹配和已撤销设备均拒绝签发；不新增 Flyway、Redis 或 v1 公共契约字段。
 - P2-09 不接入 `managed_auth_refresh_required` SSE 到 Renderer，也不实现 Managed Provider、JWKS 数据面验签或 P2-10 的离线/时钟偏差/并发异常矩阵。
 - 本轮完成 Desktop 134 项单元测试、14 项契约测试、86 项 Runtime 测试、检索评测和生产构建；Cloud 控制面 66 项 Maven 测试、契约 Python 15 项、TypeScript 1 项、Spring 1 项，契约制品和 33 文件快照校验均通过。
+
+### 2026-08-16（P2-10 Token 生命周期、离线恢复和 Main-only 认证控制）
+
+- Desktop Main 新增服务端 HTTP `Date` 时钟偏差采样；可信偏差参与 Access Token、Runtime Lease 和临界刷新调度，超过 60 秒或缺失时不延长凭据寿命。
+- 所有启动恢复、UserInfo/设备过期重试、Runtime Broker 和任务内认证刷新统一复用 Refresh Token single-flight，避免轮换 Refresh Token 并发复用；退出、设备撤销和 Runtime 生命周期按同一协调器串行化。
+- Runtime Token Broker 增加网络/DNS/超时/5xx/限流指数退避与抖动、Lease 硬过期清理、设备撤销和认证终止联动；临时故障保留桌面 Refresh Token，Entitlement/版本错误只清理 Runtime Lease。
+- Python Runtime 对过期 Managed Session 惰性清理，状态接口继续只返回脱敏字段；Main 将 `managed_auth_refresh_required` 从普通 Assistant SSE 分流，成功或失败通过现有 `/v1/managed/auth-result` 回传，不进入 Renderer。
+- P2-10 不新增 Flyway、Redis Key、Managed Service v1 公共字段或 Provider 数据面；真实 Managed Provider 触发点仍留给 P3。
+- 验证记录：Managed Service v1 契约未变，Desktop/Cloud 消费快照仍为 33 个文件；`npm run typecheck`、`npm test`（149 项）、Runtime pytest（87 项）、契约 pytest（14 项）、检索评测（六项指标 1.0）、`npm run build` 和生产端点扫描均通过。
+- 未运行项：Cloud `services/control-plane/.\mvnw.cmd test` 在当前机器未执行成功，环境仅有 JDK 17，而既有测试类为 Java 21 class version 65；待切换 JDK 21 后重跑，未修改 Cloud 代码或数据库。
+- 源提交：本轮按要求不提交 Git，现有工作区改动全部保留。

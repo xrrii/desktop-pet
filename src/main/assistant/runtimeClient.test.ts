@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AssistantEvent } from '../../shared/assistant'
-import { AssistantRuntimeClient, consumeSseBuffer } from './runtimeClient'
+import {
+  AssistantRuntimeClient,
+  consumeSseBuffer,
+  type ManagedAuthRefreshRequiredEvent
+} from './runtimeClient'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -94,6 +98,50 @@ describe('consumeSseBuffer', () => {
 
     expect(consumeSseBuffer(`data: ${event}\n\n`, 'task-1', (value) => events.push(value))).toBe('')
     expect(events[0].type).toBe('web_sources')
+  })
+
+  it('把认证刷新控制事件分流给 Main 而不进入普通事件', () => {
+    const events: AssistantEvent[] = []
+    const controls: ManagedAuthRefreshRequiredEvent[] = []
+    const control = JSON.stringify({
+      eventVersion: 1,
+      type: 'managed_auth_refresh_required',
+      sequence: 4,
+      taskId: '7a70c803-f62f-4418-81c6-905f848322f1',
+      traceId: 'dcecb768-9ff5-4ca4-a10b-6a725695ab5b',
+      requestId: '54ca903e-23da-42bb-a69b-125f3669962b',
+      reason: 'token_expired',
+      outputStarted: false
+    })
+
+    expect(consumeSseBuffer(
+      `data: ${control}\n\n`,
+      '7a70c803-f62f-4418-81c6-905f848322f1',
+      (event) => events.push(event),
+      (event) => controls.push(event)
+    )).toBe('')
+    expect(events).toEqual([])
+    expect(controls).toHaveLength(1)
+  })
+
+  it('拒绝已开始输出的认证刷新控制事件', () => {
+    const control = JSON.stringify({
+      eventVersion: 1,
+      type: 'managed_auth_refresh_required',
+      sequence: 4,
+      taskId: '7a70c803-f62f-4418-81c6-905f848322f1',
+      traceId: 'dcecb768-9ff5-4ca4-a10b-6a725695ab5b',
+      requestId: '54ca903e-23da-42bb-a69b-125f3669962b',
+      reason: 'token_expired',
+      outputStarted: true
+    })
+
+    expect(() => consumeSseBuffer(
+      `data: ${control}\n\n`,
+      '7a70c803-f62f-4418-81c6-905f848322f1',
+      () => undefined,
+      () => undefined
+    )).toThrow('invalid assistant event')
   })
 })
 

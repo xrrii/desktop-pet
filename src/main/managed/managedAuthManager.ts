@@ -17,6 +17,8 @@ import {
 } from './managedAccountSessionManager'
 import { ManagedDeviceIdentityManager } from './managedDeviceIdentityManager'
 import { ManagedRuntimeTokenBroker } from './managedRuntimeTokenBroker'
+import { ManagedRefreshCoordinator } from './managedRefreshCoordinator'
+import { ManagedServerClock } from './managedServerClock'
 import {
   ElectronManagedTokenStore,
   ManagedTokenStoreError,
@@ -52,6 +54,7 @@ export class ManagedAuthManager {
   private refreshToken: string | null = null
   private pendingTokenSet: ManagedTokenSet | null = null
   private sessionSnapshot: ManagedAccountSessionSnapshot | null = null
+  private activeTerminalCleanup: Promise<void> | null = null
 
   private readonly featureFlags: ManagedFeatureFlags
   private readonly oauthClient: ManagedOAuthClient
@@ -59,6 +62,8 @@ export class ManagedAuthManager {
   private readonly accountSessionManager: ManagedAccountSessionManager | null
   private readonly deviceIdentityManager: ManagedDeviceIdentityManager | null
   private readonly runtimeTokenBroker: ManagedRuntimeTokenBroker | null
+  private readonly serverClock: ManagedServerClock
+  private readonly refreshCoordinator = new ManagedRefreshCoordinator<ManagedTokenSet>()
 
   constructor(
     private readonly policy: ManagedEndpointPolicy = resolveManagedEndpointPolicy(),
@@ -69,10 +74,12 @@ export class ManagedAuthManager {
       tokenStore?: ManagedTokenStore
       accountSessionManager?: ManagedAccountSessionManager
       runtimeTokenBroker?: ManagedRuntimeTokenBroker
+      serverClock?: ManagedServerClock
       openExternal?: (url: string) => Promise<void>
       onStatusChange?: (status: ManagedAuthStatus) => void
     } = {}
   ) {
+    this.serverClock = dependencies.serverClock || new ManagedServerClock()
     this.featureFlags = dependencies.featureFlags || new ManagedFeatureFlags(policy, clientVersion)
     const oauthClient = dependencies.oauthClient || new ManagedOidcClient(policy.issuer)
     this.oauthClient = oauthClient
@@ -85,7 +92,7 @@ export class ManagedAuthManager {
       oauthClient.fetchUserInfo && oauthClient.revokeRefreshToken && this.deviceIdentityManager
         ? new ManagedAccountSessionManager(
             oauthClient,
-            new ManagedControlPlaneClient(policy, clientVersion),
+            new ManagedControlPlaneClient(policy, clientVersion, undefined, this.serverClock),
             this.deviceIdentityManager
           )
         : null
@@ -98,6 +105,9 @@ export class ManagedAuthManager {
         runtimeSessionState: runtimeStatus.state,
         runtimeSessionErrorCode: runtimeStatus.errorCode
       })
+    })
+    this.runtimeTokenBroker?.setTerminalErrorListener?.((error) => {
+      this.handleRuntimeTerminalError(error)
     })
   }
 
@@ -130,6 +140,15 @@ export class ManagedAuthManager {
     if (this.activeRefresh) {
       return this.activeRefresh
     }
+    if (this.activeTerminalCleanup) {
+      return this.activeTerminalCleanup.then(() => this.login())
+    }
+    if (this.refreshCoordinator.isActive()) {
+      return this.startRefreshTask(async () => {
+        await this.refreshCoordinator.waitForIdle()
+        return this.getStatus()
+      })
+    }
     if (this.pendingTokenSet) {
       return this.startRefreshTask(() => this.persistPendingSession())
     }
@@ -150,6 +169,18 @@ export class ManagedAuthManager {
     if (this.activeLogin) {
       return this.activeLogin
     }
+    if (this.activeTerminalCleanup) {
+      return this.activeTerminalCleanup.then(() => this.restoreSession())
+    }
+    if (this.refreshCoordinator.isActive()) {
+      return this.startRefreshTask(async () => {
+        await this.refreshCoordinator.waitForIdle()
+        if (this.accessToken && this.refreshToken) {
+          return this.getStatus()
+        }
+        return this.runSessionRestore()
+      })
+    }
     return this.startRefreshTask(() => this.runSessionRestore())
   }
 
@@ -161,8 +192,14 @@ export class ManagedAuthManager {
     if (this.activeLogin) {
       return this.activeLogin.then(() => this.logout())
     }
+    if (this.activeTerminalCleanup) {
+      return this.activeTerminalCleanup.then(() => this.logout())
+    }
     if (this.activeRefresh) {
       return this.activeRefresh.then(() => this.logout())
+    }
+    if (this.refreshCoordinator.isActive()) {
+      return this.refreshCoordinator.waitForIdle().then(() => this.logout())
     }
     this.activeSessionCommand = this.runLogout().finally(() => {
       this.activeSessionCommand = null
@@ -178,8 +215,14 @@ export class ManagedAuthManager {
     if (this.activeLogin) {
       return this.activeLogin.then(() => this.revokeCurrentDevice())
     }
+    if (this.activeTerminalCleanup) {
+      return this.activeTerminalCleanup.then(() => this.revokeCurrentDevice())
+    }
     if (this.activeRefresh) {
       return this.activeRefresh.then(() => this.revokeCurrentDevice())
+    }
+    if (this.refreshCoordinator.isActive()) {
+      return this.refreshCoordinator.waitForIdle().then(() => this.revokeCurrentDevice())
     }
     this.activeSessionCommand = this.runRevokeCurrentDevice().finally(() => {
       this.activeSessionCommand = null
@@ -313,8 +356,7 @@ export class ManagedAuthManager {
 
     this.setStatus({ state: 'restoring_session', errorCode: null })
     try {
-      const tokenSet = await this.oauthClient.refresh(stored.refreshToken)
-      await this.persistTokenSet(tokenSet, 'refresh')
+      const tokenSet = await this.refreshSession(stored.refreshToken)
       if (this.disposed) {
         return this.getStatus()
       }
@@ -396,9 +438,18 @@ export class ManagedAuthManager {
       this.accessToken = tokenSet.accessToken
       this.accessTokenExpiresAt = tokenSet.expiresIn === null
         ? null
-        : Date.now() + tokenSet.expiresIn * 1_000
+        : this.serverClock.now() + tokenSet.expiresIn * 1_000
       this.refreshToken = tokenSet.refreshToken
     }
+  }
+
+  /** 统一执行一次 Refresh Token Grant 和新 Token 原子落盘。 */
+  private refreshSession(refreshToken: string): Promise<ManagedTokenSet> {
+    return this.refreshCoordinator.run(refreshToken, async () => {
+      const tokenSet = await this.oauthClient.refresh(refreshToken)
+      await this.persistTokenSet(tokenSet, 'refresh')
+      return tokenSet
+    })
   }
 
   /** 建立 Refresh Token single-flight，并在完成后释放任务引用。 */
@@ -443,7 +494,7 @@ export class ManagedAuthManager {
       if (this.runtimeTokenBroker) {
         await this.runtimeTokenBroker.activate({
           deviceId: snapshot.device.id,
-          getAccessToken: () => this.ensureAccessTokenForRuntime()
+          getAccessToken: (forceRefresh) => this.ensureAccessTokenForRuntime(forceRefresh)
         }).catch(() => undefined)
       }
       return null
@@ -619,8 +670,7 @@ export class ManagedAuthManager {
       throw new ManagedOidcClientError('refresh', 'invalid_grant')
     }
     try {
-      const tokenSet = await this.oauthClient.refresh(this.refreshToken)
-      await this.persistTokenSet(tokenSet, 'refresh')
+      await this.refreshSession(this.refreshToken)
     } catch (error) {
       if (isInvalidGrant(error)) {
         this.accessToken = null
@@ -642,16 +692,52 @@ export class ManagedAuthManager {
   }
 
   /** 为 Runtime Token Broker 返回 Main 内存 Access Token，必要时先轮换 OAuth Token。 */
-  private async ensureAccessTokenForRuntime(): Promise<string | null> {
+  private async ensureAccessTokenForRuntime(forceRefresh = false): Promise<string | null> {
     if (!this.accessToken) {
       return null
     }
     const minimumLifetimeMs = 30_000
-    if (this.accessTokenExpiresAt === null || this.accessTokenExpiresAt - Date.now() >= minimumLifetimeMs) {
+    if (!forceRefresh && (
+      this.accessTokenExpiresAt === null ||
+      this.accessTokenExpiresAt - this.serverClock.now() >= minimumLifetimeMs
+    )) {
       return this.accessToken
     }
     await this.refreshAccessTokenForSession()
     return this.accessToken
+  }
+
+  /** Runtime 发现设备或认证已终止时，串行清理 Main、Runtime 和设备映射。 */
+  private handleRuntimeTerminalError(error: ManagedControlPlaneError): void {
+    if (
+      this.disposed ||
+      !['device_revoked', 'authentication_required', 'token_expired'].includes(error.code || '') ||
+      this.activeTerminalCleanup
+    ) {
+      return
+    }
+    const snapshot = this.sessionSnapshot
+    const deviceRevoked = error.code === 'device_revoked'
+    const task = (async () => {
+      if (deviceRevoked && snapshot) {
+        await this.deviceIdentityManager?.clear(snapshot.subject).catch(() => undefined)
+      }
+      await this.clearLocalSession().catch(() => {
+        logError('managed Runtime terminal session cleanup failed', {
+          errorCode: 'managed_token_persist_failed'
+        })
+      })
+      this.setStatus({
+        state: 'reauth_required',
+        sessionSyncState: deviceRevoked ? 'device_revoked' : 'reauth_required',
+        errorCode: deviceRevoked ? 'managed_device_revoked' : 'managed_refresh_invalid_grant'
+      })
+    })().finally(() => {
+      if (this.activeTerminalCleanup === task) {
+        this.activeTerminalCleanup = null
+      }
+    })
+    this.activeTerminalCleanup = task
   }
 
   /** 应用 Feature Flag 脱敏字段，不覆盖已经认证的状态。 */

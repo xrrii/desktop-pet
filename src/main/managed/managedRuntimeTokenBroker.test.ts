@@ -93,6 +93,79 @@ describe('ManagedRuntimeTokenBroker', () => {
     })
     broker.dispose()
   })
+
+  it('临时网络错误保留旧 Lease 并按退避自动恢复', async () => {
+    vi.useFakeTimers()
+    let attempt = 0
+    const createRuntimeSession = vi.fn().mockImplementation(async () => {
+      attempt += 1
+      if (attempt === 1) {
+        throw new ManagedControlPlaneError(503, 'internal_error', true)
+      }
+      return lease('9e60cf9e-1283-4c95-a193-ef0218c5cf0f')
+    })
+    const broker = new ManagedRuntimeTokenBroker({
+      createRuntimeSession,
+      revokeRuntimeSession: vi.fn()
+    } as unknown as ManagedControlPlaneClient, new ManagedRuntimeSessionBridge(), {
+      random: () => 0
+    })
+
+    await expect(broker.activate({
+      deviceId: 'a01715d2-42e3-4abe-a348-708dda38ab0d',
+      getAccessToken: async () => 'synthetic-oauth-access-token'
+    })).rejects.toBeInstanceOf(ManagedControlPlaneError)
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(createRuntimeSession).toHaveBeenCalledTimes(2)
+    expect(broker.getStatus()).toEqual({ state: 'waiting_runtime', errorCode: null })
+    broker.dispose()
+  })
+
+  it('控制面明确 Token 过期时强制刷新 Access Token 后重试一次', async () => {
+    const createRuntimeSession = vi.fn()
+      .mockRejectedValueOnce(new ManagedControlPlaneError(401, 'token_expired', true))
+      .mockResolvedValueOnce(lease('9e60cf9e-1283-4c95-a193-ef0218c5cf0f'))
+    const getAccessToken = vi.fn()
+      .mockResolvedValueOnce('old-access-token')
+      .mockResolvedValueOnce('refreshed-access-token')
+    const broker = new ManagedRuntimeTokenBroker({
+      createRuntimeSession,
+      revokeRuntimeSession: vi.fn()
+    } as unknown as ManagedControlPlaneClient, new ManagedRuntimeSessionBridge())
+
+    await broker.activate({
+      deviceId: 'a01715d2-42e3-4abe-a348-708dda38ab0d',
+      getAccessToken
+    })
+
+    expect(getAccessToken).toHaveBeenNthCalledWith(1, false)
+    expect(getAccessToken).toHaveBeenNthCalledWith(2, true)
+    expect(createRuntimeSession).toHaveBeenCalledTimes(2)
+    broker.dispose()
+  })
+
+  it('设备撤销通知 Main，并清理本地 Runtime Lease', async () => {
+    const terminal = vi.fn()
+    const transport = transportDouble()
+    const broker = new ManagedRuntimeTokenBroker({
+      createRuntimeSession: vi.fn().mockRejectedValue(
+        new ManagedControlPlaneError(403, 'device_revoked', false)
+      ),
+      revokeRuntimeSession: vi.fn()
+    } as unknown as ManagedControlPlaneClient, new ManagedRuntimeSessionBridge(), {
+      onStatusChange: undefined
+    })
+    broker.setTerminalErrorListener(terminal)
+    await expect(broker.activate({
+      deviceId: 'a01715d2-42e3-4abe-a348-708dda38ab0d',
+      getAccessToken: async () => 'synthetic-oauth-access-token'
+    })).rejects.toBeInstanceOf(ManagedControlPlaneError)
+
+    expect(terminal).toHaveBeenCalledWith(expect.objectContaining({ code: 'device_revoked' }))
+    expect(transport.clearManagedSession).not.toHaveBeenCalled()
+    broker.dispose()
+  })
 })
 
 function lease(sessionId: string): ManagedRuntimeSessionLease {

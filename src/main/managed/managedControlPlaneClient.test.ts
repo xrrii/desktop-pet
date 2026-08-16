@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ManagedEndpointPolicy } from './managedOAuthTypes'
 import { ManagedControlPlaneClient, ManagedControlPlaneError } from './managedControlPlaneClient'
+import { ManagedServerClock } from './managedServerClock'
 
 const POLICY: ManagedEndpointPolicy = {
   environment: 'local-mock',
@@ -36,6 +37,7 @@ describe('ManagedControlPlaneClient', () => {
         message: '合成消息',
         requestId: '45bb9edb-c3bb-4fa9-9a13-60611343aaf4',
         retryable: false,
+        retryAfterSeconds: 30,
         responseBody: '不应传播'
       }
     }), { status: 404, headers: { 'Content-Type': 'application/json' } }))
@@ -46,8 +48,30 @@ describe('ManagedControlPlaneClient', () => {
       status: 404,
       code: 'device_not_found',
       retryable: false,
-      requestId: '45bb9edb-c3bb-4fa9-9a13-60611343aaf4'
+      requestId: '45bb9edb-c3bb-4fa9-9a13-60611343aaf4',
+      retryAfterSeconds: 30
     } satisfies Partial<ManagedControlPlaneError>)
+  })
+
+  it('成功和错误响应都会用标准 Date 更新共享时钟', async () => {
+    const localTimes = [
+      Date.parse('2026-08-16T00:00:00Z'),
+      Date.parse('2026-08-16T00:00:00Z')
+    ]
+    const clock = new ManagedServerClock(() => localTimes.shift() ?? Date.parse('2026-08-16T00:00:00Z'))
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(devicePayload()), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        Date: 'Sun, 16 Aug 2026 00:00:20 GMT'
+      }
+    }))
+    const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher, clock)
+
+    await client.getCurrentDevice('synthetic-access-token')
+
+    expect(client.getServerClock()).toBe(clock)
+    expect(clock.getSnapshot()).toEqual({ offsetMs: 20_000, trusted: true })
   })
 
   it('撤销设备只接受 Main 提供的路径参数并处理 204', async () => {

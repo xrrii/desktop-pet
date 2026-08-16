@@ -25,6 +25,8 @@ import type {
   ManagedRuntimeSessionStatus,
   ManagedRuntimeSessionUpdate
 } from '../managed/managedRuntimeSessionBridge'
+import type { ManagedAuthRefreshRequiredEvent } from '../managed/managedRuntimeAuthRefreshHandler'
+export type { ManagedAuthRefreshRequiredEvent } from '../managed/managedRuntimeAuthRefreshHandler'
 
 export class AssistantRuntimeClient {
   private readonly baseUrl: string
@@ -183,7 +185,8 @@ export class AssistantRuntimeClient {
 
   async streamEvents(
     taskId: string,
-    onEvent: (event: AssistantEvent) => void
+    onEvent: (event: AssistantEvent) => void,
+    onManagedAuthRefreshRequired?: (event: ManagedAuthRefreshRequiredEvent) => void
   ): Promise<void> {
     const response = await fetch(`${this.baseUrl}/v1/events/${encodeURIComponent(taskId)}`, {
       headers: { Authorization: this.authorization }
@@ -203,11 +206,11 @@ export class AssistantRuntimeClient {
       }
       const chunk = value
       buffer += decoder.decode(chunk, { stream: true })
-      buffer = consumeSseBuffer(buffer, taskId, onEvent)
+      buffer = consumeSseBuffer(buffer, taskId, onEvent, onManagedAuthRefreshRequired)
     }
 
     buffer += decoder.decode()
-    consumeSseBuffer(`${buffer}\n\n`, taskId, onEvent)
+    consumeSseBuffer(`${buffer}\n\n`, taskId, onEvent, onManagedAuthRefreshRequired)
   }
 
   async cancel(taskId: string): Promise<boolean> {
@@ -422,7 +425,8 @@ function requireManagedSessionStatus(value: unknown): ManagedRuntimeSessionStatu
 export function consumeSseBuffer(
   buffer: string,
   taskId: string,
-  onEvent: (event: AssistantEvent) => void
+  onEvent: (event: AssistantEvent) => void,
+  onManagedAuthRefreshRequired?: (event: ManagedAuthRefreshRequiredEvent) => void
 ): string {
   const blocks = buffer.split(/\r?\n\r?\n/)
   const remainder = blocks.pop() ?? ''
@@ -437,6 +441,13 @@ export function consumeSseBuffer(
       continue
     }
     const event = JSON.parse(data) as unknown
+    if (isManagedAuthRefreshRequiredEvent(event)) {
+      if (event.taskId !== taskId || !onManagedAuthRefreshRequired) {
+        throw new Error('Runtime returned an invalid managed authentication event.')
+      }
+      onManagedAuthRefreshRequired(event)
+      continue
+    }
     if (!isAssistantEvent(event) || event.taskId !== taskId) {
       throw new Error('Runtime returned an invalid assistant event.')
     }
@@ -444,6 +455,29 @@ export function consumeSseBuffer(
   }
 
   return remainder
+}
+
+/** 严格校验本地认证控制事件，拒绝已输出后重放和任何额外语义。 */
+function isManagedAuthRefreshRequiredEvent(value: unknown): value is ManagedAuthRefreshRequiredEvent {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const event = value as Record<string, unknown>
+  return (
+    event.eventVersion === 1 &&
+    event.type === 'managed_auth_refresh_required' &&
+    Number.isInteger(event.sequence) && Number(event.sequence) >= 1 &&
+    typeof event.taskId === 'string' && isUuid(event.taskId) &&
+    typeof event.traceId === 'string' && isUuid(event.traceId) &&
+    typeof event.requestId === 'string' && isUuid(event.requestId) &&
+    event.reason === 'token_expired' &&
+    event.outputStarted === false
+  )
+}
+
+/** 校验 Managed v1 控制事件使用的 UUID。 */
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 function isAssistantEvent(value: unknown): value is AssistantEvent {

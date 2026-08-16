@@ -40,6 +40,8 @@ import { loadSettings } from '../store'
 import { logError, logInfo } from '../logger'
 import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess, type AssistantRuntimeLifecycle } from './runtimeProcess'
+import type { AssistantRuntimeClient } from './runtimeClient'
+import type { ManagedAuthRefreshRequiredEvent } from '../managed/managedRuntimeAuthRefreshHandler'
 import { EmbeddingModelManager } from './embeddingModelManager'
 import { AssistantToolHost, webToolErrorMessage } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
@@ -90,12 +92,28 @@ export class AssistantManager {
   private readonly activeTasks = new Map<string, ActiveTask>()
   private readonly pendingPermissions = new Map<string, PendingPermission>()
   private readonly draftAttachments = new Map<string, AssistantAttachmentSummary>()
+  private readonly onManagedAuthRefreshRequired: (
+    event: ManagedAuthRefreshRequiredEvent,
+    client: AssistantRuntimeClient
+  ) => Promise<void>
 
   constructor(
     onStatus: (status: AssistantRuntimeStatus) => void,
     private readonly onEvent: (event: AssistantEvent) => void,
-    runtimeLifecycle: AssistantRuntimeLifecycle = {}
+    runtimeLifecycle: AssistantRuntimeLifecycle = {},
+    onManagedAuthRefreshRequired: (
+      event: ManagedAuthRefreshRequiredEvent,
+      client: AssistantRuntimeClient
+    ) => Promise<void> = async (event, client) => {
+      await client.submitManagedAuthResult({
+        taskId: event.taskId,
+        requestId: event.requestId,
+        result: 'failed',
+        errorCode: 'provider_unavailable'
+      })
+    }
   ) {
+    this.onManagedAuthRefreshRequired = onManagedAuthRefreshRequired
     this.runtime = new AssistantRuntimeProcess(
       onStatus,
       () => this.runtimeEnvironment(),
@@ -358,7 +376,18 @@ export class AssistantManager {
     }
 
     void client
-      .streamEvents(taskId, (event) => this.handleRuntimeEvent(event))
+      .streamEvents(
+        taskId,
+        (event) => this.handleRuntimeEvent(event),
+        (event) => {
+          if (!this.activeTasks.has(event.taskId)) {
+            return
+          }
+          void this.onManagedAuthRefreshRequired(event, client).catch((error: unknown) => {
+            logError('managed Runtime task authentication refresh handler failed', error)
+          })
+        }
+      )
       .catch((error: unknown) => {
         const active = this.activeTasks.get(taskId)
         if (!active) {

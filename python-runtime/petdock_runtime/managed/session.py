@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from threading import RLock
+from collections.abc import Callable
 
 
 @dataclass(frozen=True)
@@ -17,9 +18,11 @@ class ManagedSessionLease:
 class ManagedSessionStore:
     """线程安全保存官方 Runtime Token，不提供任何持久化路径。"""
 
-    def __init__(self) -> None:
+    def __init__(self, now: Callable[[], datetime] | None = None) -> None:
+        """允许测试注入 UTC 时钟，生产默认使用系统 UTC 时间。"""
         self._lock = RLock()
         self._lease: ManagedSessionLease | None = None
+        self._now = now or (lambda: datetime.now(UTC))
 
     def update(
         self,
@@ -38,14 +41,17 @@ class ManagedSessionStore:
             self._lease = None
 
     def lease(self) -> ManagedSessionLease | None:
-        """仅向后续 Managed Provider 返回当前 Lease 的不可变引用。"""
+        """仅返回仍有效的 Lease；过期凭据在读取时立即惰性清除。"""
         with self._lock:
-            return self._lease
+            lease = self._lease
+            if lease is not None and lease.expires_at <= self._now():
+                self._lease = None
+                return None
+            return lease
 
     def status(self) -> dict[str, object]:
         """返回不含 Token、用户、设备和 Session 标识的状态。"""
-        with self._lock:
-            lease = self._lease
+        lease = self.lease()
         if lease is None:
             return {
                 "configured": False,
@@ -57,4 +63,3 @@ class ManagedSessionStore:
             "expiresAt": lease.expires_at.isoformat().replace("+00:00", "Z"),
             "capabilitySnapshotVersion": lease.capability_snapshot_version,
         }
-

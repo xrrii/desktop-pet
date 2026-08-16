@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ManagedEndpointPolicy } from './managedOAuthTypes'
+import { ManagedServerClock } from './managedServerClock'
 
 /** 控制面业务错误的稳定分类，禁止携带响应正文。 */
 export type ManagedControlPlaneErrorCode =
@@ -23,7 +24,8 @@ export class ManagedControlPlaneError extends Error {
     readonly status: number | null,
     readonly code: ManagedControlPlaneErrorCode,
     readonly retryable: boolean,
-    readonly requestId: string | null = null
+    readonly requestId: string | null = null,
+    readonly retryAfterSeconds: number | null = null
   ) {
     super('Managed 控制面请求失败。')
     this.name = 'ManagedControlPlaneError'
@@ -62,8 +64,14 @@ export class ManagedControlPlaneClient {
   constructor(
     private readonly policy: ManagedEndpointPolicy,
     private readonly clientVersion: string,
-    private readonly fetcher: typeof fetch = fetch
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly serverClock: ManagedServerClock = new ManagedServerClock()
   ) {}
+
+  /** 返回与该客户端共享的校正时钟，供 Main 内部统一 Token 调度。 */
+  getServerClock(): ManagedServerClock {
+    return this.serverClock
+  }
 
   /** 查询 Access Token 当前绑定的设备。 */
   async getCurrentDevice(accessToken: string): Promise<ManagedControlPlaneDevice> {
@@ -137,6 +145,7 @@ export class ManagedControlPlaneClient {
     }
 
     let response: Response
+    const requestStartedAt = this.serverClock.localTime()
     try {
       response = await this.fetcher(new URL(resourcePath, this.policy.controlPlaneBaseUrl), {
         method: options.method,
@@ -147,6 +156,7 @@ export class ManagedControlPlaneClient {
     } catch {
       throw new ManagedControlPlaneError(null, 'network_error', true, requestId)
     }
+    this.serverClock.observe(response.headers.get('date'), requestStartedAt, this.serverClock.localTime())
 
     if (response.ok) {
       if (options.expectBody === false || response.status === 204) {
@@ -164,7 +174,8 @@ export class ManagedControlPlaneClient {
       response.status,
       envelope.code ?? mapHttpStatus(response.status),
       envelope.retryable ?? (response.status === 429 || response.status >= 500),
-      envelope.requestId ?? requestId
+      envelope.requestId ?? requestId,
+      envelope.retryAfterSeconds
     )
   }
 }
@@ -174,24 +185,28 @@ async function readErrorEnvelope(response: Response): Promise<{
   code: ManagedControlPlaneErrorCode
   retryable: boolean | null
   requestId: string | null
+  retryAfterSeconds: number | null
 }> {
   try {
     const payload: unknown = await response.json()
     if (!payload || typeof payload !== 'object') {
-      return { code: null, retryable: null, requestId: null }
+      return { code: null, retryable: null, requestId: null, retryAfterSeconds: null }
     }
     const detail = (payload as { error?: unknown }).error
     if (!detail || typeof detail !== 'object') {
-      return { code: null, retryable: null, requestId: null }
+      return { code: null, retryable: null, requestId: null, retryAfterSeconds: null }
     }
     const value = detail as Record<string, unknown>
     return {
       code: isErrorCode(value.code) ? value.code : null,
       retryable: typeof value.retryable === 'boolean' ? value.retryable : null,
-      requestId: typeof value.requestId === 'string' ? value.requestId : null
+      requestId: typeof value.requestId === 'string' ? value.requestId : null,
+      retryAfterSeconds: value.retryAfterSeconds === null || (
+        Number.isInteger(value.retryAfterSeconds) && Number(value.retryAfterSeconds) >= 0
+      ) ? value.retryAfterSeconds as number | null : null
     }
   } catch {
-    return { code: null, retryable: null, requestId: null }
+    return { code: null, retryable: null, requestId: null, retryAfterSeconds: null }
   }
 }
 

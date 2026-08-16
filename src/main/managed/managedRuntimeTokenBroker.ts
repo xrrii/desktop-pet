@@ -4,12 +4,15 @@ import {
   ManagedControlPlaneError,
   type ManagedRuntimeSessionLease
 } from './managedControlPlaneClient'
+import { ManagedOidcClientError } from './managedOAuthClient'
 import {
   ManagedRuntimeSessionBridge,
   type ManagedRuntimeSessionTransport
 } from './managedRuntimeSessionBridge'
 
 const REFRESH_WINDOW_MS = 3 * 60 * 1_000
+const MAX_RETRY_DELAY_MS = 30 * 1_000
+const RETRY_JITTER_MS = 250
 
 export type ManagedRuntimeTokenState = 'idle' | 'provisioning' | 'waiting_runtime' | 'ready' | 'failed'
 
@@ -30,11 +33,12 @@ export interface ManagedRuntimeTokenStatus {
 /** Broker 获取 OAuth Access Token 所需的 Main 内部上下文。 */
 export interface ManagedRuntimeAccessContext {
   deviceId: string
-  getAccessToken: () => Promise<string | null>
+  getAccessToken: (forceRefresh?: boolean) => Promise<string | null>
 }
 
 interface BrokerDependencies {
   now?: () => number
+  random?: () => number
   onStatusChange?: (status: ManagedRuntimeTokenStatus) => void
 }
 
@@ -46,9 +50,12 @@ export class ManagedRuntimeTokenBroker {
   private refreshTimer: NodeJS.Timeout | null = null
   private generation = 0
   private disposed = false
+  private retryAttempt = 0
   private status: ManagedRuntimeTokenStatus = { state: 'idle', errorCode: null }
   private readonly now: () => number
+  private readonly random: () => number
   private statusListener: (status: ManagedRuntimeTokenStatus) => void
+  private terminalErrorListener: (error: ManagedControlPlaneError) => void = () => undefined
 
   constructor(
     private readonly controlPlaneClient: ManagedControlPlaneClient,
@@ -56,6 +63,7 @@ export class ManagedRuntimeTokenBroker {
     dependencies: BrokerDependencies = {}
   ) {
     this.now = dependencies.now || Date.now
+    this.random = dependencies.random || Math.random
     this.statusListener = dependencies.onStatusChange || (() => undefined)
   }
 
@@ -63,6 +71,11 @@ export class ManagedRuntimeTokenBroker {
   setStatusListener(listener: (status: ManagedRuntimeTokenStatus) => void): void {
     this.statusListener = listener
     listener(this.getStatus())
+  }
+
+  /** 注册设备撤销和认证终止的 Main 回调，其他错误只在 Broker 内收敛。 */
+  setTerminalErrorListener(listener: (error: ManagedControlPlaneError) => void): void {
+    this.terminalErrorListener = listener
   }
 
   /** 返回不包含 Token、Session ID、设备 ID和过期时间的状态。 */
@@ -73,6 +86,7 @@ export class ManagedRuntimeTokenBroker {
   /** 登录或恢复成功后创建 Runtime Session，并保留后续刷新所需的 Main 回调。 */
   async activate(context: ManagedRuntimeAccessContext): Promise<void> {
     this.context = context
+    this.retryAttempt = 0
     this.generation += 1
     const generation = this.generation
     if (this.activeProvision) {
@@ -120,6 +134,7 @@ export class ManagedRuntimeTokenBroker {
     this.context = null
     this.cancelRefreshTimer()
     this.lease = null
+    this.retryAttempt = 0
     await this.bridge.clear().catch(() => {
       logError('managed Runtime Session 本地清理失败', { errorCode: 'managed_runtime_bridge_failed' })
     })
@@ -132,10 +147,19 @@ export class ManagedRuntimeTokenBroker {
     this.generation += 1
     this.context = null
     this.lease = null
+    this.retryAttempt = 0
     this.cancelRefreshTimer()
     void this.bridge.clear().catch(() => undefined)
     this.bridge.detach()
     this.setStatus({ state: 'idle', errorCode: null })
+  }
+
+  /** 任务内认证事件要求立即换发新 Lease，成功后由调用方提交恢复结果。 */
+  async refreshForTask(): Promise<void> {
+    if (!this.context) {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    await this.ensureSession(true)
   }
 
   /** 保证存在剩余有效期超过三分钟的 Lease；并发调用复用同一个签发任务。 */
@@ -157,6 +181,7 @@ export class ManagedRuntimeTokenBroker {
         const errorCode = mapBrokerError(error)
         if (!this.disposed && generation === this.generation) {
           this.setStatus({ state: 'failed', errorCode })
+          this.scheduleRetry(error, generation)
           logError('managed Runtime Session 创建失败', { errorCode })
         }
         throw error
@@ -169,11 +194,23 @@ export class ManagedRuntimeTokenBroker {
 
   /** 创建新 Lease、注入 Runtime，再最佳努力撤销被替换的旧 Session。 */
   private async provision(context: ManagedRuntimeAccessContext, generation: number): Promise<void> {
-    const oauthAccessToken = await context.getAccessToken()
+    let oauthAccessToken = await context.getAccessToken(false)
     if (!oauthAccessToken) {
       throw new ManagedControlPlaneError(401, 'authentication_required', false)
     }
-    const next = await this.controlPlaneClient.createRuntimeSession(oauthAccessToken, context.deviceId)
+    let next: ManagedRuntimeSessionLease
+    try {
+      next = await this.controlPlaneClient.createRuntimeSession(oauthAccessToken, context.deviceId)
+    } catch (error) {
+      if (!isAccessTokenRetryable(error)) {
+        throw error
+      }
+      oauthAccessToken = await context.getAccessToken(true)
+      if (!oauthAccessToken) {
+        throw new ManagedControlPlaneError(401, 'authentication_required', false)
+      }
+      next = await this.controlPlaneClient.createRuntimeSession(oauthAccessToken, context.deviceId)
+    }
     if (this.disposed || generation !== this.generation || this.context !== context) {
       await this.revokeBestEffort(oauthAccessToken, next.sessionId)
       return
@@ -188,6 +225,7 @@ export class ManagedRuntimeTokenBroker {
         return
       }
       this.lease = next
+      this.retryAttempt = 0
       this.scheduleRefresh(next)
       this.setStatus({ state: injected ? 'ready' : 'waiting_runtime', errorCode: null })
       if (previous && previous.sessionId !== next.sessionId) {
@@ -203,7 +241,7 @@ export class ManagedRuntimeTokenBroker {
     }
   }
 
-  /** 在剩余三分钟时触发下一次签发，完整失败恢复策略由 P2-10 补强。 */
+  /** 在剩余三分钟时触发下一次签发，失败后进入统一退避恢复。 */
   private scheduleRefresh(lease: ManagedRuntimeSessionLease): void {
     this.cancelRefreshTimer()
     const delay = Math.max(0, this.remainingLifetime(lease) - REFRESH_WINDOW_MS)
@@ -212,6 +250,77 @@ export class ManagedRuntimeTokenBroker {
       void this.ensureSession(true).catch(() => undefined)
     }, delay)
     this.refreshTimer.unref()
+  }
+
+  /** 临时网络错误使用指数退避和小幅抖动，Lease 到期后不再保留 Runtime 凭据。 */
+  private scheduleRetry(error: unknown, generation: number): void {
+    if (this.disposed || generation !== this.generation || !this.context) {
+      if (isTerminalBrokerError(error)) {
+        this.handleTerminalError(error)
+      }
+      return
+    }
+    if (isTerminalBrokerError(error)) {
+      this.handleTerminalError(error)
+      return
+    }
+    if (!isRetryableBrokerError(error)) {
+      if (error instanceof ManagedControlPlaneError && (
+        error.code === 'capability_not_entitled' ||
+        error.code === 'unsupported_client_version'
+      )) {
+        void this.clearRuntimeLeaseOnly()
+      }
+      return
+    }
+    const remaining = this.lease ? this.remainingLifetime(this.lease) : Number.POSITIVE_INFINITY
+    if (remaining <= 0) {
+      void this.expireLease(generation)
+      return
+    }
+    this.cancelRefreshTimer()
+    const baseDelay = Math.min(MAX_RETRY_DELAY_MS, 1_000 * (2 ** Math.min(this.retryAttempt, 5)))
+    const jitter = Math.floor(this.random() * RETRY_JITTER_MS)
+    const retryAfter = error instanceof ManagedControlPlaneError && error.retryAfterSeconds !== null
+      ? error.retryAfterSeconds * 1_000
+      : baseDelay + jitter
+    const delay = Math.max(0, Math.min(Math.max(250, retryAfter), Math.max(0, remaining - 100)))
+    this.retryAttempt += 1
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null
+      if (this.lease && this.remainingLifetime(this.lease) <= 0) {
+        void this.expireLease(generation)
+        return
+      }
+      void this.ensureSession(true).catch(() => undefined)
+    }, delay)
+    this.refreshTimer.unref()
+  }
+
+  /** Lease 已过期时清除 Runtime，不触碰桌面 Refresh Token。 */
+  private async expireLease(generation: number): Promise<void> {
+    if (this.disposed || generation !== this.generation) {
+      return
+    }
+    this.lease = null
+    await this.bridge.clear().catch(() => undefined)
+    this.setStatus({ state: 'failed', errorCode: 'managed_runtime_session_failed' })
+    this.scheduleRetry(new ManagedControlPlaneError(503, 'internal_error', true), generation)
+  }
+
+  /** Entitlement 或版本错误只清理 Runtime Lease，保留桌面账号会话。 */
+  private async clearRuntimeLeaseOnly(): Promise<void> {
+    this.cancelRefreshTimer()
+    this.lease = null
+    await this.bridge.clear().catch(() => undefined)
+  }
+
+  /** 将设备撤销或认证终止通知给拥有完整会话的 AuthManager。 */
+  private handleTerminalError(error: unknown): void {
+    if (error instanceof ManagedControlPlaneError && isTerminalBrokerError(error)) {
+      void this.clearRuntimeLeaseOnly()
+      this.terminalErrorListener(error)
+    }
   }
 
   /** 撤销失败不覆盖已经成功注入的新 Lease，也不记录 Token 或 Session ID。 */
@@ -245,7 +354,7 @@ function mapBrokerError(error: unknown): Exclude<ManagedRuntimeTokenErrorCode, n
   if (error instanceof ManagedControlPlaneError) {
     if (error.code === 'capability_not_entitled') return 'managed_capability_not_entitled'
     if (error.code === 'unsupported_client_version') return 'managed_unsupported_client_version'
-    if (error.code === 'authentication_required' || error.code === 'token_expired') {
+    if (error.code === 'authentication_required' || error.code === 'token_expired' || error.code === 'device_revoked') {
       return 'managed_authentication_required'
     }
     return 'managed_runtime_session_failed'
@@ -253,4 +362,24 @@ function mapBrokerError(error: unknown): Exclude<ManagedRuntimeTokenErrorCode, n
   return error instanceof Error && error.message === '本地 Runtime Session 注入失败。'
     ? 'managed_runtime_bridge_failed'
     : 'managed_runtime_session_failed'
+}
+
+/** 控制面明确表示 Access Token 已失效时允许一次强制 Refresh。 */
+function isAccessTokenRetryable(error: unknown): boolean {
+  return error instanceof ManagedControlPlaneError &&
+    (error.code === 'authentication_required' || error.code === 'token_expired')
+}
+
+/** 网络、限流和服务端暂态错误允许离线退避恢复。 */
+function isRetryableBrokerError(error: unknown): boolean {
+  if (error instanceof ManagedControlPlaneError) {
+    return error.code === 'network_error' || error.retryable || error.status === 429 || (error.status !== null && error.status >= 500)
+  }
+  return error instanceof ManagedOidcClientError && error.reason === 'network'
+}
+
+/** 设备撤销和无法恢复的认证错误必须通知 AuthManager 清理完整会话。 */
+function isTerminalBrokerError(error: unknown): error is ManagedControlPlaneError {
+  return error instanceof ManagedControlPlaneError &&
+    (error.code === 'device_revoked' || error.code === 'authentication_required' || error.code === 'token_expired')
 }
