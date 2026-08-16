@@ -16,6 +16,7 @@ import {
   type ManagedAccountSessionSnapshot
 } from './managedAccountSessionManager'
 import { ManagedDeviceIdentityManager } from './managedDeviceIdentityManager'
+import { ManagedRuntimeTokenBroker } from './managedRuntimeTokenBroker'
 import {
   ElectronManagedTokenStore,
   ManagedTokenStoreError,
@@ -28,6 +29,8 @@ const DEFAULT_STATUS: ManagedAuthStatus = {
   minimumClientVersion: null,
   errorCode: null,
   sessionSyncState: 'idle',
+  runtimeSessionState: 'idle',
+  runtimeSessionErrorCode: null,
   account: null,
   device: null
 }
@@ -45,6 +48,7 @@ export class ManagedAuthManager {
   private cancelRequested = false
   private disposed = false
   private accessToken: string | null = null
+  private accessTokenExpiresAt: number | null = null
   private refreshToken: string | null = null
   private pendingTokenSet: ManagedTokenSet | null = null
   private sessionSnapshot: ManagedAccountSessionSnapshot | null = null
@@ -54,6 +58,7 @@ export class ManagedAuthManager {
   private readonly tokenStore: ManagedTokenStore
   private readonly accountSessionManager: ManagedAccountSessionManager | null
   private readonly deviceIdentityManager: ManagedDeviceIdentityManager | null
+  private readonly runtimeTokenBroker: ManagedRuntimeTokenBroker | null
 
   constructor(
     private readonly policy: ManagedEndpointPolicy = resolveManagedEndpointPolicy(),
@@ -63,6 +68,7 @@ export class ManagedAuthManager {
       oauthClient?: ManagedOAuthClient
       tokenStore?: ManagedTokenStore
       accountSessionManager?: ManagedAccountSessionManager
+      runtimeTokenBroker?: ManagedRuntimeTokenBroker
       openExternal?: (url: string) => Promise<void>
       onStatusChange?: (status: ManagedAuthStatus) => void
     } = {}
@@ -86,6 +92,13 @@ export class ManagedAuthManager {
     )
     this.openExternal = dependencies.openExternal || ((url) => shell.openExternal(url))
     this.onStatusChange = dependencies.onStatusChange || (() => undefined)
+    this.runtimeTokenBroker = dependencies.runtimeTokenBroker || null
+    this.runtimeTokenBroker?.setStatusListener((runtimeStatus) => {
+      this.setStatus({
+        runtimeSessionState: runtimeStatus.state,
+        runtimeSessionErrorCode: runtimeStatus.errorCode
+      })
+    })
   }
 
   private readonly openExternal: (url: string) => Promise<void>
@@ -195,7 +208,9 @@ export class ManagedAuthManager {
     this.activeLogin = null
     this.activeRefresh = null
     this.activeSessionCommand = null
+    this.runtimeTokenBroker?.dispose()
     this.accessToken = null
+    this.accessTokenExpiresAt = null
     this.refreshToken = null
     this.pendingTokenSet = null
     this.sessionSnapshot = null
@@ -259,6 +274,7 @@ export class ManagedAuthManager {
     } catch (error) {
       const mapped = mapLoginError(error)
       this.accessToken = null
+      this.accessTokenExpiresAt = null
       this.refreshToken = null
       this.setStatus({ state: mapped.state, errorCode: mapped.errorCode })
       logError('managed OAuth login failed', { errorCode: mapped.errorCode })
@@ -312,6 +328,7 @@ export class ManagedAuthManager {
     } catch (error) {
       if (isInvalidGrant(error)) {
         this.accessToken = null
+        this.accessTokenExpiresAt = null
         this.refreshToken = null
         this.pendingTokenSet = null
         await this.tokenStore.clear().catch(() => {
@@ -319,12 +336,14 @@ export class ManagedAuthManager {
             errorCode: 'managed_token_persist_failed'
           })
         })
+        await this.runtimeTokenBroker?.clear()
         this.setStatus({ state: 'reauth_required', errorCode: 'managed_refresh_invalid_grant' })
         logError('managed session restore failed', { errorCode: 'managed_refresh_invalid_grant' })
         return this.getStatus()
       }
 
       this.accessToken = null
+      this.accessTokenExpiresAt = null
       this.refreshToken = null
       const mapped = mapRefreshError(error)
       this.setStatus({ state: mapped.state, errorCode: mapped.errorCode })
@@ -375,6 +394,9 @@ export class ManagedAuthManager {
     this.pendingTokenSet = null
     if (!this.disposed) {
       this.accessToken = tokenSet.accessToken
+      this.accessTokenExpiresAt = tokenSet.expiresIn === null
+        ? null
+        : Date.now() + tokenSet.expiresIn * 1_000
       this.refreshToken = tokenSet.refreshToken
     }
   }
@@ -418,13 +440,21 @@ export class ManagedAuthManager {
         account: snapshot.account,
         device: toManagedDeviceStatus(snapshot.device)
       })
+      if (this.runtimeTokenBroker) {
+        await this.runtimeTokenBroker.activate({
+          deviceId: snapshot.device.id,
+          getAccessToken: () => this.ensureAccessTokenForRuntime()
+        }).catch(() => undefined)
+      }
       return null
     } catch (error) {
       if (isControlPlaneDeviceRevoked(error)) {
         this.accessToken = null
+        this.accessTokenExpiresAt = null
         this.refreshToken = null
         this.pendingTokenSet = null
         await this.tokenStore.clear().catch(() => undefined)
+        await this.runtimeTokenBroker?.clear()
         this.sessionSnapshot = null
         this.setStatus({
           state: 'reauth_required',
@@ -525,7 +555,9 @@ export class ManagedAuthManager {
 
   /** 清理 Main 内存和本地加密凭据，设备映射由调用方决定是否删除。 */
   private async clearLocalSession(): Promise<void> {
+    await this.runtimeTokenBroker?.clear()
     this.accessToken = null
+    this.accessTokenExpiresAt = null
     this.refreshToken = null
     this.pendingTokenSet = null
     this.sessionSnapshot = null
@@ -592,14 +624,34 @@ export class ManagedAuthManager {
     } catch (error) {
       if (isInvalidGrant(error)) {
         this.accessToken = null
+        this.accessTokenExpiresAt = null
         this.refreshToken = null
         this.pendingTokenSet = null
         await this.tokenStore.clear().catch(() => undefined)
         this.sessionSnapshot = null
+        await this.runtimeTokenBroker?.clear()
+        this.setStatus({
+          state: 'reauth_required',
+          sessionSyncState: 'reauth_required',
+          errorCode: 'managed_refresh_invalid_grant'
+        })
         throw new ManagedControlPlaneError(401, 'authentication_required', false)
       }
       throw error
     }
+  }
+
+  /** 为 Runtime Token Broker 返回 Main 内存 Access Token，必要时先轮换 OAuth Token。 */
+  private async ensureAccessTokenForRuntime(): Promise<string | null> {
+    if (!this.accessToken) {
+      return null
+    }
+    const minimumLifetimeMs = 30_000
+    if (this.accessTokenExpiresAt === null || this.accessTokenExpiresAt - Date.now() >= minimumLifetimeMs) {
+      return this.accessToken
+    }
+    await this.refreshAccessTokenForSession()
+    return this.accessToken
   }
 
   /** 应用 Feature Flag 脱敏字段，不覆盖已经认证的状态。 */

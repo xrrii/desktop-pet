@@ -20,6 +20,11 @@ import type {
 } from '../../shared/assistant'
 import type { ToolAuditEntry } from './auditLog'
 import type { AssistantAttachmentRegistration } from './attachmentManager'
+import type {
+  ManagedAuthResult,
+  ManagedRuntimeSessionStatus,
+  ManagedRuntimeSessionUpdate
+} from '../managed/managedRuntimeSessionBridge'
 
 export class AssistantRuntimeClient {
   private readonly baseUrl: string
@@ -37,6 +42,33 @@ export class AssistantRuntimeClient {
     if (!response.ok) {
       throw new Error(`Runtime health check failed (${response.status}).`)
     }
+  }
+
+  /** 使用本地启动令牌把官方短期 Token 写入 Runtime 内存。 */
+  async updateManagedSession(update: ManagedRuntimeSessionUpdate): Promise<void> {
+    await this.request('/v1/managed/session', {
+      method: 'PUT',
+      body: JSON.stringify(update)
+    })
+  }
+
+  /** 清除 Runtime 内存中的官方 Session，不影响本地 BYOK 配置。 */
+  async clearManagedSession(): Promise<void> {
+    await this.request('/v1/managed/session', { method: 'DELETE' })
+  }
+
+  /** 获取不包含官方 Token 的 Runtime Session 状态。 */
+  async getManagedSessionStatus(): Promise<ManagedRuntimeSessionStatus> {
+    const response = await this.request('/v1/managed/session/status', { method: 'GET' })
+    return requireManagedSessionStatus(await response.json())
+  }
+
+  /** 提交任务内官方认证刷新结果，实际刷新事件编排在 P2-10 接入。 */
+  async submitManagedAuthResult(result: ManagedAuthResult): Promise<void> {
+    await this.request('/v1/managed/auth-result', {
+      method: 'POST',
+      body: JSON.stringify(result)
+    })
   }
 
   async createTask(request: AssistantRequest): Promise<void> {
@@ -354,6 +386,36 @@ export class AssistantRuntimeClient {
       throw new Error(await responseError(response, `Runtime request failed (${response.status}).`))
     }
     return response
+  }
+}
+
+/** 严格校验 Runtime 返回的脱敏 Session 状态。 */
+function requireManagedSessionStatus(value: unknown): ManagedRuntimeSessionStatus {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Runtime 返回了无效的 Managed Session 状态。')
+  }
+  const status = value as Record<string, unknown>
+  const expiresAtValid = status.expiresAt === null || (
+    typeof status.expiresAt === 'string' &&
+    !Number.isNaN(Date.parse(status.expiresAt))
+  )
+  const versionValid = status.capabilitySnapshotVersion === null || (
+    Number.isInteger(status.capabilitySnapshotVersion) &&
+    Number(status.capabilitySnapshotVersion) >= 1
+  )
+  if (
+    typeof status.configured !== 'boolean' ||
+    !expiresAtValid ||
+    !versionValid ||
+    (status.configured && (status.expiresAt === null || status.capabilitySnapshotVersion === null)) ||
+    (!status.configured && (status.expiresAt !== null || status.capabilitySnapshotVersion !== null))
+  ) {
+    throw new Error('Runtime 返回了无效的 Managed Session 状态。')
+  }
+  return {
+    configured: status.configured,
+    expiresAt: status.expiresAt as string | null,
+    capabilitySnapshotVersion: status.capabilitySnapshotVersion as number | null
   }
 }
 

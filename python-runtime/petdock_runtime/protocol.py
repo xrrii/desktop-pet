@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
+from uuid import UUID
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -20,6 +22,43 @@ class AssistantContext(BaseModel):
     timezone: str = Field(min_length=1, max_length=128)
     webSearchEnabled: bool = False
     webSearchProvider: Literal["volcengine", "brave"] | None = None
+
+
+class ManagedSessionUpdate(BaseModel):
+    """Main 注入的官方短期 Session，只允许冻结契约中的三个字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    accessToken: str = Field(min_length=32)
+    expiresAt: datetime
+    capabilitySnapshotVersion: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_timezone(self) -> "ManagedSessionUpdate":
+        """拒绝没有时区的时间，避免本机时区改变 Token 生命周期。"""
+        if self.expiresAt.tzinfo is None or self.expiresAt.utcoffset() is None:
+            raise ValueError("expiresAt 必须包含时区。")
+        return self
+
+
+class ManagedAuthResult(BaseModel):
+    """Main 提交的任务认证刷新结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    taskId: UUID
+    requestId: UUID
+    result: Literal["refreshed", "failed"]
+    errorCode: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_result_error(self) -> "ManagedAuthResult":
+        """成功时禁止错误码，失败时要求稳定非空错误码。"""
+        if self.result == "refreshed" and self.errorCode is not None:
+            raise ValueError("认证刷新成功时 errorCode 必须为空。")
+        if self.result == "failed" and not (self.errorCode or "").strip():
+            raise ValueError("认证刷新失败时必须提供 errorCode。")
+        return self
 
 
 class AssistantSkillInvocation(BaseModel):

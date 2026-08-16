@@ -4,6 +4,7 @@ import { ManagedAuthManager } from './managedAuthManager'
 import { ManagedOidcClientError } from './managedOAuthClient'
 import { ManagedControlPlaneError } from './managedControlPlaneClient'
 import type { ManagedFeatureSnapshot } from './managedFeatureFlags'
+import type { ManagedRuntimeTokenBroker } from './managedRuntimeTokenBroker'
 import type {
   ManagedAuthorizationPreparation,
   ManagedEndpointPolicy,
@@ -306,10 +307,12 @@ describe('ManagedAuthManager', () => {
     const tokenStore = new FakeTokenStore()
     tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }
     const sessionManager = managedSessionManagerDouble()
+    const runtimeBroker = runtimeTokenBrokerDouble()
     const manager = new ManagedAuthManager(policy, '0.2.0', {
       tokenStore,
       oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
-      accountSessionManager: sessionManager.value
+      accountSessionManager: sessionManager.value,
+      runtimeTokenBroker: runtimeBroker.value
     })
 
     await expect(manager.restoreSession()).resolves.toMatchObject({
@@ -318,6 +321,10 @@ describe('ManagedAuthManager', () => {
       account: { username: 'alice' },
       device: { displayName: 'Windows Desktop', status: 'active' }
     })
+    expect(runtimeBroker.activate).toHaveBeenCalledOnce()
+    const runtimeContext = runtimeBroker.activate.mock.calls[0][0]
+    expect(runtimeContext.deviceId).toBe('a01715d2-42e3-4abe-a348-708dda38ab0d')
+    await expect(runtimeContext.getAccessToken()).resolves.toBe('access-token')
     await expect(manager.logout()).resolves.toMatchObject({
       state: 'disabled',
       sessionSyncState: 'idle',
@@ -326,6 +333,7 @@ describe('ManagedAuthManager', () => {
     })
 
     expect(sessionManager.revokeRefreshToken).toHaveBeenCalledWith('rotated-refresh-token')
+    expect(runtimeBroker.clear).toHaveBeenCalledOnce()
     expect(tokenStore.clearCount).toBe(1)
     expect(manager.getAccessTokenForMain()).toBeNull()
   })
@@ -456,5 +464,22 @@ function managedSessionManagerDouble() {
     synchronize,
     revokeRefreshToken,
     revokeCurrentDevice
+  }
+}
+
+/** 创建不持有 Token 的 Runtime Broker 测试替身。 */
+function runtimeTokenBrokerDouble() {
+  const activate = vi.fn().mockResolvedValue(undefined)
+  const clear = vi.fn().mockResolvedValue(undefined)
+  const dispose = vi.fn()
+  const setStatusListener = vi.fn((listener: (status: {
+    state: 'idle'
+    errorCode: null
+  }) => void) => listener({ state: 'idle', errorCode: null }))
+  return {
+    value: { activate, clear, dispose, setStatusListener } as unknown as ManagedRuntimeTokenBroker,
+    activate,
+    clear,
+    dispose
   }
 }

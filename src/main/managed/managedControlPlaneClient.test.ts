@@ -72,6 +72,54 @@ describe('ManagedControlPlaneClient', () => {
       code: 'internal_error'
     })
   })
+
+  it('创建 Runtime Session 时严格校验响应并保留 Entitlement 版本', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(runtimeSessionPayload()), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+    }))
+    const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher)
+
+    await expect(client.createRuntimeSession(
+      'synthetic-access-token',
+      'a01715d2-42e3-4abe-a348-708dda38ab0d'
+    )).resolves.toMatchObject({
+      sessionId: '039f8b64-dc93-4b7f-a94d-cf88400f2615',
+      tokenType: 'Bearer',
+      entitlementVersion: 3
+    })
+    expect(fetcher.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ deviceId: 'a01715d2-42e3-4abe-a348-708dda38ab0d' })
+    })
+  })
+
+  it('拒绝过期时间早于签发时间的 Runtime Session 响应', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      ...runtimeSessionPayload(),
+      expiresAt: '2026-08-16T00:00:00Z'
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher)
+
+    await expect(client.createRuntimeSession(
+      'synthetic-access-token',
+      'a01715d2-42e3-4abe-a348-708dda38ab0d'
+    )).rejects.toMatchObject({ code: 'internal_error' })
+  })
+
+  it('撤销 Runtime Session 使用路径 ID并处理 204', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }))
+    const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher)
+
+    await client.revokeRuntimeSession(
+      'synthetic-access-token',
+      '039f8b64-dc93-4b7f-a94d-cf88400f2615'
+    )
+
+    expect(String(fetcher.mock.calls[0][0]))
+      .toBe('http://127.0.0.1:18080/api/v1/runtime-sessions/039f8b64-dc93-4b7f-a94d-cf88400f2615')
+    expect(fetcher.mock.calls[0][1]?.method).toBe('DELETE')
+  })
 })
 
 /** 返回不含敏感字段的合成设备响应。 */
@@ -83,5 +131,17 @@ function devicePayload(): Record<string, unknown> {
     status: 'active',
     createdAt: '2026-08-16T00:00:00Z',
     lastSeenAt: '2026-08-16T00:00:00Z'
+  }
+}
+
+/** 返回固定 15 分钟有效期的合成 Runtime Session。 */
+function runtimeSessionPayload(): Record<string, unknown> {
+  return {
+    sessionId: '039f8b64-dc93-4b7f-a94d-cf88400f2615',
+    accessToken: 'synthetic-runtime-access-token-value-0001',
+    tokenType: 'Bearer',
+    issuedAt: '2026-08-16T00:00:00Z',
+    expiresAt: '2026-08-16T00:15:00Z',
+    entitlementVersion: 3
   }
 }

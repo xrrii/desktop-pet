@@ -15,6 +15,8 @@ from ..knowledge.service import KnowledgeService
 from ..knowledge.store import KnowledgeStore
 from ..memory.extractor import create_memory_extractor
 from ..memory.store import MemoryStore
+from ..managed.auth_refresh import ManagedAuthRefreshCoordinator
+from ..managed.session import ManagedSessionStore
 from ..protocol import AssistantRequest
 from ..providers.chat import ChatModelFactory
 from ..providers.embeddings import EmbeddingProvider, LocalHashEmbedding, create_embedding_provider
@@ -44,10 +46,14 @@ class RuntimeResources:
     skills: SkillRegistry
     skill_installer: SkillInstaller
     assistant: AssistantService
+    managed_session: ManagedSessionStore
+    managed_auth_refresh: ManagedAuthRefreshCoordinator
 
     async def close(self) -> None:
         """按依赖顺序关闭后台任务、索引和数据库连接。"""
         LOGGER.info("开始关闭 Runtime 服务资源")
+        self.managed_session.clear()
+        await self.managed_auth_refresh.close()
         await self.knowledge.close()
         self.vision.close()
         self.skills.close()
@@ -125,6 +131,8 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         create_memory_extractor(chat_models, memory),
         prepare_attachments,
     )
+    managed_session = ManagedSessionStore()
+    managed_auth_refresh = ManagedAuthRefreshCoordinator()
     LOGGER.info(
         "Runtime 服务资源已创建 backend=%s embedding=%s",
         config.resolved_backend,
@@ -142,6 +150,8 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         skills=skills,
         skill_installer=skill_installer,
         assistant=assistant,
+        managed_session=managed_session,
+        managed_auth_refresh=managed_auth_refresh,
     )
 
 

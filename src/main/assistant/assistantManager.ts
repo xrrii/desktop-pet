@@ -39,7 +39,7 @@ import { ASSISTANT_PROTOCOL_VERSION } from '../../shared/assistant'
 import { loadSettings } from '../store'
 import { logError, logInfo } from '../logger'
 import { writeToolAudit } from './auditLog'
-import { AssistantRuntimeProcess } from './runtimeProcess'
+import { AssistantRuntimeProcess, type AssistantRuntimeLifecycle } from './runtimeProcess'
 import { EmbeddingModelManager } from './embeddingModelManager'
 import { AssistantToolHost, webToolErrorMessage } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
@@ -93,11 +93,13 @@ export class AssistantManager {
 
   constructor(
     onStatus: (status: AssistantRuntimeStatus) => void,
-    private readonly onEvent: (event: AssistantEvent) => void
+    private readonly onEvent: (event: AssistantEvent) => void,
+    runtimeLifecycle: AssistantRuntimeLifecycle = {}
   ) {
     this.runtime = new AssistantRuntimeProcess(
       onStatus,
-      () => this.runtimeEnvironment()
+      () => this.runtimeEnvironment(),
+      runtimeLifecycle
     )
   }
 

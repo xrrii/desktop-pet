@@ -31,6 +31,10 @@ import { AssistantManager } from './assistant/assistantManager'
 import { writeArtifactAtomically } from './assistant/artifactFileWriter'
 import { logError, logInfo } from './logger'
 import { ManagedAuthManager } from './managed/managedAuthManager'
+import { ManagedControlPlaneClient } from './managed/managedControlPlaneClient'
+import { resolveManagedEndpointPolicy } from './managed/managedEndpointPolicy'
+import { ManagedRuntimeSessionBridge } from './managed/managedRuntimeSessionBridge'
+import { ManagedRuntimeTokenBroker } from './managed/managedRuntimeTokenBroker'
 import { ScreenshotManager } from './screenshotManager'
 import { setAssistantTheme } from './theme'
 import {
@@ -79,9 +83,19 @@ let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
 let smokeArtifactSaveCancelled = false
 const pendingPetSpritesheetSelections = new Map<string, { filePath: string; fileName: string }>()
+const managedEndpointPolicy = resolveManagedEndpointPolicy()
+const managedRuntimeSessionBridge = new ManagedRuntimeSessionBridge()
+const managedRuntimeTokenBroker = new ManagedRuntimeTokenBroker(
+  new ManagedControlPlaneClient(managedEndpointPolicy, app.getVersion()),
+  managedRuntimeSessionBridge
+)
 const assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
-  (event) => petWindow?.webContents.send('assistant:event', event)
+  (event) => petWindow?.webContents.send('assistant:event', event),
+  {
+    onReady: (client) => managedRuntimeTokenBroker.attachRuntime(client),
+    onStopped: (client) => managedRuntimeTokenBroker.detachRuntime(client)
+  }
 )
 const screenshotManager = new ScreenshotManager(
   () => petWindow,
@@ -90,7 +104,8 @@ const screenshotManager = new ScreenshotManager(
   (result) => petWindow?.webContents.send('assistant:attachments-staged', result),
   (message) => petWindow?.webContents.send('assistant:attachment-stage-error', message)
 )
-const managedAuthManager = new ManagedAuthManager(undefined, app.getVersion(), {
+const managedAuthManager = new ManagedAuthManager(managedEndpointPolicy, app.getVersion(), {
+  runtimeTokenBroker: managedRuntimeTokenBroker,
   onStatusChange: (status) => petWindow?.webContents.send('managed:status-changed', status)
 })
 

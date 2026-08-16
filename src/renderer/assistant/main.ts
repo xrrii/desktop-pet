@@ -732,7 +732,15 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (status.sessionSyncState === 'logging_out') return '正在退出'
     if (status.sessionSyncState === 'syncing') return '正在同步账号和设备'
     if (status.sessionSyncState === 'device_revoked') return '设备授权已撤销'
-    if (status.state === 'authenticated' && status.sessionSyncState === 'ready') return '已登录'
+    if (status.state === 'authenticated' && status.sessionSyncState === 'ready') {
+      if (status.runtimeSessionState === 'provisioning') return '已登录，正在准备官方运行时'
+      if (status.runtimeSessionState === 'waiting_runtime') return '已登录，等待本地运行时'
+      if (status.runtimeSessionState === 'ready') return '已登录，官方运行时已就绪'
+      if (status.runtimeSessionErrorCode === 'managed_capability_not_entitled') return '已登录，当前套餐未授权官方能力'
+      if (status.runtimeSessionErrorCode === 'managed_unsupported_client_version') return '已登录，客户端版本不受支持'
+      if (status.runtimeSessionState === 'failed') return '已登录，官方运行时暂不可用'
+      return '已登录'
+    }
     if (status.state === 'waiting_callback') return '等待浏览器授权'
     if (status.state === 'preparing' || status.state === 'exchanging_code') return '正在登录'
     if (status.state === 'offline') return '服务暂不可用'

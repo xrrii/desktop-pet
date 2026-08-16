@@ -51,19 +51,19 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 云端 P2-08 完成，桌面 P2-08 Done
+当前阶段：Phase 2 P2-09 Done，Desktop/Cloud Runtime Session Bridge 已完成
 架构对齐：Decision Frozen
-桌面端 Managed 实现：P2-06、P2-07、P2-08 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出和当前设备撤销；Runtime 仍延后）
+桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker 和本地 Session Bridge）
 独立官网前端：Not Started（不在当前仓库）
-Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
+Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：P2-09 Runtime Token Broker 和 Runtime Session Bridge
+下一建议工作项：P2-10 过期、时钟偏差、离线、撤销、重复登录和并发刷新异常矩阵
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计和外部签名密钥轮换基础；Entitlement 管理、Usage、Managed Provider、官网和桌面真实登录仍未完成。备案继续只阻塞正式公网联调。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计、外部签名密钥轮换和 Runtime Session API；Desktop 已完成 Runtime Token Broker 与本地 Runtime Session Bridge。Entitlement 管理、Usage、Managed Provider、官网和桌面真实公网登录仍未完成。备案继续只阻塞正式公网联调。
 
 ## 4. 产品与仓库边界
 
@@ -143,7 +143,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-08 已完成系统浏览器 PKCE 登录、loopback、Refresh Token safeStorage、轮换和启动恢复，以及 UserInfo 账号脱敏快照、设备注册与状态、退出登录和设备撤销。下一工作项进入 `P2-09` Runtime Token Broker 和 Runtime Session Bridge；备案继续只阻塞正式公网域名联调。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-09 已完成系统浏览器 PKCE 登录、loopback、Refresh Token safeStorage、轮换和启动恢复、UserInfo 账号脱敏快照、设备注册与状态、退出登录、设备撤销、Runtime Token Broker 和本地 Runtime Session Bridge。下一工作项进入 `P2-10` 过期、时钟偏差、离线、撤销、重复登录和并发刷新异常矩阵；备案继续只阻塞正式公网域名联调。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -171,7 +171,7 @@ npm.cmd run test:e2e:assistant:c5
 
 服务器与 `petdock.site` 域名已经就绪，ICP 备案仍在审核中。备案完成前不开放普通用户公网登录流量，但允许在服务器内部部署共享开发数据库、中间件和服务，并通过 SSH 隧道或自建私网受控接入；数据库和中间件端口不得直接暴露公网。
 
-Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose、Nginx 和 SSH 隧道开发接入。UserInfo/账号快照、Refresh Token 主动撤销、Feature Flag 下发、开发环境端点覆盖、设备显示名和服务端时间已由 `petdock-cloud` 的 `D-P2-01` 至 `D-P2-08` 冻结；实际 Provider/模型安全配置和 Beta 免费额度仍属于后续上线配置前置条件。
+Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose、Nginx 和 SSH 隧道开发接入。UserInfo/账号快照、Refresh Token 主动撤销、Feature Flag 下发、开发环境端点覆盖、设备显示名和服务端时间已由 `petdock-cloud` 的 `D-P2-01` 至 `D-P2-08` 冻结；P2-09 沿用现有 v1 Runtime Session 和本地 Runtime Session 契约，不新增公共字段。实际 Provider/模型安全配置和 Beta 免费额度仍属于后续上线配置前置条件。
 
 ## 11. 验证记录
 
@@ -199,6 +199,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-16 | Desktop P2-04 文档同步工作区 | Desktop 回归 | 通过（使用隔离临时目录） | TypeScript 80 项、契约 14 项、Runtime 82 项、检索六项指标 1.0 和生产构建通过；统一 `npm run check` 在 Runtime 阶段受既有 `temp/pytest-runtime` ACL 阻断，已改用未占用的 ignored basetemp 复验 |
 | 2026-08-16 | Desktop/Cloud P2-06 工作区 | Cloud Python 契约、Spring/JUnit、Desktop TypeScript、Mock OIDC、生产制品扫描和快照比对 | 通过 | Cloud 14 项契约测试、Spring 61 项测试通过；Desktop 92 项单元测试、14 项契约测试、类型检查和生产制品端点扫描通过；33 个契约文件一致；真实公网域名浏览器联调未运行（备案未完成） |
 | 2026-08-16 | Desktop P2-07 工作区 | safeStorage 存储、Refresh Grant、启动恢复、轮换并发保护、类型检查、契约和生产构建 | 通过 | Desktop 108 项单元测试、14 项契约测试、类型检查、生产制品端点扫描和真实 Electron safeStorage 加解密往返自检通过；共享开发 OAuth 重启联调未运行 |
+| 2026-08-16 | Desktop/Cloud P2-09 工作区 | Runtime Token Broker、Runtime Session Bridge、Cloud Runtime Session 回归和跨端门禁 | 通过 | Cloud JDK 21 Maven 66 项测试、Testcontainers PostgreSQL 17 迁移/持久化；Desktop TypeScript 134 项、契约 14 项、隔离 basetemp Runtime 86 项、检索六项指标 1.0、类型检查和生产构建；Cloud Python 契约 15 项、TypeScript 1 项、Spring 1 项、契约制品校验和 33 文件快照一致 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -308,3 +309,11 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Desktop 新增 RFC 7009 Refresh Token 退出、当前设备撤销 IPC 和设置页入口；网络失败保留可用凭据，服务端确认撤销后清理本地凭据，撤销后删除本地设备映射。
 - Cloud 接入 Spring Authorization Server UserInfo Mapper，仅返回 `sub`、`email`、`email_verified`、`preferred_username` 和 `name`，不新增数据库迁移、Redis Key 或公共契约字段。
 - Desktop 123 项单元测试、14 项契约测试、类型检查、生产构建和生产端点扫描通过；Cloud JDK 21 Maven 62 项测试、Testcontainers PostgreSQL 17 迁移与持久化、Python 15 项、TypeScript 1 项、Spring 契约 1 项及 33 文件快照比对通过。
+
+### 2026-08-16（P2-09 Runtime Token Broker 和 Runtime Session Bridge）
+
+- Desktop Main 新增 Runtime Token Broker：只在 Main 内存持有 Runtime Lease，固定 15 分钟 TTL、剩余 3 分钟刷新、single-flight、Runtime 重启重新注入和退出时内存清理；Renderer 只接收脱敏状态。
+- Desktop Main 与 Python Runtime 接入本地 `PUT/DELETE /v1/managed/session`、`GET /v1/managed/session/status` 和 `POST /v1/managed/auth-result`；Runtime Session Store 线程安全、纯内存且禁止通过状态或 repr 暴露 Token、Session ID、用户或设备标识。
+- Cloud 复核 Runtime Session Controller 与应用服务回归覆盖：撤销返回 204、无 Entitlement、设备绑定不匹配和已撤销设备均拒绝签发；不新增 Flyway、Redis 或 v1 公共契约字段。
+- P2-09 不接入 `managed_auth_refresh_required` SSE 到 Renderer，也不实现 Managed Provider、JWKS 数据面验签或 P2-10 的离线/时钟偏差/并发异常矩阵。
+- 本轮完成 Desktop 134 项单元测试、14 项契约测试、86 项 Runtime 测试、检索评测和生产构建；Cloud 控制面 66 项 Maven 测试、契约 Python 15 项、TypeScript 1 项、Spring 1 项，契约制品和 33 文件快照校验均通过。

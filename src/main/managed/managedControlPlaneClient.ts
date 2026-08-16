@@ -9,6 +9,8 @@ export type ManagedControlPlaneErrorCode =
   | 'device_access_denied'
   | 'device_not_found'
   | 'device_conflict'
+  | 'runtime_session_not_found'
+  | 'capability_not_entitled'
   | 'unsupported_client_version'
   | 'invalid_request'
   | 'internal_error'
@@ -45,6 +47,16 @@ export interface ManagedDeviceRegistrationInput {
   platform: 'windows'
 }
 
+/** 控制面一次性返回的 Runtime Session Lease，仅允许在 Main 内存中使用。 */
+export interface ManagedRuntimeSessionLease {
+  sessionId: string
+  accessToken: string
+  tokenType: 'Bearer'
+  issuedAt: string
+  expiresAt: string
+  entitlementVersion: number
+}
+
 /** 调用设备控制面 API，统一请求头、超时和 ErrorEnvelope 解析。 */
 export class ManagedControlPlaneClient {
   constructor(
@@ -78,6 +90,25 @@ export class ManagedControlPlaneClient {
   /** 撤销当前桌面设备及其服务端授权关联。 */
   async revokeDevice(accessToken: string, deviceId: string): Promise<void> {
     await this.request<null>(`/api/v1/devices/${encodeURIComponent(deviceId)}`, {
+      method: 'DELETE',
+      accessToken,
+      expectBody: false
+    })
+  }
+
+  /** 为当前 OAuth 授权绑定的设备创建短期 Runtime Session。 */
+  async createRuntimeSession(accessToken: string, deviceId: string): Promise<ManagedRuntimeSessionLease> {
+    const payload = await this.request<unknown>('/api/v1/runtime-sessions', {
+      method: 'POST',
+      accessToken,
+      body: { deviceId }
+    })
+    return requireRuntimeSession(payload)
+  }
+
+  /** 撤销属于当前用户的指定 Runtime Session。 */
+  async revokeRuntimeSession(accessToken: string, sessionId: string): Promise<void> {
+    await this.request<null>(`/api/v1/runtime-sessions/${encodeURIComponent(sessionId)}`, {
       method: 'DELETE',
       accessToken,
       expectBody: false
@@ -184,11 +215,40 @@ function isErrorCode(value: unknown): value is Exclude<ManagedControlPlaneErrorC
     'device_access_denied',
     'device_not_found',
     'device_conflict',
+    'runtime_session_not_found',
+    'capability_not_entitled',
     'unsupported_client_version',
     'invalid_request',
     'internal_error',
     'network_error'
   ].includes(value as string)
+}
+
+/** 严格校验短期 Runtime Session，拒绝把不可信响应写入 Main 内存。 */
+function requireRuntimeSession(value: unknown): ManagedRuntimeSessionLease {
+  if (!value || typeof value !== 'object') {
+    throw new ManagedControlPlaneError(null, 'internal_error', false)
+  }
+  const session = value as Record<string, unknown>
+  if (
+    typeof session.sessionId !== 'string' || !isUuid(session.sessionId) ||
+    typeof session.accessToken !== 'string' || session.accessToken.length < 32 ||
+    session.tokenType !== 'Bearer' ||
+    typeof session.issuedAt !== 'string' || !isTimestamp(session.issuedAt) ||
+    typeof session.expiresAt !== 'string' || !isTimestamp(session.expiresAt) ||
+    Date.parse(session.expiresAt) - Date.parse(session.issuedAt) !== 15 * 60 * 1_000 ||
+    !Number.isInteger(session.entitlementVersion) || Number(session.entitlementVersion) < 1
+  ) {
+    throw new ManagedControlPlaneError(null, 'internal_error', false)
+  }
+  return {
+    sessionId: session.sessionId,
+    accessToken: session.accessToken,
+    tokenType: 'Bearer',
+    issuedAt: session.issuedAt,
+    expiresAt: session.expiresAt,
+    entitlementVersion: Number(session.entitlementVersion)
+  }
 }
 
 /** 严格校验服务端设备快照，防止不可信响应进入 Main 会话状态。 */

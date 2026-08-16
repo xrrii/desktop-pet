@@ -6,8 +6,10 @@ import secrets
 from collections.abc import Callable
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import Response, StreamingResponse
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from ..config import RuntimeConfig
 from ..protocol import (
@@ -19,6 +21,8 @@ from ..protocol import (
     MemoryClearRequest,
     MemoryCandidateResolutionRequest,
     MemoryItemRequest,
+    ManagedAuthResult,
+    ManagedSessionUpdate,
     KnowledgeLibraryCreateRequest,
     ToolLogRequest,
     ToolResultRequest,
@@ -26,6 +30,7 @@ from ..protocol import (
     SkillInstallRequest,
     SkillLocalPreviewRequest,
 )
+from ..managed.auth_refresh import ManagedAuthResultValue
 from ..skills.manifest import SkillManifestError
 from .resources import create_runtime_resources
 
@@ -38,6 +43,13 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     """创建带本地 SQLite、聊天、工具和记忆接口的 FastAPI 应用。"""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     resources = create_runtime_resources(config)
+
+    @app.exception_handler(RequestValidationError)
+    async def managed_validation_error(request: Request, exception: RequestValidationError) -> Response:
+        """Managed 本地契约使用 400，其余既有路由继续保留 FastAPI 默认行为。"""
+        if request.url.path.startswith("/v1/managed/"):
+            return JSONResponse(status_code=400, content={"detail": "请求参数无效。"})
+        return await request_validation_exception_handler(request, exception)
     store = resources.memory
     attachments = resources.attachments
     vision = resources.vision
@@ -49,6 +61,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     skills = resources.skills
     skill_installer = resources.skill_installer
     service = resources.assistant
+    managed_session = resources.managed_session
+    managed_auth_refresh = resources.managed_auth_refresh
 
     def authorize(authorization: str | None) -> None:
         """校验除健康检查外所有接口使用的 Runtime 启动令牌。"""
@@ -67,6 +81,53 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
             "embeddingProfileId": embedding.descriptor.id,
             "indexSignature": embedding.descriptor.signature,
         }
+
+    @app.put("/v1/managed/session", status_code=204)
+    async def update_managed_session(
+        request: ManagedSessionUpdate,
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        """原子更新 Runtime 内存中的官方短期 Session。"""
+        authorize(authorization)
+        managed_session.update(
+            request.accessToken,
+            request.expiresAt,
+            request.capabilitySnapshotVersion,
+        )
+        return Response(status_code=204)
+
+    @app.delete("/v1/managed/session", status_code=204)
+    async def clear_managed_session(
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        """幂等清除 Runtime 内存中的官方 Session。"""
+        authorize(authorization)
+        managed_session.clear()
+        return Response(status_code=204)
+
+    @app.get("/v1/managed/session/status")
+    async def managed_session_status(
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        """返回不包含 Token 和身份标识的 Managed Session 状态。"""
+        authorize(authorization)
+        return managed_session.status()
+
+    @app.post("/v1/managed/auth-result", status_code=202)
+    async def submit_managed_auth_result(
+        request: ManagedAuthResult,
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        """把 Main 刷新结果提交给等待中的任务。"""
+        authorize(authorization)
+        accepted = await managed_auth_refresh.submit(
+            str(request.taskId),
+            str(request.requestId),
+            ManagedAuthResultValue(request.result, request.errorCode),
+        )
+        if not accepted:
+            raise HTTPException(status_code=404, detail="Managed 认证刷新任务不存在。")
+        return Response(status_code=202)
 
     @app.post("/v1/chat")
     async def chat(

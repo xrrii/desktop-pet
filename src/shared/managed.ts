@@ -24,6 +24,23 @@ export type ManagedSessionSyncState =
   | 'reauth_required'
   | 'failed'
 
+/** Renderer 只可见 Runtime Token Broker 的脱敏生命周期状态。 */
+export type ManagedRuntimeSessionState =
+  | 'idle'
+  | 'provisioning'
+  | 'waiting_runtime'
+  | 'ready'
+  | 'failed'
+
+/** Runtime Session 失败的稳定分类，不包含请求正文或 Token。 */
+export type ManagedRuntimeSessionErrorCode =
+  | 'managed_runtime_session_failed'
+  | 'managed_runtime_bridge_failed'
+  | 'managed_capability_not_entitled'
+  | 'managed_unsupported_client_version'
+  | 'managed_authentication_required'
+  | null
+
 /** Renderer 可见的稳定登录错误分类。 */
 export type ManagedAuthErrorCode =
   | 'managed_login_disabled'
@@ -84,6 +101,8 @@ export interface ManagedAuthStatus {
   minimumClientVersion: string | null
   errorCode: ManagedAuthErrorCode | null
   sessionSyncState: ManagedSessionSyncState
+  runtimeSessionState: ManagedRuntimeSessionState
+  runtimeSessionErrorCode: ManagedRuntimeSessionErrorCode
   account: ManagedAccountSnapshot | null
   device: ManagedDeviceStatus | null
 }

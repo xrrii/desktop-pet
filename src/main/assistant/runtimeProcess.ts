@@ -16,6 +16,11 @@ import { normalizeRuntimeEnvironment } from './runtimeEnvironment'
 const START_TIMEOUT_MS = 30_000
 const STOP_TIMEOUT_MS = 3_000
 
+export interface AssistantRuntimeLifecycle {
+  onReady?: (client: AssistantRuntimeClient) => void | Promise<void>
+  onStopped?: (client: AssistantRuntimeClient) => void
+}
+
 export class AssistantRuntimeProcess {
   private child: ChildProcessWithoutNullStreams | null = null
   private client: AssistantRuntimeClient | null = null
@@ -25,7 +30,8 @@ export class AssistantRuntimeProcess {
 
   constructor(
     private readonly onStatus: (status: AssistantRuntimeStatus) => void,
-    private readonly getRuntimeEnvironment: () => Record<string, string> = () => ({})
+    private readonly getRuntimeEnvironment: () => Record<string, string> = () => ({}),
+    private readonly lifecycle: AssistantRuntimeLifecycle = {}
   ) {}
 
   getStatus(): AssistantRuntimeStatus {
@@ -62,7 +68,12 @@ export class AssistantRuntimeProcess {
     }
 
     this.setStatus({ ...this.status, state: 'stopping', error: null })
-    await this.client?.shutdown().catch(() => undefined)
+    const client = this.client
+    if (client) {
+      this.lifecycle.onStopped?.(client)
+      this.client = null
+    }
+    await client?.shutdown().catch(() => undefined)
 
     if (child.exitCode === null) {
       const exited = await waitForExit(child, STOP_TIMEOUT_MS)
@@ -130,8 +141,12 @@ export class AssistantRuntimeProcess {
       if (this.child !== child) {
         return
       }
+      const exitedClient = this.client
       this.child = null
       this.client = null
+      if (exitedClient) {
+        this.lifecycle.onStopped?.(exitedClient)
+      }
       if (!this.stopping) {
         const error = `Assistant Runtime exited (code=${String(code)}, signal=${String(signal)}).`
         logError(error)
@@ -145,6 +160,10 @@ export class AssistantRuntimeProcess {
       await waitForHealth(client)
       this.client = client
       this.setStatus({ state: 'ready', backend: readiness.backend, error: null })
+      void Promise.resolve(this.lifecycle.onReady?.(client)).catch(() => {
+        // Managed Bridge 失败不得阻断 BYOK Runtime 启动，详细状态由 Broker 单独上报。
+        logError('assistant runtime managed session synchronization failed')
+      })
       logInfo('assistant runtime ready', {
         pid: readiness.pid,
         port: readiness.port,

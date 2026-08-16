@@ -81,7 +81,13 @@ describe('AssistantRuntimeProcess', () => {
       child.emit('exit', 0, null)
     })
     const statuses: string[] = []
-    const runtime = new AssistantRuntimeProcess((status) => statuses.push(status.state))
+    const onReady = vi.fn()
+    const onStopped = vi.fn()
+    const runtime = new AssistantRuntimeProcess(
+      (status) => statuses.push(status.state),
+      () => ({}),
+      { onReady, onStopped }
+    )
 
     const starting = runtime.start()
     const stopping = runtime.stop()
@@ -96,6 +102,8 @@ describe('AssistantRuntimeProcess', () => {
     await expect(starting).resolves.toBeInstanceOf(AssistantRuntimeClient)
     await stopping
 
+    expect(onReady).toHaveBeenCalledOnce()
+    expect(onStopped).toHaveBeenCalledOnce()
     expect(shutdown).toHaveBeenCalledOnce()
     expect(child.kill).not.toHaveBeenCalled()
     expect(statuses.at(-1)).toBe('stopped')

@@ -197,7 +197,7 @@ src/main/managed/
   managedAccountSessionManager.ts
 ```
 
-P2-06 至 P2-08 已落地。`managedAuthManager` 只在进程内保留 Access/Refresh Token；Preload 只暴露账号、设备显示状态和会话同步状态等脱敏快照。P2-09 Runtime Token Broker 仍未实现。
+P2-06 至 P2-09 已落地。`managedAuthManager` 只在进程内保留 Access/Refresh Token；Preload 只暴露账号、设备显示状态和会话同步状态等脱敏快照；Runtime Token Broker 只在 Electron Main 内存持有短期 Runtime Lease，Python Runtime 通过本地 Session Bridge 获取并保持内存态。
 
 本地联调通过未提交环境变量选择端点：`PETDOCK_MANAGED_ENVIRONMENT=local-mock` 或 `shared-dev`，并同时设置 `PETDOCK_MANAGED_ISSUER` 与 `PETDOCK_MANAGED_CONTROL_PLANE_URL`。生产和预发布不读取这些覆盖值，固定使用契约中的官方端点。
 
@@ -328,7 +328,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 
 本次冻结已确定 OIDC Discovery/UserInfo/Token Response、RFC 7009 主动撤销、`managed_login_enabled` 服务端下发、开发端点覆盖和生产固定校验、设备显示名与重复注册、HTTP `Date` 服务端时间，以及 PostgreSQL/Redis 的 shared-dev 和生产环境隔离规则。
 
-云端已完成 P2-01、P2-02、P2-04、P2-05 和 P2-08 UserInfo 衔接，具备持久化用户目录、设备、授权记录、Runtime Token 签发、撤销审计、签名密钥轮换基础和安全审计回归门禁；Entitlement 管理与 Usage API 按确认延后。桌面端 P2-06 至 P2-08 已完成，下一步进入 Runtime Token Broker。
+云端已完成 P2-01、P2-02、P2-04、P2-05、P2-08 UserInfo 衔接和 P2-09 Runtime Session 回归覆盖，具备持久化用户目录、设备、授权记录、Runtime Token 签发、撤销审计、签名密钥轮换基础和安全审计回归门禁；Entitlement 管理与 Usage API 按确认延后。桌面端 P2-06 至 P2-09 已完成，下一步进入 P2-10 过期、离线、时钟偏差和并发刷新异常矩阵。
 
 ## 13. 实施顺序
 
@@ -338,7 +338,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 4. `P2-06`：桌面 PKCE、loopback 和本地 Mock OAuth 验收。
 5. `P2-07`：Refresh Token `safeStorage`、轮换和恢复。
 6. `P2-08`：账号/设备脱敏快照、退出和撤销。
-7. `P2-09`：Runtime Token Broker 和本地 Runtime Session API。
+7. `P2-09`：Runtime Token Broker 和本地 Runtime Session API（已完成）。
 8. `P2-10`：离线、过期、时钟偏差、重复登录和并发刷新。
 9. `P2-W01` 至 `P2-W04`：官网页面和授权确认。
 10. `P2-11`：官网管理入口和返回应用刷新。
