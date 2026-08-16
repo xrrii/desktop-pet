@@ -327,13 +327,13 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 
 本次冻结已确定 OIDC Discovery/UserInfo/Token Response、RFC 7009 主动撤销、`managed_login_enabled` 服务端下发、开发端点覆盖和生产固定校验、设备显示名与重复注册、HTTP `Date` 服务端时间，以及 PostgreSQL/Redis 的 shared-dev 和生产环境隔离规则。
 
-云端已完成 P2-01、P2-02 和 P2-04，具备持久化用户目录、设备、授权记录、Runtime Token 签发、撤销审计和签名密钥轮换基础；Entitlement 管理与 Usage API 按确认延后。桌面端可以开始不依赖真实公网的 Mock OAuth、PKCE 和 loopback 模块。
+云端已完成 P2-01、P2-02、P2-04 和 P2-05，具备持久化用户目录、设备、授权记录、Runtime Token 签发、撤销审计、签名密钥轮换基础和安全审计回归门禁；Entitlement 管理与 Usage API 按确认延后。桌面端可以开始不依赖真实公网的 Mock OAuth、PKCE 和 loopback 模块。
 
 ## 13. 实施顺序
 
 1. `P2-00`：冻结契约缺口、开发环境和数据库/中间件选型（已完成）。
 2. 建立 `shared-dev` 服务器内部网络、开发数据库、中间件、备份和受控接入。
-3. `P2-01` 至 `P2-05`：云端身份、设备、会话、Entitlement、JWKS 和审计（P2-01、P2-02、P2-04 已完成，Entitlement 管理延后）。
+3. `P2-01` 至 `P2-05`：云端身份、设备、会话、Entitlement、JWKS 和审计（P2-01、P2-02、P2-04、P2-05 已完成，Entitlement 管理延后）。
 4. `P2-06`：桌面 PKCE、loopback 和本地 Mock OAuth 验收。
 5. `P2-07`：Refresh Token `safeStorage`、轮换和恢复。
 6. `P2-08`：账号/设备脱敏快照、退出和撤销。
