@@ -21,6 +21,22 @@
           </div>
         </header>
         <div class="settings-content">
+          <section id="managed-account-panel" class="managed-account-panel" aria-labelledby="managed-account-title">
+            <div class="settings-section-heading">
+              <strong id="managed-account-title">PetDock Cloud</strong>
+              <small id="managed-account-status" role="status">未登录</small>
+            </div>
+            <div class="managed-account-summary">
+              <strong id="managed-account-name">未登录</strong>
+              <small id="managed-account-email"></small>
+              <small id="managed-device-name"></small>
+            </div>
+            <div class="settings-actions">
+              <button id="managed-login" class="secondary-button" type="button">登录</button>
+              <button id="managed-logout" class="secondary-button" type="button" disabled>退出登录</button>
+              <button id="managed-revoke-device" class="secondary-button" type="button" disabled>撤销此设备</button>
+            </div>
+          </section>
           <form id="model-settings-form" class="model-settings-form">
             <div class="settings-section-heading">
               <strong>主模型</strong>

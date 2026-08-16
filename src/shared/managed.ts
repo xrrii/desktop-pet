@@ -14,6 +14,16 @@ export type ManagedAuthState =
   | 'offline'
   | 'unsupported_client'
 
+/** Main 内账号和设备同步的脱敏状态。 */
+export type ManagedSessionSyncState =
+  | 'idle'
+  | 'syncing'
+  | 'ready'
+  | 'logging_out'
+  | 'device_revoked'
+  | 'reauth_required'
+  | 'failed'
+
 /** Renderer 可见的稳定登录错误分类。 */
 export type ManagedAuthErrorCode =
   | 'managed_login_disabled'
@@ -31,6 +41,41 @@ export type ManagedAuthErrorCode =
   | 'managed_refresh_invalid_grant'
   | 'managed_refresh_failed'
   | 'managed_refresh_response_invalid'
+  | 'managed_userinfo_failed'
+  | 'managed_session_sync_failed'
+  | 'managed_logout_failed'
+  | 'managed_device_revoked'
+  | 'managed_device_conflict'
+  | 'managed_device_access_denied'
+  | 'managed_device_not_found'
+  | 'managed_unsupported_client_version'
+
+/** 只包含 UserInfo 契约允许展示的账号字段。 */
+export interface ManagedAccountSnapshot {
+  email: string
+  emailVerified: boolean
+  username: string
+  displayName: string
+}
+
+/** Main 内部使用的完整设备快照；deviceId 不通过 IPC 暴露。 */
+export interface ManagedDeviceSnapshot {
+  id: string
+  displayName: string
+  current: boolean
+  status: 'active' | 'revoked'
+  createdAt: string
+  lastSeenAt: string
+}
+
+/** Renderer 可见的设备脱敏状态。 */
+export interface ManagedDeviceStatus {
+  displayName: string
+  current: boolean
+  status: 'active' | 'revoked'
+  createdAt: string
+  lastSeenAt: string
+}
 
 /** Main 向 Renderer 返回的脱敏认证快照。 */
 export interface ManagedAuthStatus {
@@ -38,4 +83,7 @@ export interface ManagedAuthStatus {
   managedLoginEnabled: boolean
   minimumClientVersion: string | null
   errorCode: ManagedAuthErrorCode | null
+  sessionSyncState: ManagedSessionSyncState
+  account: ManagedAccountSnapshot | null
+  device: ManagedDeviceStatus | null
 }

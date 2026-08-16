@@ -431,6 +431,16 @@ function registerIpc(): void {
     return managedAuthManager.cancel()
   })
 
+  ipcMain.handle('managed:logout', (event) => {
+    requirePetSender(event)
+    return managedAuthManager.logout()
+  })
+
+  ipcMain.handle('managed:revoke-current-device', (event) => {
+    requirePetSender(event)
+    return managedAuthManager.revokeCurrentDevice()
+  })
+
   ipcMain.handle('assistant:get-capability-settings', (event) => {
     requirePetSender(event)
     return assistantManager.getCapabilitySettings()

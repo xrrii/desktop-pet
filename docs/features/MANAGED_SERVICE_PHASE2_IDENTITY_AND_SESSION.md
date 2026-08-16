@@ -192,17 +192,20 @@ src/main/managed/
   managedOAuthClient.ts
   managedOAuthLoopback.ts
   managedOAuthTypes.ts
+  managedControlPlaneClient.ts
+  managedDeviceIdentityManager.ts
+  managedAccountSessionManager.ts
 ```
 
-P2-06 已落地的 Main 侧模块如上。`managedAuthManager` 只在进程内保留 Access/Refresh Token；Preload 只暴露登录命令和 `ManagedAuthStatus` 脱敏快照。`safeStorage`、UserInfo、设备注册和 Runtime Token Broker 分别延后到 P2-07 至 P2-09。
+P2-06 至 P2-08 已落地。`managedAuthManager` 只在进程内保留 Access/Refresh Token；Preload 只暴露账号、设备显示状态和会话同步状态等脱敏快照。P2-09 Runtime Token Broker 仍未实现。
 
 本地联调通过未提交环境变量选择端点：`PETDOCK_MANAGED_ENVIRONMENT=local-mock` 或 `shared-dev`，并同时设置 `PETDOCK_MANAGED_ISSUER` 与 `PETDOCK_MANAGED_CONTROL_PLANE_URL`。生产和预发布不读取这些覆盖值，固定使用契约中的官方端点。
 
 职责边界：
 
-- `managedAuthManager.ts`：P2-06 登录状态机、取消和退出清理；启动恢复与撤销编排留给后续阶段。
+- `managedAuthManager.ts`：登录状态机、取消、启动恢复、UserInfo/设备同步、RFC 7009 退出和当前设备撤销编排。
 - `managedOAuthLoopback.ts`：只监听 `127.0.0.1` 随机端口，校验回调路径、`state`、超时和一次性消费。
-- `managedTokenStore.ts`、`managedControlPlaneClient.ts`、`managedDeviceIdentityManager.ts`、`managedRuntimeTokenBroker.ts`、`managedAccountSnapshot.ts`：分别在 P2-07 至 P2-09 新增，当前不提前实现。
+- `managedTokenStore.ts`：P2-07 使用 `safeStorage` 保存 Refresh Token；`managedControlPlaneClient.ts`、`managedDeviceIdentityManager.ts` 和 `managedAccountSessionManager.ts`：P2-08 负责 UserInfo、设备同步和撤销；`managedRuntimeTokenBroker.ts`：P2-09 负责 Runtime Token。
 - `managedFeatureFlags.ts`：处理 `managed_login_enabled` 和开发环境端点覆盖，生产构建固定官方端点。
 
 ## 7. OAuth PKCE 与 Loopback
@@ -213,7 +216,7 @@ P2-06 已落地的 Main 侧模块如上。`managedAuthManager` 只在进程内�
 issuer=https://account.petdock.site
 client_id=petdock-desktop
 response_type=code
-scope=desktop.session
+scope=openid profile email desktop.session
 code_challenge_method=S256
 redirect_path=/oauth/callback
 ```
@@ -227,7 +230,7 @@ redirect_path=/oauth/callback
 5. 校验回调方法、路径、`state`、错误参数和一次性消费状态。
 6. 使用原始 `code_verifier` 换取桌面 Access/Refresh Token。
 7. 先安全保存轮换后的 Refresh Token，再更新内存会话。
-8. 注册或确认设备，读取 Entitlement，并创建 Runtime Session。
+8. 获取 UserInfo 并注册或确认当前设备；Entitlement 和 Runtime Session 由后续阶段负责。
 9. 成功、失败、用户取消或 5 分钟超时后立即关闭监听器。
 
 授权码、Token、Verifier、Cookie 和完整回调查询参数不得进入日志、Renderer、截图或错误消息。
@@ -325,7 +328,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 
 本次冻结已确定 OIDC Discovery/UserInfo/Token Response、RFC 7009 主动撤销、`managed_login_enabled` 服务端下发、开发端点覆盖和生产固定校验、设备显示名与重复注册、HTTP `Date` 服务端时间，以及 PostgreSQL/Redis 的 shared-dev 和生产环境隔离规则。
 
-云端已完成 P2-01、P2-02、P2-04 和 P2-05，具备持久化用户目录、设备、授权记录、Runtime Token 签发、撤销审计、签名密钥轮换基础和安全审计回归门禁；Entitlement 管理与 Usage API 按确认延后。桌面端可以开始不依赖真实公网的 Mock OAuth、PKCE 和 loopback 模块。
+云端已完成 P2-01、P2-02、P2-04、P2-05 和 P2-08 UserInfo 衔接，具备持久化用户目录、设备、授权记录、Runtime Token 签发、撤销审计、签名密钥轮换基础和安全审计回归门禁；Entitlement 管理与 Usage API 按确认延后。桌面端 P2-06 至 P2-08 已完成，下一步进入 Runtime Token Broker。
 
 ## 13. 实施顺序
 

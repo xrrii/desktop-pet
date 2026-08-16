@@ -10,6 +10,12 @@ import { resolveManagedEndpointPolicy } from './managedEndpointPolicy'
 import { ManagedOidcClient, ManagedOidcClientError } from './managedOAuthClient'
 import { ManagedOAuthLoopbackError, ManagedOAuthLoopbackSession } from './managedOAuthLoopback'
 import type { ManagedEndpointPolicy, ManagedOAuthClient, ManagedTokenSet } from './managedOAuthTypes'
+import { ManagedControlPlaneError, ManagedControlPlaneClient } from './managedControlPlaneClient'
+import {
+  ManagedAccountSessionManager,
+  type ManagedAccountSessionSnapshot
+} from './managedAccountSessionManager'
+import { ManagedDeviceIdentityManager } from './managedDeviceIdentityManager'
 import {
   ElectronManagedTokenStore,
   ManagedTokenStoreError,
@@ -20,7 +26,10 @@ const DEFAULT_STATUS: ManagedAuthStatus = {
   state: 'disabled',
   managedLoginEnabled: false,
   minimumClientVersion: null,
-  errorCode: null
+  errorCode: null,
+  sessionSyncState: 'idle',
+  account: null,
+  device: null
 }
 
 /**
@@ -31,16 +40,20 @@ export class ManagedAuthManager {
   private status: ManagedAuthStatus = { ...DEFAULT_STATUS }
   private activeLogin: Promise<ManagedAuthStatus> | null = null
   private activeRefresh: Promise<ManagedAuthStatus> | null = null
+  private activeSessionCommand: Promise<ManagedAuthStatus> | null = null
   private loopback: ManagedOAuthLoopbackSession | null = null
   private cancelRequested = false
   private disposed = false
   private accessToken: string | null = null
   private refreshToken: string | null = null
   private pendingTokenSet: ManagedTokenSet | null = null
+  private sessionSnapshot: ManagedAccountSessionSnapshot | null = null
 
   private readonly featureFlags: ManagedFeatureFlags
   private readonly oauthClient: ManagedOAuthClient
   private readonly tokenStore: ManagedTokenStore
+  private readonly accountSessionManager: ManagedAccountSessionManager | null
+  private readonly deviceIdentityManager: ManagedDeviceIdentityManager | null
 
   constructor(
     private readonly policy: ManagedEndpointPolicy = resolveManagedEndpointPolicy(),
@@ -49,13 +62,28 @@ export class ManagedAuthManager {
       featureFlags?: ManagedFeatureFlags
       oauthClient?: ManagedOAuthClient
       tokenStore?: ManagedTokenStore
+      accountSessionManager?: ManagedAccountSessionManager
       openExternal?: (url: string) => Promise<void>
       onStatusChange?: (status: ManagedAuthStatus) => void
     } = {}
   ) {
     this.featureFlags = dependencies.featureFlags || new ManagedFeatureFlags(policy, clientVersion)
-    this.oauthClient = dependencies.oauthClient || new ManagedOidcClient(policy.issuer)
+    const oauthClient = dependencies.oauthClient || new ManagedOidcClient(policy.issuer)
+    this.oauthClient = oauthClient
     this.tokenStore = dependencies.tokenStore || new ElectronManagedTokenStore()
+    const supportsManagedSession = Boolean(oauthClient.fetchUserInfo && oauthClient.revokeRefreshToken)
+    this.deviceIdentityManager = !dependencies.accountSessionManager && supportsManagedSession
+      ? new ManagedDeviceIdentityManager(policy.issuer)
+      : null
+    this.accountSessionManager = dependencies.accountSessionManager || (
+      oauthClient.fetchUserInfo && oauthClient.revokeRefreshToken && this.deviceIdentityManager
+        ? new ManagedAccountSessionManager(
+            oauthClient,
+            new ManagedControlPlaneClient(policy, clientVersion),
+            this.deviceIdentityManager
+          )
+        : null
+    )
     this.openExternal = dependencies.openExternal || ((url) => shell.openExternal(url))
     this.onStatusChange = dependencies.onStatusChange || (() => undefined)
   }
@@ -65,7 +93,11 @@ export class ManagedAuthManager {
 
   /** 获取只包含登录状态和稳定错误分类的快照。 */
   getStatus(): ManagedAuthStatus {
-    return { ...this.status }
+    return {
+      ...this.status,
+      account: this.status.account ? { ...this.status.account } : null,
+      device: this.status.device ? { ...this.status.device } : null
+    }
   }
 
   /** 登录前刷新服务端开关，供 Renderer 决定是否展示官方登录入口。 */
@@ -108,6 +140,40 @@ export class ManagedAuthManager {
     return this.startRefreshTask(() => this.runSessionRestore())
   }
 
+  /** 撤销当前桌面会话的 Refresh Token，并在服务端确认后清理本地凭据。 */
+  logout(): Promise<ManagedAuthStatus> {
+    if (this.activeSessionCommand) {
+      return this.activeSessionCommand
+    }
+    if (this.activeLogin) {
+      return this.activeLogin.then(() => this.logout())
+    }
+    if (this.activeRefresh) {
+      return this.activeRefresh.then(() => this.logout())
+    }
+    this.activeSessionCommand = this.runLogout().finally(() => {
+      this.activeSessionCommand = null
+    })
+    return this.activeSessionCommand
+  }
+
+  /** 撤销当前设备及其服务端授权关联，禁止 Renderer 指定任意设备 ID。 */
+  revokeCurrentDevice(): Promise<ManagedAuthStatus> {
+    if (this.activeSessionCommand) {
+      return this.activeSessionCommand
+    }
+    if (this.activeLogin) {
+      return this.activeLogin.then(() => this.revokeCurrentDevice())
+    }
+    if (this.activeRefresh) {
+      return this.activeRefresh.then(() => this.revokeCurrentDevice())
+    }
+    this.activeSessionCommand = this.runRevokeCurrentDevice().finally(() => {
+      this.activeSessionCommand = null
+    })
+    return this.activeSessionCommand
+  }
+
   /** 取消当前浏览器授权并清理 loopback 监听器。 */
   cancel(): ManagedAuthStatus {
     if (this.activeLogin) {
@@ -128,9 +194,17 @@ export class ManagedAuthManager {
     this.loopback = null
     this.activeLogin = null
     this.activeRefresh = null
+    this.activeSessionCommand = null
     this.accessToken = null
     this.refreshToken = null
     this.pendingTokenSet = null
+    this.sessionSnapshot = null
+    this.status = {
+      ...this.status,
+      account: null,
+      device: null,
+      sessionSyncState: 'idle'
+    }
   }
 
   /** 暴露给后续控制面调用的 Main 内存 Access Token，当前不通过 IPC 返回。 */
@@ -174,6 +248,10 @@ export class ManagedAuthManager {
       await this.persistTokenSet(tokenSet, 'token_exchange')
       if (this.disposed) {
         return this.getStatus()
+      }
+      const syncFailure = await this.establishSession(tokenSet.idTokenSubject, true)
+      if (syncFailure) {
+        return syncFailure
       }
       this.setStatus({ state: 'authenticated', errorCode: null })
       logInfo('managed OAuth login authenticated')
@@ -224,6 +302,10 @@ export class ManagedAuthManager {
       if (this.disposed) {
         return this.getStatus()
       }
+      const syncFailure = await this.establishSession(tokenSet.idTokenSubject, false)
+      if (syncFailure) {
+        return syncFailure
+      }
       this.setStatus({ state: 'authenticated', errorCode: null })
       logInfo('managed session restored')
       return this.getStatus()
@@ -261,6 +343,10 @@ export class ManagedAuthManager {
     try {
       await this.persistTokenSet(tokenSet, 'refresh')
       if (!this.disposed) {
+        const syncFailure = await this.establishSession(tokenSet.idTokenSubject, true)
+        if (syncFailure) {
+          return syncFailure
+        }
         this.setStatus({ state: 'authenticated', errorCode: null })
         logInfo('managed pending session persisted')
       }
@@ -314,6 +400,208 @@ export class ManagedAuthManager {
     }
   }
 
+  /** 同步 UserInfo 和当前设备；失败时保留可重试凭据但不伪造 ready。 */
+  private async establishSession(
+    expectedSubject?: string | null,
+    retryExpiredAccessToken = false
+  ): Promise<ManagedAuthStatus | null> {
+    if (!this.accountSessionManager || !this.accessToken) {
+      this.setStatus({ sessionSyncState: 'ready' })
+      return null
+    }
+    this.setStatus({ sessionSyncState: 'syncing', account: null, device: null })
+    try {
+      const snapshot = await this.synchronizeAccountSession(expectedSubject, retryExpiredAccessToken)
+      this.sessionSnapshot = snapshot
+      this.setStatus({
+        sessionSyncState: 'ready',
+        account: snapshot.account,
+        device: toManagedDeviceStatus(snapshot.device)
+      })
+      return null
+    } catch (error) {
+      if (isControlPlaneDeviceRevoked(error)) {
+        this.accessToken = null
+        this.refreshToken = null
+        this.pendingTokenSet = null
+        await this.tokenStore.clear().catch(() => undefined)
+        this.sessionSnapshot = null
+        this.setStatus({
+          state: 'reauth_required',
+          sessionSyncState: 'device_revoked',
+          account: null,
+          device: null,
+          errorCode: 'managed_device_revoked'
+        })
+        return this.getStatus()
+      }
+      const mapped = mapSessionError(error)
+      this.setStatus({
+        state: mapped.state,
+        sessionSyncState: 'failed',
+        errorCode: mapped.errorCode
+      })
+      logError('managed account session synchronization failed', { errorCode: mapped.errorCode })
+      return this.getStatus()
+    }
+  }
+
+  /** 执行 RFC 7009 退出；撤销成功后才清理本地 Refresh Token。 */
+  private async runLogout(): Promise<ManagedAuthStatus> {
+    if (!this.refreshToken) {
+      await this.clearLocalSession()
+      this.setStatus({
+        state: this.status.managedLoginEnabled ? 'idle' : 'disabled',
+        sessionSyncState: 'idle',
+        errorCode: null
+      })
+      return this.getStatus()
+    }
+    if (!this.accountSessionManager) {
+      this.setStatus({ sessionSyncState: 'failed', errorCode: 'managed_logout_failed' })
+      return this.getStatus()
+    }
+    this.setStatus({ sessionSyncState: 'logging_out', errorCode: null })
+    try {
+      await this.accountSessionManager.revokeRefreshToken(this.refreshToken)
+      await this.clearLocalSession()
+      this.setStatus({
+        state: this.status.managedLoginEnabled ? 'idle' : 'disabled',
+        sessionSyncState: 'idle',
+        errorCode: null
+      })
+      logInfo('managed session logged out')
+      return this.getStatus()
+    } catch {
+      this.setStatus({ sessionSyncState: 'failed', errorCode: 'managed_logout_failed' })
+      logError('managed logout failed', { errorCode: 'managed_logout_failed' })
+      return this.getStatus()
+    }
+  }
+
+  /** 执行当前设备撤销并删除该账号本地设备映射。 */
+  private async runRevokeCurrentDevice(): Promise<ManagedAuthStatus> {
+    const snapshot = this.sessionSnapshot
+    if (!this.accessToken || !snapshot || !this.accountSessionManager) {
+      this.setStatus({ state: 'reauth_required', sessionSyncState: 'reauth_required', errorCode: 'managed_device_not_found' })
+      return this.getStatus()
+    }
+    this.setStatus({ sessionSyncState: 'logging_out', errorCode: null })
+    try {
+      await this.revokeDeviceWithAccessTokenRetry(this.accountSessionManager, snapshot.device.id)
+    } catch (error) {
+      if (!isControlPlaneDeviceRevoked(error)) {
+        if (error instanceof ManagedControlPlaneError &&
+            (error.code === 'authentication_required' || error.code === 'token_expired')) {
+          this.setStatus({
+            state: 'reauth_required',
+            sessionSyncState: 'reauth_required',
+            errorCode: 'managed_refresh_invalid_grant'
+          })
+          return this.getStatus()
+        }
+        const code = error instanceof ManagedControlPlaneError && error.code === 'device_not_found'
+          ? 'managed_device_not_found'
+          : 'managed_session_sync_failed'
+        this.setStatus({ sessionSyncState: 'failed', errorCode: code })
+        return this.getStatus()
+      }
+    }
+    await this.deviceIdentityManager?.clear(snapshot.subject).catch(() => undefined)
+    try {
+      await this.clearLocalSession()
+    } catch {
+      this.setStatus({
+        state: 'reauth_required',
+        sessionSyncState: 'device_revoked',
+        errorCode: 'managed_token_persist_failed'
+      })
+      return this.getStatus()
+    }
+    this.setStatus({ state: 'reauth_required', sessionSyncState: 'device_revoked', errorCode: 'managed_device_revoked' })
+    logInfo('managed current device revoked')
+    return this.getStatus()
+  }
+
+  /** 清理 Main 内存和本地加密凭据，设备映射由调用方决定是否删除。 */
+  private async clearLocalSession(): Promise<void> {
+    this.accessToken = null
+    this.refreshToken = null
+    this.pendingTokenSet = null
+    this.sessionSnapshot = null
+    await this.tokenStore.clear()
+    this.status = {
+      ...this.status,
+      account: null,
+      device: null
+    }
+  }
+
+  /** 当前 Access Token 失效时只轮换一次 Refresh Token，再重试账号同步。 */
+  private async synchronizeAccountSession(
+    expectedSubject: string | null | undefined,
+    retryExpiredAccessToken: boolean
+  ): Promise<ManagedAccountSessionSnapshot> {
+    if (!this.accountSessionManager || !this.accessToken) {
+      throw new Error('Managed 会话客户端未准备完成。')
+    }
+    try {
+      return await this.accountSessionManager.synchronize(this.accessToken, expectedSubject)
+    } catch (error) {
+      if (!retryExpiredAccessToken || !isAccessTokenRetryable(error)) {
+        throw error
+      }
+      await this.refreshAccessTokenForSession()
+      if (!this.accessToken) {
+        throw error
+      }
+      return this.accountSessionManager.synchronize(this.accessToken, expectedSubject)
+    }
+  }
+
+  /** 当前设备操作遇到 Access Token 过期时只执行一次 Refresh 并重试。 */
+  private async revokeDeviceWithAccessTokenRetry(
+    sessionManager: ManagedAccountSessionManager,
+    deviceId: string
+  ): Promise<void> {
+    if (!this.accessToken) {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    try {
+      await sessionManager.revokeCurrentDevice(this.accessToken, deviceId)
+    } catch (error) {
+      if (!isAccessTokenRetryable(error)) {
+        throw error
+      }
+      await this.refreshAccessTokenForSession()
+      if (!this.accessToken) {
+        throw error
+      }
+      await sessionManager.revokeCurrentDevice(this.accessToken, deviceId)
+    }
+  }
+
+  /** 使用当前 Refresh Token 轮换 Access Token，失败时不清理可重试凭据。 */
+  private async refreshAccessTokenForSession(): Promise<void> {
+    if (!this.refreshToken) {
+      throw new ManagedOidcClientError('refresh', 'invalid_grant')
+    }
+    try {
+      const tokenSet = await this.oauthClient.refresh(this.refreshToken)
+      await this.persistTokenSet(tokenSet, 'refresh')
+    } catch (error) {
+      if (isInvalidGrant(error)) {
+        this.accessToken = null
+        this.refreshToken = null
+        this.pendingTokenSet = null
+        await this.tokenStore.clear().catch(() => undefined)
+        this.sessionSnapshot = null
+        throw new ManagedControlPlaneError(401, 'authentication_required', false)
+      }
+      throw error
+    }
+  }
+
   /** 应用 Feature Flag 脱敏字段，不覆盖已经认证的状态。 */
   private applyFeatureSnapshot(
     features: Awaited<ReturnType<ManagedFeatureFlags['getSnapshot']>>,
@@ -321,6 +609,7 @@ export class ManagedAuthManager {
   ): void {
     const preserveSessionState =
       ['authenticated', 'restoring_session', 'reauth_required'].includes(this.status.state) ||
+      this.status.sessionSyncState !== 'idle' ||
       this.status.errorCode?.startsWith('managed_token_') === true ||
       this.status.errorCode?.startsWith('managed_refresh_') === true
     const nextState = features.managedLoginEnabled
@@ -393,6 +682,62 @@ function mapRefreshError(error: unknown): { state: ManagedAuthState; errorCode: 
     return { state: 'offline', errorCode: 'managed_refresh_failed' }
   }
   return { state: 'offline', errorCode: 'managed_refresh_failed' }
+}
+
+/** 将账号同步错误映射为稳定的 Renderer 错误分类。 */
+function mapSessionError(error: unknown): { state: ManagedAuthState; errorCode: ManagedAuthErrorCode } {
+  if (error instanceof ManagedControlPlaneError) {
+    switch (error.code) {
+      case 'device_conflict':
+        return { state: 'failed', errorCode: 'managed_device_conflict' }
+      case 'device_access_denied':
+        return { state: 'failed', errorCode: 'managed_device_access_denied' }
+      case 'device_not_found':
+        return { state: 'failed', errorCode: 'managed_device_not_found' }
+      case 'unsupported_client_version':
+        return { state: 'unsupported_client', errorCode: 'managed_unsupported_client_version' }
+      case 'authentication_required':
+      case 'token_expired':
+        return { state: 'reauth_required', errorCode: 'managed_refresh_invalid_grant' }
+      default:
+        return { state: 'offline', errorCode: 'managed_session_sync_failed' }
+    }
+  }
+  if (error instanceof ManagedOidcClientError && error.stage === 'userinfo') {
+    return { state: error.reason === 'network' ? 'offline' : 'failed', errorCode: 'managed_userinfo_failed' }
+  }
+  if (isInvalidGrant(error)) {
+    return { state: 'reauth_required', errorCode: 'managed_refresh_invalid_grant' }
+  }
+  return { state: 'offline', errorCode: 'managed_session_sync_failed' }
+}
+
+/** 判断服务端明确返回的设备撤销错误，供撤销操作幂等收敛。 */
+function isControlPlaneDeviceRevoked(error: unknown): boolean {
+  return error instanceof ManagedControlPlaneError && error.code === 'device_revoked'
+}
+
+/** 只把明确的 Access Token 失效视为一次性 Refresh 重试条件。 */
+function isAccessTokenRetryable(error: unknown): boolean {
+  return (
+    error instanceof ManagedControlPlaneError &&
+      (error.code === 'authentication_required' || error.code === 'token_expired')
+  ) || (
+    error instanceof ManagedOidcClientError &&
+      error.stage === 'userinfo' &&
+      error.reason === 'invalid_grant'
+  )
+}
+
+/** 从 Main 完整设备模型生成 IPC 可见脱敏快照。 */
+function toManagedDeviceStatus(device: ManagedAccountSessionSnapshot['device']): ManagedAuthStatus['device'] {
+  return {
+    displayName: device.displayName,
+    current: device.current,
+    status: device.status,
+    createdAt: device.createdAt,
+    lastSeenAt: device.lastSeenAt
+  }
 }
 
 /** 检测服务端明确返回的失效、过期、撤销或复用结果。 */

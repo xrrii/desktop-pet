@@ -28,6 +28,7 @@ import type {
 } from '../../shared/assistant'
 import type { AvailablePet, PetSpritesheetSelection } from '../../shared/pet'
 import type { AssistantThemeId } from '../../shared/theme'
+import type { ManagedAuthStatus } from '../../shared/managed'
 import {
   getCommandPaletteState,
   type AssistantCommandOption
@@ -159,6 +160,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const modelConfiguredStatus = requireElement<HTMLElement>('#model-configured-status')
   const modelSaveStatus = requireElement<HTMLElement>('#model-save-status')
   const settingsBack = requireElement<HTMLButtonElement>('#settings-back')
+  const managedAccountStatus = requireElement<HTMLElement>('#managed-account-status')
+  const managedAccountName = requireElement<HTMLElement>('#managed-account-name')
+  const managedAccountEmail = requireElement<HTMLElement>('#managed-account-email')
+  const managedDeviceName = requireElement<HTMLElement>('#managed-device-name')
+  const managedLogin = requireElement<HTMLButtonElement>('#managed-login')
+  const managedLogout = requireElement<HTMLButtonElement>('#managed-logout')
+  const managedRevokeDevice = requireElement<HTMLButtonElement>('#managed-revoke-device')
   const settingsOpenPetManager = requireElement<HTMLButtonElement>('#settings-open-pet-manager')
   const settingsOpenWeb = requireElement<HTMLButtonElement>('#settings-open-web')
   const settingsOpenKnowledge = requireElement<HTMLButtonElement>('#settings-open-knowledge')
@@ -239,6 +247,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let visionBusy = false
   let modelSettings: AssistantModelSettingsSnapshot | null = null
   let modelBusy = false
+  let managedAuthStatus: ManagedAuthStatus | null = null
+  let managedAuthBusy = false
   let pendingSkillPreview: AssistantSkillInstallPreview | null = null
   let pendingSkillUninstall: AssistantSkillSummary | null = null
   let selectedSkillId: string | null = null
@@ -277,6 +287,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     panel.classList.toggle('is-attachment-drop-target', active && dropZone === 'conversation')
     petRoot.classList.toggle('is-attachment-drop-target', active && dropZone === 'pet')
   })
+  window.desktopPet.onManagedAuthStatus(renderManagedAuthStatus)
+  void window.desktopPet.getManagedAuthStatus().then(renderManagedAuthStatus).catch(showError)
   window.desktopPet.onAssistantOpenMemory(() => {
     if (!busy) {
       if (memoryMode) {
@@ -476,6 +488,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     void saveModelSettings()
   })
   modelClearKey.addEventListener('click', () => void clearModelKey())
+  managedLogin.addEventListener('click', () => void startManagedLogin())
+  managedLogout.addEventListener('click', () => void logoutManaged())
+  managedRevokeDevice.addEventListener('click', () => void revokeManagedCurrentDevice())
   skillButton.addEventListener('click', () => {
     if (!busy) {
       if (skillMode) {
@@ -691,11 +706,99 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
   }
 
+  /** 更新 Managed 账号和当前设备的脱敏展示，绝不渲染 Token 或内部设备 ID。 */
+  function renderManagedAuthStatus(status: ManagedAuthStatus): void {
+    managedAuthStatus = status
+    const account = status.account
+    const device = status.device
+    managedAccountName.textContent = account?.displayName || account?.username || '未登录'
+    managedAccountEmail.textContent = account?.email || ''
+    managedDeviceName.textContent = device
+      ? `当前设备：${device.displayName} · ${device.status === 'active' ? '正常' : '已撤销'}`
+      : ''
+    managedAccountStatus.textContent = managedStatusLabel(status)
+    const authenticated = status.state === 'authenticated' && status.sessionSyncState === 'ready'
+    const synchronizing = status.sessionSyncState === 'syncing' || status.sessionSyncState === 'logging_out'
+    const retainedSession = status.sessionSyncState === 'failed'
+    const loginEligible = status.state === 'idle' || status.state === 'reauth_required'
+    managedLogin.hidden = authenticated || retainedSession || synchronizing || !loginEligible
+    managedLogin.disabled = managedAuthBusy || !status.managedLoginEnabled || !loginEligible
+    managedLogout.disabled = managedAuthBusy || (!authenticated && !retainedSession)
+    managedRevokeDevice.disabled = managedAuthBusy || !authenticated || !device || device.status !== 'active'
+  }
+
+  /** 将 Main 稳定状态转换为设置页短文案。 */
+  function managedStatusLabel(status: ManagedAuthStatus): string {
+    if (status.sessionSyncState === 'logging_out') return '正在退出'
+    if (status.sessionSyncState === 'syncing') return '正在同步账号和设备'
+    if (status.sessionSyncState === 'device_revoked') return '设备授权已撤销'
+    if (status.state === 'authenticated' && status.sessionSyncState === 'ready') return '已登录'
+    if (status.state === 'waiting_callback') return '等待浏览器授权'
+    if (status.state === 'preparing' || status.state === 'exchanging_code') return '正在登录'
+    if (status.state === 'offline') return '服务暂不可用'
+    if (status.state === 'reauth_required') return '需要重新登录'
+    if (status.errorCode === 'managed_device_conflict') return '设备标识冲突'
+    if (status.errorCode === 'managed_device_access_denied') return '设备访问被拒绝'
+    if (status.errorCode === 'managed_userinfo_failed') return '账号资料同步失败'
+    if (status.errorCode === 'managed_session_sync_failed') return '账号或设备同步失败'
+    if (status.errorCode === 'managed_logout_failed') return '退出失败，请重试'
+    return status.managedLoginEnabled ? '未登录' : '官方登录未启用'
+  }
+
+  /** 从设置页发起 Main 托管的 PKCE 登录。 */
+  async function startManagedLogin(): Promise<void> {
+    if (managedAuthBusy) return
+    managedAuthBusy = true
+    try {
+      renderManagedAuthStatus(managedAuthStatus || await window.desktopPet.getManagedAuthStatus())
+      renderManagedAuthStatus(await window.desktopPet.loginManaged())
+    } catch (error) {
+      showError(error)
+    } finally {
+      managedAuthBusy = false
+      if (managedAuthStatus) renderManagedAuthStatus(managedAuthStatus)
+    }
+  }
+
+  /** 通过 RFC 7009 退出当前桌面会话。 */
+  async function logoutManaged(): Promise<void> {
+    if (managedAuthBusy) return
+    managedAuthBusy = true
+    try {
+      renderManagedAuthStatus(await window.desktopPet.logoutManaged())
+    } catch (error) {
+      showError(error)
+    } finally {
+      managedAuthBusy = false
+      if (managedAuthStatus) renderManagedAuthStatus(managedAuthStatus)
+    }
+  }
+
+  /** 撤销当前桌面设备，不允许页面选择任意设备 ID。 */
+  async function revokeManagedCurrentDevice(): Promise<void> {
+    if (managedAuthBusy) return
+    if (!window.confirm('撤销当前设备后需要重新登录，是否继续？')) return
+    managedAuthBusy = true
+    try {
+      renderManagedAuthStatus(await window.desktopPet.revokeManagedCurrentDevice())
+    } catch (error) {
+      showError(error)
+    } finally {
+      managedAuthBusy = false
+      if (managedAuthStatus) renderManagedAuthStatus(managedAuthStatus)
+    }
+  }
+
   /** 打开统一助手配置页，主模型表单与能力入口均只展示脱敏信息。 */
   async function openSettingsView(): Promise<void> {
     clearError()
     try {
-      modelSettings = await window.desktopPet.getAssistantModelSettings()
+      const [nextModelSettings, nextManagedStatus] = await Promise.all([
+        window.desktopPet.getAssistantModelSettings(),
+        window.desktopPet.refreshManagedFeatures()
+      ])
+      modelSettings = nextModelSettings
+      renderManagedAuthStatus(nextManagedStatus)
       settingsMode = true
       conversation.hidden = true
       settingsView.hidden = false

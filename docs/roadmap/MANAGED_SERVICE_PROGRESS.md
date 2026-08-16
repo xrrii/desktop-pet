@@ -51,16 +51,16 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 云端 P2-05 完成，桌面 P2-07 Done
+当前阶段：Phase 2 云端 P2-08 完成，桌面 P2-08 Done
 架构对齐：Decision Frozen
-桌面端 Managed 实现：P2-06、P2-07 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换和启动恢复；账号/设备/Runtime 仍延后）
+桌面端 Managed 实现：P2-06、P2-07、P2-08 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出和当前设备撤销；Runtime 仍延后）
 独立官网前端：Not Started（不在当前仓库）
-Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
+Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：P2-08 账号脱敏快照、设备状态、退出登录和设备撤销
+下一建议工作项：P2-09 Runtime Token Broker 和 Runtime Session Bridge
 ```
 
 当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计和外部签名密钥轮换基础；Entitlement 管理、Usage、Managed Provider、官网和桌面真实登录仍未完成。备案继续只阻塞正式公网联调。
@@ -143,7 +143,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06、P2-07 已完成系统浏览器 PKCE 登录、loopback、Refresh Token safeStorage、轮换和启动恢复。下一工作项进入 `P2-08`，实现 UserInfo 账号脱敏快照、设备注册与状态、退出登录和设备撤销；备案继续只阻塞正式公网域名联调。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-08 已完成系统浏览器 PKCE 登录、loopback、Refresh Token safeStorage、轮换和启动恢复，以及 UserInfo 账号脱敏快照、设备注册与状态、退出登录和设备撤销。下一工作项进入 `P2-09` Runtime Token Broker 和 Runtime Session Bridge；备案继续只阻塞正式公网域名联调。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -300,3 +300,11 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Main 新增 Refresh Token Grant、每次使用后的严格轮换校验、启动会话恢复和 single-flight 并发保护；临时网络故障保留旧密文，`invalid_grant` 才清理并要求重新登录。
 - 服务端已轮换但本地保存失败时只在 Main 内存保留新 Token 并重试落盘，不再次提交已经使用过的旧 Token；Renderer 只接收脱敏状态事件。
 - Desktop 108 项单元测试、14 项契约测试、类型检查、生产构建、端点扫描和真实 Electron `safeStorage` 加解密往返自检通过；未修改 Cloud、数据库、Redis 或 Managed Service v1 公共契约。
+
+### 2026-08-16（P2-08 实现工作区）
+
+- Desktop Main 新增 OIDC UserInfo 最小字段校验、账号脱敏快照、按 issuer+subject 隔离的本地设备 UUID 映射、设备注册/查询/撤销控制面客户端和统一 ErrorEnvelope 解析。
+- Desktop 登录与启动恢复在 Refresh Token 持久化后同步 UserInfo 和当前设备；Renderer 只接收账号、设备显示状态和会话同步状态，不接收 Token、subject 或设备 ID。
+- Desktop 新增 RFC 7009 Refresh Token 退出、当前设备撤销 IPC 和设置页入口；网络失败保留可用凭据，服务端确认撤销后清理本地凭据，撤销后删除本地设备映射。
+- Cloud 接入 Spring Authorization Server UserInfo Mapper，仅返回 `sub`、`email`、`email_verified`、`preferred_username` 和 `name`，不新增数据库迁移、Redis Key 或公共契约字段。
+- Desktop 123 项单元测试、14 项契约测试、类型检查、生产构建和生产端点扫描通过；Cloud JDK 21 Maven 62 项测试、Testcontainers PostgreSQL 17 迁移与持久化、Python 15 项、TypeScript 1 项、Spring 契约 1 项及 33 文件快照比对通过。

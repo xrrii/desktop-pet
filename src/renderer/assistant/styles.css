@@ -125,6 +125,37 @@ button:disabled {
   box-shadow: 0 4px 12px rgb(28 35 45 / 0.1);
 }
 
+.managed-account-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #d2d7df;
+  border-radius: 8px;
+  color: #303640;
+  background: #fff;
+}
+
+.managed-account-summary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.managed-account-summary strong,
+.managed-account-summary small {
+  overflow-wrap: anywhere;
+}
+
+.managed-account-summary strong {
+  font-size: 13px;
+}
+
+.managed-account-summary small {
+  color: #727c88;
+  font-size: 11px;
+}
+
 .settings-section-heading {
   display: flex;
   align-items: baseline;

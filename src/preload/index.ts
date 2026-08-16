@@ -110,6 +110,10 @@ const api = {
   loginManaged: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:login'),
   /** 取消当前 PKCE 登录并关闭 Main loopback 监听器。 */
   cancelManagedLogin: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:cancel-login'),
+  /** 撤销当前桌面会话的 Refresh Token，成功后清理本地会话。 */
+  logoutManaged: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:logout'),
+  /** 撤销当前设备及其关联授权，Renderer 不提交设备 ID。 */
+  revokeManagedCurrentDevice: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:revoke-current-device'),
   getAssistantWebSettings: (): Promise<AssistantWebSettingsSnapshot> =>
     ipcRenderer.invoke('assistant:get-web-settings'),
   setAssistantWebSettings: (

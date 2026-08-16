@@ -66,7 +66,7 @@ describe('ManagedOidcClient', () => {
       )
       expect(prepared.authorizationUrl.searchParams.get('code_challenge_method')).toBe('S256')
       expect(prepared.authorizationUrl.searchParams.get('state')).toBe(prepared.state)
-      expect(prepared.authorizationUrl.searchParams.get('scope')).toBe('openid desktop.session')
+      expect(prepared.authorizationUrl.searchParams.get('scope')).toBe('openid profile email desktop.session')
 
       await expect(prepared.exchange(new URL(
         'http://127.0.0.1:49152/oauth/callback?code=mock-code&state=' + prepared.state
@@ -104,7 +104,7 @@ describe('ManagedOidcClient', () => {
         const parameters = new URLSearchParams(body)
         expect(parameters.get('grant_type')).toBe('refresh_token')
         expect(parameters.get('refresh_token')).toBe('old-refresh-token')
-        expect(parameters.get('client_id')).toBe('petdock-desktop')
+        expect(parameters.getAll('client_id')).toEqual(['petdock-desktop'])
         expect(parameters.get('client_secret')).toBeNull()
         writeJson(response, 200, {
           access_token: 'rotated-access-token',
@@ -160,6 +160,62 @@ describe('ManagedOidcClient', () => {
     try {
       await expect(new ManagedOidcClient(new URL(`http://127.0.0.1:${port}`)).refresh('reused-refresh-token'))
         .rejects.toMatchObject({ stage: 'refresh', reason: 'invalid_grant' })
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+    }
+  })
+
+  it('获取 UserInfo 并按 RFC 7009 撤销 Refresh Token', async () => {
+    const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
+      const issuer = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+      if (request.url === '/.well-known/openid-configuration') {
+        writeJson(response, 200, {
+          issuer,
+          authorization_endpoint: `${issuer}/oauth2/authorize`,
+          token_endpoint: `${issuer}/oauth2/token`,
+          revocation_endpoint: `${issuer}/oauth2/revoke`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+          jwks_uri: `${issuer}/.well-known/jwks.json`,
+          grant_types_supported: ['authorization_code', 'refresh_token'],
+          token_endpoint_auth_methods_supported: ['none']
+        })
+        return
+      }
+      if (request.url === '/userinfo' && request.method === 'GET') {
+        expect(request.headers.authorization).toBe('Bearer synthetic-access-token')
+        writeJson(response, 200, {
+          sub: 'opaque-subject',
+          email: 'alice@example.test',
+          email_verified: true,
+          preferred_username: 'alice',
+          name: 'Alice'
+        })
+        return
+      }
+      if (request.url === '/oauth2/revoke' && request.method === 'POST') {
+        let body = ''
+        for await (const chunk of request) body += chunk
+        const parameters = new URLSearchParams(body)
+        expect(parameters.get('client_id')).toBe('petdock-desktop')
+        expect(parameters.get('token')).toBe('synthetic-refresh-token')
+        expect(parameters.get('token_type_hint')).toBe('refresh_token')
+        response.statusCode = 200
+        response.end()
+        return
+      }
+      response.statusCode = 404
+      response.end()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = (server.address() as { port: number }).port
+    const client = new ManagedOidcClient(new URL(`http://127.0.0.1:${port}`))
+
+    try {
+      await expect(client.fetchUserInfo('synthetic-access-token', 'opaque-subject')).resolves.toMatchObject({
+        sub: 'opaque-subject',
+        preferred_username: 'alice'
+      })
+      await expect(client.revokeRefreshToken('synthetic-refresh-token')).resolves.toBeUndefined()
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
     }

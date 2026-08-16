@@ -1,12 +1,17 @@
-import type { ManagedOAuthClient, ManagedAuthorizationPreparation, ManagedTokenSet } from './managedOAuthTypes'
+import type {
+  ManagedOAuthClient,
+  ManagedAuthorizationPreparation,
+  ManagedTokenSet,
+  ManagedUserInfo
+} from './managedOAuthTypes'
 
 const CLIENT_ID = 'petdock-desktop'
-const SCOPE = 'openid desktop.session'
+const SCOPE = 'openid profile email desktop.session'
 
 /** OIDC 客户端阶段错误，避免将第三方库原始消息传播到 Renderer 或日志。 */
 export class ManagedOidcClientError extends Error {
   constructor(
-    readonly stage: 'discovery' | 'authorization_denied' | 'token_exchange' | 'refresh',
+    readonly stage: 'discovery' | 'authorization_denied' | 'token_exchange' | 'refresh' | 'userinfo' | 'revocation',
     readonly reason: 'invalid_grant' | 'response_invalid' | 'network' | null = null
   ) {
     super('Managed OAuth 操作失败。')
@@ -100,6 +105,55 @@ export class ManagedOidcClient implements ManagedOAuthClient {
     }
   }
 
+  /** 使用短期 Access Token 获取 OIDC UserInfo，启动恢复时跳过无法持久化的 ID Token subject 对比。 */
+  async fetchUserInfo(accessToken: string, expectedSubject?: string | null): Promise<ManagedUserInfo> {
+    if (!accessToken) {
+      throw new ManagedOidcClientError('userinfo', 'response_invalid')
+    }
+    const { client, configuration } = await this.discover()
+    const metadata = configuration.serverMetadata()
+    if (!metadata.userinfo_endpoint) {
+      throw new ManagedOidcClientError('userinfo', 'response_invalid')
+    }
+    try {
+      const response = await client.fetchUserInfo(
+        configuration,
+        accessToken,
+        expectedSubject || client.skipSubjectCheck
+      )
+      return response as ManagedUserInfo
+    } catch (error) {
+      const responseStatus = getResponseStatus(error)
+      if (responseStatus === 401 || responseStatus === 403) {
+        throw new ManagedOidcClientError('userinfo', 'invalid_grant')
+      }
+      if (responseStatus === 429 || (responseStatus !== null && responseStatus >= 500)) {
+        throw new ManagedOidcClientError('userinfo', 'network')
+      }
+      throw new ManagedOidcClientError('userinfo', responseStatus === null ? 'network' : 'response_invalid')
+    }
+  }
+
+  /** 通过 RFC 7009 撤销 Refresh Token，显式提交 Public Client ID 和 Token 类型提示。 */
+  async revokeRefreshToken(refreshToken: string): Promise<void> {
+    if (!refreshToken) {
+      throw new ManagedOidcClientError('revocation', 'response_invalid')
+    }
+    const { client, configuration } = await this.discover()
+    const metadata = configuration.serverMetadata()
+    if (!metadata.revocation_endpoint) {
+      throw new ManagedOidcClientError('revocation', 'response_invalid')
+    }
+    try {
+      await client.tokenRevocation(configuration, refreshToken, {
+        client_id: CLIENT_ID,
+        token_type_hint: 'refresh_token'
+      })
+    } catch {
+      throw new ManagedOidcClientError('revocation', 'network')
+    }
+  }
+
   /** 统一完成 Discovery，并允许 local-mock 使用 HTTP，其余环境仍由端点策略约束。 */
   private async discover(): Promise<{
     client: typeof import('openid-client')
@@ -132,6 +186,7 @@ function normalizeTokenResponse(response: {
   refresh_token?: string
   scope?: string
   id_token?: string
+  claims?: () => { sub?: unknown } | undefined
 }, requireRefreshToken = false): ManagedTokenSet {
   if (!response || !response.access_token || typeof response.access_token !== 'string') {
     throw new Error('OAuth Token Response 缺少 Access Token。')
@@ -152,13 +207,15 @@ function normalizeTokenResponse(response: {
   if (tokenType.toLowerCase() !== 'bearer') {
     throw new Error('OAuth Token Response 的 Token 类型不受支持。')
   }
+  const idTokenClaims = response.claims?.()
   return {
     accessToken: response.access_token,
     refreshToken: response.refresh_token || null,
     tokenType: 'Bearer',
     expiresIn: response.expires_in ?? null,
     scope: response.scope || null,
-    idToken: response.id_token || null
+    idToken: response.id_token || null,
+    idTokenSubject: typeof idTokenClaims?.sub === 'string' ? idTokenClaims.sub : null
   }
 }
 
