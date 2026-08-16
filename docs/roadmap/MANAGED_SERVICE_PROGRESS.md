@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-15
+最后更新时间：2026-08-16
 
 ## 1. 新会话快速开始
 
@@ -51,19 +51,19 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 方案细化与基础设施准备
+当前阶段：Phase 2 云端 P2-04 完成，桌面 P2-06 Ready
 架构对齐：Decision Frozen
 桌面端 Managed 实现：Phase 1 Done（仅本地 BYOK/Mock 抽象，未接入 Managed 网络流量）
 独立官网前端：Not Started（不在当前仓库）
-Spring Boot 控制面：P2-01 基础骨架已建立（位于独立 `petdock-cloud`）
+Spring Boot 控制面：P2-01、P2-02、P2-04 Done（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
-共享开发依赖：计划部署在服务器内部网络，本地开发机通过 SSH 隧道或自建私网接入
+共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：联调 `petdock-cloud` 的 P2-01 控制面基础工程，再进入 P2-02 用户、设备和授权持久化
+下一建议工作项：复核云端 P2-05 审计覆盖后进入桌面 P2-06 PKCE + loopback 登录
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。服务器与域名已就绪但备案仍在审核中；P2-00 契约缺口已在 `petdock-cloud` 冻结，控制面基础工程已建立，但尚未完成正式用户、设备、Runtime Token、Managed Provider、配额或官网功能。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计和外部签名密钥轮换基础；Entitlement 管理、Usage、Managed Provider、官网和桌面真实登录仍未完成。备案继续只阻塞正式公网联调。
 
 ## 4. 产品与仓库边界
 
@@ -195,6 +195,8 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-15 | 当前工作区 | C3/C5 开发版与解包版 E2E | 通过 | `ASSISTANT_C3_SMOKE_OK`、`ASSISTANT_C5_SMOKE_OK` |
 | 2026-08-15 | 当前工作区 | 提交前敏感数据与忽略规则检查 | 通过 | 复核 21 个待提交文件；规则命中均为合成占位符、保留测试域名、回环地址或拒绝测试，无真实凭据、个人绝对路径、用户正文和生产日志；构建产物、虚拟环境、Runtime 数据及临时目录保持忽略 |
 | 2026-08-15 | `petdock-cloud` P2-00/P2-01 工作区 | 云端 Python 契约 14 项、TypeScript 1 项、Spring/JUnit 1 项、制品校验、Desktop/Cloud 快照比对 | 通过 | 新增身份与会话契约、Feature Flag 接口和 Spring Boot 控制面基础工程；消费快照共 33 个文件 |
+| 2026-08-16 | `petdock-cloud` P2-04 工作区 | 控制面、三语言契约与快照比对 | 通过 | 控制面 44 项、Python 15 项、TypeScript 1 项、Spring 契约 1 项通过；33 个契约文件一致，Desktop 契约未变更 |
+| 2026-08-16 | Desktop P2-04 文档同步工作区 | Desktop 回归 | 通过（使用隔离临时目录） | TypeScript 80 项、契约 14 项、Runtime 82 项、检索六项指标 1.0 和生产构建通过；统一 `npm run check` 在 Runtime 阶段受既有 `temp/pytest-runtime` ACL 阻断，已改用未占用的 ignored basetemp 复验 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -277,3 +279,9 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - 在 `petdock-cloud` 权威契约中冻结 `D-P2-01` 至 `D-P2-08`，新增 OIDC/UserInfo/Token Response、RFC 7009 撤销、Feature Flag、端点覆盖、设备命名、HTTP `Date` 和环境隔离规则。
 - `petdock-cloud` 新增 Spring Boot 控制面基础工程、开发配置模板、Flyway V1 迁移、Redis/PostgreSQL 连接和健康检查；正式用户、设备和 Runtime 业务仍未完成。
 - 已将权威契约整体同步到桌面消费快照并完成 33 个文件 SHA-256 比对；下一工作项进入云端 P2-02，桌面 P2-06 等待控制面协议可联调后开始。
+
+### 2026-08-16（云端 P2-02/P2-04 完成）
+
+- `petdock-cloud` 已提交 P2-02 用户、设备、授权、Runtime Session、撤销和安全审计持久化，Desktop/Cloud 契约快照继续保持 33 个文件一致。
+- 云端 P2-04 新增仓库外 PKCS#12 密钥环、稳定公钥指纹 `kid`、多公钥 JWKS、5 分钟缓存和分阶段轮换门禁，不改变桌面消费契约。
+- Entitlement 管理 API 和 Usage API 按确认延后；备案仍只阻塞正式域名公网登录，桌面 P2-06 本地 Mock PKCE/loopback 开发不受影响。
