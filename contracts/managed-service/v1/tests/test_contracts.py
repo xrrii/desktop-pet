@@ -267,10 +267,12 @@ def test_phase_two_identity_decisions_are_frozen() -> None:
 
 
 def test_control_plane_feature_flag_contract_is_present() -> None:
-    """确保桌面端 Feature Flag 有明确的认证接口和蛇形字段。"""
+    """确保桌面端 Feature Flag 可在登录前读取并使用蛇形字段。"""
     document = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
     operation = document["paths"]["/api/v1/features"]["get"]
     assert operation["operationId"] == "getFeatureFlags"
+    assert operation["security"] == []
+    assert "401" not in operation["responses"]
     schema = document["components"]["schemas"]["FeatureFlagSnapshot"]
     assert set(schema["required"]) == {
         "version",

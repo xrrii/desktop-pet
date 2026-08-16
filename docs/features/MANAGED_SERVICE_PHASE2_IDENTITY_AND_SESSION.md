@@ -6,7 +6,7 @@
 - 建立日期：2026-08-15
 - 适用阶段：Managed Service Phase 2
 - 适用仓库：`desktop-pet`、`petdock-web`、`petdock-cloud`
-- 当前入口：云端 `P2-04` 已完成，下一步复核 `P2-05` 后进入桌面 `P2-06`
+- 当前入口：云端 `P2-05` 已完成，桌面 `P2-06` 正在实现系统浏览器 PKCE 与 loopback 登录
 
 本文档承载 Phase 2 的详细设计、跨仓库拆分、开发环境、实现顺序和验收要求。总体架构、安全边界和阶段定义仍以 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md` 为准，接口字段和协议语义仍以 `contracts/managed-service/v1` 权威契约为准。
 
@@ -187,24 +187,22 @@ PostgreSQL 是用户、设备、Token Family、Runtime Session、Entitlement 和
 ```text
 src/main/managed/
   managedAuthManager.ts
-  managedOAuthLoopback.ts
-  managedTokenStore.ts
-  managedControlPlaneClient.ts
-  managedDeviceIdentityManager.ts
-  managedRuntimeTokenBroker.ts
-  managedAccountSnapshot.ts
+  managedEndpointPolicy.ts
   managedFeatureFlags.ts
+  managedOAuthClient.ts
+  managedOAuthLoopback.ts
+  managedOAuthTypes.ts
 ```
+
+P2-06 已落地的 Main 侧模块如上。`managedAuthManager` 只在进程内保留 Access/Refresh Token；Preload 只暴露登录命令和 `ManagedAuthStatus` 脱敏快照。`safeStorage`、UserInfo、设备注册和 Runtime Token Broker 分别延后到 P2-07 至 P2-09。
+
+本地联调通过未提交环境变量选择端点：`PETDOCK_MANAGED_ENVIRONMENT=local-mock` 或 `shared-dev`，并同时设置 `PETDOCK_MANAGED_ISSUER` 与 `PETDOCK_MANAGED_CONTROL_PLANE_URL`。生产和预发布不读取这些覆盖值，固定使用契约中的官方端点。
 
 职责边界：
 
-- `managedAuthManager.ts`：登录状态机、启动恢复、退出和撤销编排。
+- `managedAuthManager.ts`：P2-06 登录状态机、取消和退出清理；启动恢复与撤销编排留给后续阶段。
 - `managedOAuthLoopback.ts`：只监听 `127.0.0.1` 随机端口，校验回调路径、`state`、超时和一次性消费。
-- `managedTokenStore.ts`：Refresh Token 加密、原子替换、损坏处理和清理。
-- `managedControlPlaneClient.ts`：控制面请求头、响应校验、稳定错误码和服务端时间偏差。
-- `managedDeviceIdentityManager.ts`：生成不可猜测的随机 `device_id`，不读取硬件序列号。
-- `managedRuntimeTokenBroker.ts`：15 分钟 Runtime Token、3 分钟提前刷新、single-flight 并发控制。
-- `managedAccountSnapshot.ts`：只向 Renderer 返回脱敏账号、设备、套餐和能力状态。
+- `managedTokenStore.ts`、`managedControlPlaneClient.ts`、`managedDeviceIdentityManager.ts`、`managedRuntimeTokenBroker.ts`、`managedAccountSnapshot.ts`：分别在 P2-07 至 P2-09 新增，当前不提前实现。
 - `managedFeatureFlags.ts`：处理 `managed_login_enabled` 和开发环境端点覆盖，生产构建固定官方端点。
 
 ## 7. OAuth PKCE 与 Loopback

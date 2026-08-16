@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: PetDock Desktop Control Plane API
   version: 1.0.0
-  description: 桌面端登录后使用的设备、授权、Runtime Session 和用量摘要接口。官网 Web API 另行定义。
+  description: 桌面端使用的登录前 Feature Flag、设备、授权、Runtime Session 和用量摘要接口。官网 Web API 另行定义。
 x-petdock-contract-version: 1
 servers:
   - url: https://api.petdock.site
@@ -15,6 +15,7 @@ paths:
       operationId: getFeatureFlags
       summary: 获取桌面端官方能力开关
       tags: [Feature]
+      security: []
       parameters:
         - $ref: '#/components/parameters/ClientVersion'
         - $ref: '#/components/parameters/RequestId'
@@ -25,7 +26,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FeatureFlagSnapshot'
-        '401': { $ref: '#/components/responses/ErrorResponse' }
         '426': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/devices:
     post:

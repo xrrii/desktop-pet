@@ -38,6 +38,7 @@ import type {
 } from '../shared/assistant'
 import type { ScreenshotOverlayPayload, ScreenshotSelectionInput } from '../shared/screenshot'
 import type { AssistantThemeId } from '../shared/theme'
+import type { ManagedAuthStatus } from '../shared/managed'
 import type {
   AvailablePet,
   CreatePetInput,
@@ -101,6 +102,14 @@ const api = {
     ipcRenderer.invoke('screenshot:cancel'),
   getAssistantStatus: (): Promise<AssistantRuntimeStatus> =>
     ipcRenderer.invoke('assistant:get-status'),
+  /** 获取脱敏 Managed 登录状态，永远不返回 Token。 */
+  getManagedAuthStatus: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:get-status'),
+  /** 登录前匿名刷新服务端 Feature Flag，永远不发送 Access Token。 */
+  refreshManagedFeatures: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:refresh-features'),
+  /** 请求 Main 通过系统浏览器开始 PKCE 登录。 */
+  loginManaged: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:login'),
+  /** 取消当前 PKCE 登录并关闭 Main loopback 监听器。 */
+  cancelManagedLogin: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:cancel-login'),
   getAssistantWebSettings: (): Promise<AssistantWebSettingsSnapshot> =>
     ipcRenderer.invoke('assistant:get-web-settings'),
   setAssistantWebSettings: (

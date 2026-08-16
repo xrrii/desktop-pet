@@ -30,6 +30,7 @@ import type { CreatePetInput, PetSpritesheetSelection } from '../shared/pet'
 import { AssistantManager } from './assistant/assistantManager'
 import { writeArtifactAtomically } from './assistant/artifactFileWriter'
 import { logError, logInfo } from './logger'
+import { ManagedAuthManager } from './managed/managedAuthManager'
 import { ScreenshotManager } from './screenshotManager'
 import { setAssistantTheme } from './theme'
 import {
@@ -89,6 +90,7 @@ const screenshotManager = new ScreenshotManager(
   (result) => petWindow?.webContents.send('assistant:attachments-staged', result),
   (message) => petWindow?.webContents.send('assistant:attachment-stage-error', message)
 )
+const managedAuthManager = new ManagedAuthManager(undefined, app.getVersion())
 
 /**
  * 打开 Artifact 原生保存对话框；仅在自动化 Smoke 明确注入变量时提供确定性选择结果。
@@ -405,6 +407,26 @@ function registerIpc(): void {
   ipcMain.handle('assistant:get-model-settings', (event) => {
     requirePetSender(event)
     return assistantManager.getModelSettings()
+  })
+
+  ipcMain.handle('managed:get-status', (event) => {
+    requirePetSender(event)
+    return managedAuthManager.getStatus()
+  })
+
+  ipcMain.handle('managed:refresh-features', (event) => {
+    requirePetSender(event)
+    return managedAuthManager.refreshFeatures()
+  })
+
+  ipcMain.handle('managed:login', (event) => {
+    requirePetSender(event)
+    return managedAuthManager.login()
+  })
+
+  ipcMain.handle('managed:cancel-login', (event) => {
+    requirePetSender(event)
+    return managedAuthManager.cancel()
   })
 
   ipcMain.handle('assistant:get-capability-settings', (event) => {
@@ -949,6 +971,7 @@ app.on('before-quit', (event) => {
     return
   }
   logInfo('before quit')
+  managedAuthManager.dispose()
   flushSettings()
   event.preventDefault()
   quitAfterRuntimeStops = true

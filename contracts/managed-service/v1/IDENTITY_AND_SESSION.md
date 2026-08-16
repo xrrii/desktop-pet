@@ -81,7 +81,7 @@ Public Client 必须提交 `client_id`，`token_type_hint` 可选，取值为 `a
 
 ## 5. Feature Flag
 
-桌面 Access Token 访问控制面：
+登录前即可访问控制面 Feature Flag；该请求不携带 Access Token：
 
 ```text
 GET /api/v1/features
@@ -89,7 +89,7 @@ X-PetDock-Client-Version: 0.2.0
 X-PetDock-Request-Id: <uuid>
 ```
 
-响应字段由 `control-plane.yaml` 的 `FeatureFlagSnapshot` 定义：`version` 固定为 `1`，`managed_login_enabled` 控制官方登录入口，`minimum_client_version` 控制最低受支持版本。服务不可用、字段缺失和版本不兼容时，桌面端本地按 `managed_login_enabled=false` 处理。
+响应字段由 `control-plane.yaml` 的 `FeatureFlagSnapshot` 定义：`version` 固定为 `1`，`managed_login_enabled` 控制官方登录入口，`minimum_client_version` 控制最低受支持版本。服务不可用、字段缺失和版本不兼容时，桌面端本地按 `managed_login_enabled=false` 处理。该端点不返回用户信息或 Token。
 
 ## 6. 端点覆盖与环境
 
@@ -98,7 +98,7 @@ X-PetDock-Request-Id: <uuid>
 - `local-mock`、`shared-dev`：允许回环地址、服务器内网地址和 SSH 隧道端口。
 - `staging`、`production`：拒绝覆盖，固定官方 Issuer、控制面和数据面地址。
 
-生产构建检查必须验证构建产物不含 `127.0.0.1`、`localhost`、`.local` 或开发端口。检查结果只输出通过/失败，不输出完整配置值。
+生产构建检查必须验证构建产物不含静态开发服务端点（`127.0.0.1`、`localhost`、`.local` 或开发端口）。OAuth 登录运行时生成的 `http://127.0.0.1:<random-port>/oauth/callback` 是允许的 loopback 回调，不属于静态开发服务端点；检查结果只输出通过/失败，不输出完整配置值。
 
 ## 7. 设备显示名
 

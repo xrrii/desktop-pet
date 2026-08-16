@@ -36,12 +36,15 @@ PetDock 的 MIT 许可证仅覆盖项目自有代码和文档。下列组件继�
 | entities | 8.0.0 | BSD-2-Clause | https://github.com/fb55/entities |
 | html-encoding-sniffer | 6.0.0 | MIT | https://github.com/jsdom/html-encoding-sniffer |
 | is-potential-custom-element-name | 1.0.1 | MIT | https://github.com/mathiasbynens/is-potential-custom-element-name |
+| jose | 6.2.9 | MIT | https://github.com/panva/jose |
 | jsdom | 29.1.1 | MIT | https://github.com/jsdom/jsdom |
 | linkify-it | 5.0.2 | MIT | markdown-it/linkify-it |
 | lru-cache | 11.5.2 | BlueOak-1.0.0 | ssh://git@github.com/isaacs/node-lru-cache |
 | markdown-it | 14.3.0 | MIT | markdown-it/markdown-it |
 | mdn-data | 2.27.1 | CC0-1.0 | https://developer.mozilla.org |
 | mdurl | 2.1.0 | MIT | https://github.com/markdown-it/mdurl |
+| oauth4webapi | 3.8.7 | MIT | https://github.com/panva/oauth4webapi |
+| openid-client | 6.8.1 | MIT | https://github.com/panva/openid-client |
 | parse5 | 8.0.1 | MIT | https://parse5.js.org |
 | punycode.js | 2.3.1 | MIT | https://mths.be/punycode |
 | punycode | 2.3.1 | MIT | https://mths.be/punycode |

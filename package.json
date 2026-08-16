@@ -1,6 +1,6 @@
 {
   "name": "petdock",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A transparent Electron desktop pet dock powered by spritesheet atlases.",
   "author": "xrrii",
   "license": "MIT",
@@ -26,7 +26,8 @@
     "test:e2e:assistant:c5": "cross-env PETDOCK_SMOKE_DEV=1 PETDOCK_SMOKE_C5_ONLY=1 PETDOCK_SMOKE_DISABLE_GPU=1 node tools/assistant_smoke.mjs",
     "test:e2e:assistant:c5:packaged": "cross-env PETDOCK_SMOKE_EXECUTABLE=release\\win-unpacked\\PetDock.exe PETDOCK_SMOKE_C5_ONLY=1 PETDOCK_SMOKE_DISABLE_GPU=1 node tools/assistant_smoke.mjs",
     "test:e2e:assistant:langchain": "cross-env PETDOCK_SMOKE_EXECUTABLE=release\\win-unpacked\\PetDock.exe PETDOCK_SMOKE_SCREENSHOT=outputs\\assistant-stage1-langchain.png PETDOCK_SMOKE_BACKEND=langchain node tools/assistant_smoke.mjs",
-    "build": "electron-vite build",
+    "check:production": "node tools/check_production_artifact.mjs dist",
+    "build": "electron-vite build && npm run check:production",
     "build:runtime": "node tools/build_runtime.mjs",
     "licenses": "node tools/generate_third_party_notices.mjs",
     "check": "npm run typecheck && npm test && npm run test:contracts && npm run test:runtime && npm run test:retrieval && npm run build",
@@ -112,6 +113,7 @@
   "dependencies": {
     "dompurify": "^3.4.13",
     "jsdom": "^29.1.1",
-    "markdown-it": "^14.3.0"
+    "markdown-it": "^14.3.0",
+    "openid-client": "^6.8.1"
   }
 }

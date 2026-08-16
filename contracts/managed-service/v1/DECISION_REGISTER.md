@@ -158,7 +158,7 @@
 
 状态：`Frozen`
 
-- 控制面提供需要桌面认证的 `GET /api/v1/features`，返回 `version`、`managed_login_enabled` 和 `minimum_client_version`。
+- 控制面提供登录前可访问的 `GET /api/v1/features`，返回 `version`、`managed_login_enabled` 和 `minimum_client_version`；该端点不要求桌面 OAuth 认证，以避免读取登录开关本身形成循环依赖。
 - 服务端默认关闭 `managed_login_enabled`；只有服务端配置明确开启且客户端版本满足最低版本时，桌面端才展示官方登录入口。
 - 桌面端本地默认值固定为 `false`。服务不可用、响应字段缺失或版本不兼容时必须按 `false` 处理，不影响 BYOK。
 
@@ -167,8 +167,8 @@
 状态：`Frozen`
 
 - `local-mock` 和 `shared-dev` 允许通过未提交的环境变量覆盖 Issuer、控制面和数据面地址；覆盖值只能指向回环地址、服务器内网地址或 SSH 隧道端口。
-- `staging` 与 `production` 构建固定官方端点，启动时拒绝任何覆盖；生产 Issuer 必须为 `https://account.petdock.site`，控制面和数据面分别为 `https://api.petdock.site` 与 `https://ai.petdock.site`。
-- 端点覆盖不进入 Renderer、契约样例、日志或错误消息；构建校验必须阻止生产包携带开发端点。
+- `staging` 与 `production` 构建固定官方端点，启动时拒绝任何覆盖；生产 Issuer 必须为 `https://account.petdock.site`，控制面和数据面分别为 `https://api.petdock.site` 与 `https://ai.petdock.site`。桌面 Public Client 允许 `127.0.0.1` 上 `/oauth/callback` 的运行时随机端口，其他主机、路径、协议、查询参数和片段均拒绝。
+- 端点覆盖不进入 Renderer、契约样例、日志或错误消息；构建校验必须阻止生产包携带静态开发服务端点，但不得误报运行时生成的 OAuth loopback 回调。
 
 ### `D-P2-06` 设备显示名与重复注册
 

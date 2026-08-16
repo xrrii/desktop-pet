@@ -51,16 +51,16 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 云端 P2-04 完成，桌面 P2-06 Ready
+当前阶段：Phase 2 云端 P2-05 完成，桌面 P2-06 In Progress
 架构对齐：Decision Frozen
-桌面端 Managed 实现：Phase 1 Done（仅本地 BYOK/Mock 抽象，未接入 Managed 网络流量）
+桌面端 Managed 实现：P2-06 In Progress（Main 已接入 Discovery、PKCE、loopback 和受控 IPC；账号/设备/Runtime 仍延后）
 独立官网前端：Not Started（不在当前仓库）
-Spring Boot 控制面：P2-01、P2-02、P2-04 Done（位于独立 `petdock-cloud`）
+Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：复核云端 P2-05 审计覆盖后进入桌面 P2-06 PKCE + loopback 登录
+下一建议工作项：完成 P2-06 跨端回归后进入 P2-07 Refresh Token safeStorage
 ```
 
 当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计和外部签名密钥轮换基础；Entitlement 管理、Usage、Managed Provider、官网和桌面真实登录仍未完成。备案继续只阻塞正式公网联调。
@@ -197,6 +197,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-15 | `petdock-cloud` P2-00/P2-01 工作区 | 云端 Python 契约 14 项、TypeScript 1 项、Spring/JUnit 1 项、制品校验、Desktop/Cloud 快照比对 | 通过 | 新增身份与会话契约、Feature Flag 接口和 Spring Boot 控制面基础工程；消费快照共 33 个文件 |
 | 2026-08-16 | `petdock-cloud` P2-04 工作区 | 控制面、三语言契约与快照比对 | 通过 | 控制面 44 项、Python 15 项、TypeScript 1 项、Spring 契约 1 项通过；33 个契约文件一致，Desktop 契约未变更 |
 | 2026-08-16 | Desktop P2-04 文档同步工作区 | Desktop 回归 | 通过（使用隔离临时目录） | TypeScript 80 项、契约 14 项、Runtime 82 项、检索六项指标 1.0 和生产构建通过；统一 `npm run check` 在 Runtime 阶段受既有 `temp/pytest-runtime` ACL 阻断，已改用未占用的 ignored basetemp 复验 |
+| 2026-08-16 | Desktop/Cloud P2-06 工作区 | Cloud Python 契约、Spring/JUnit、Desktop TypeScript、Mock OIDC、生产制品扫描和快照比对 | 通过 | Cloud 14 项契约测试、Spring 61 项测试通过；Desktop 92 项单元测试、14 项契约测试、类型检查和生产制品端点扫描通过；33 个契约文件一致；真实公网域名浏览器联调未运行（备案未完成） |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -285,3 +286,9 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - `petdock-cloud` 已提交 P2-02 用户、设备、授权、Runtime Session、撤销和安全审计持久化，Desktop/Cloud 契约快照继续保持 33 个文件一致。
 - 云端 P2-04 新增仓库外 PKCS#12 密钥环、稳定公钥指纹 `kid`、多公钥 JWKS、5 分钟缓存和分阶段轮换门禁，不改变桌面消费契约。
 - Entitlement 管理 API 和 Usage API 按确认延后；备案仍只阻塞正式域名公网登录，桌面 P2-06 本地 Mock PKCE/loopback 开发不受影响。
+
+### 2026-08-16（P2-06 实现工作区）
+
+- Cloud 修正 `GET /api/v1/features` 为登录前匿名端点，并为 `petdock-desktop` 增加仅限 `127.0.0.1`、固定 `/oauth/callback`、显式随机端口和 `http` 协议的 redirect URI 校验；其他 Client 继续精确匹配。
+- Desktop 新增 Main 侧端点策略、Feature Flag、openid-client Discovery/PKCE、一次性 loopback、登录状态机和受控 IPC；Token 只保存在 Main 内存，`safeStorage` 留给 P2-07。
+- 生产制品扫描仅禁止静态开发服务端点，允许运行时生成 OAuth loopback 地址；应用版本同步到契约最低版本 `0.2.0`。
