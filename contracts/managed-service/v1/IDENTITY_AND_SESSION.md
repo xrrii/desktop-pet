@@ -104,6 +104,8 @@ X-PetDock-Request-Id: <uuid>
 
 客户端提交 `deviceId`、`displayName` 和 `platform=windows`。服务端执行去除首尾空白、折叠连续空白、拒绝控制字符和 1 至 100 个 Unicode 字符校验。客户端无法提供有效名称时使用 `Windows Desktop`。同一用户重复注册同一 `deviceId` 只更新名称和 `lastSeenAt`；同一 ID 属于其他用户时返回冲突。
 
+当前设备由服务端将桌面 Access Token 所属的 OAuth 授权记录与设备绑定后解析，不新增设备请求头，也不接受客户端通过 Header 覆盖当前设备。首次成功调用 `POST /api/v1/devices` 时，一个尚未绑定的 OAuth 授权只能绑定一个 `deviceId`；后续 Refresh Token 轮换保持同一绑定。`GET /api/v1/devices/current` 在授权尚未绑定设备时返回 `device_not_found`。
+
 ## 8. 服务端时间
 
 控制面每个 HTTP 响应由 Web 容器写入标准 HTTP `Date` Header，使用 UTC。客户端只使用该 Header 估算时钟偏差，不依赖业务 JSON 中的 `serverTime` 字段，也不得因缺少该 Header 延长 Token、撤销或配额有效期。

@@ -118,6 +118,10 @@ def test_error_catalog_is_unique_and_has_required_codes() -> None:
         "authentication_required",
         "token_expired",
         "device_revoked",
+        "device_access_denied",
+        "device_not_found",
+        "device_conflict",
+        "runtime_session_not_found",
         "capability_disabled",
         "capability_not_entitled",
         "quota_exhausted",
@@ -252,12 +256,14 @@ def test_phase_two_identity_decisions_are_frozen() -> None:
 
     for number in range(1, 9):
         assert f"`D-P2-{number:02d}`" in register
+    assert "`D-P2-09`" in register
     assert "RFC 7009" in identity
     assert "managed_login_enabled" in identity
     assert "Date` Header" in identity
     assert "PostgreSQL 17" in register
     assert "Redis 8.0" in register
     assert "不读取硬件序列号" in register
+    assert "不新增客户端设备 Header" in register
 
 
 def test_control_plane_feature_flag_contract_is_present() -> None:
