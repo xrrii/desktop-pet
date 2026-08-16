@@ -30,6 +30,7 @@ export interface ManagedTokenSet {
 /** OIDC 客户端依赖的最小可替换接口，供本地 Mock OAuth 测试使用。 */
 export interface ManagedOAuthClient {
   prepare(redirectUri: string): Promise<ManagedAuthorizationPreparation>
+  refresh(refreshToken: string): Promise<ManagedTokenSet>
 }
 
 /** openid-client Configuration 仅由实现模块持有，避免泄露给 Renderer。 */

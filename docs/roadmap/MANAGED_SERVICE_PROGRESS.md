@@ -51,16 +51,16 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 云端 P2-05 完成，桌面 P2-06 In Progress
+当前阶段：Phase 2 云端 P2-05 完成，桌面 P2-07 Done
 架构对齐：Decision Frozen
-桌面端 Managed 实现：P2-06 In Progress（Main 已接入 Discovery、PKCE、loopback 和受控 IPC；账号/设备/Runtime 仍延后）
+桌面端 Managed 实现：P2-06、P2-07 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换和启动恢复；账号/设备/Runtime 仍延后）
 独立官网前端：Not Started（不在当前仓库）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：完成 P2-06 跨端回归后进入 P2-07 Refresh Token safeStorage
+下一建议工作项：P2-08 账号脱敏快照、设备状态、退出登录和设备撤销
 ```
 
 当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计和外部签名密钥轮换基础；Entitlement 管理、Usage、Managed Provider、官网和桌面真实登录仍未完成。备案继续只阻塞正式公网联调。
@@ -143,7 +143,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 数据组件已确认使用 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose 和 Nginx，开发机通过 SSH 隧道接入。UserInfo、Token 撤销、Feature Flag、开发端点覆盖、设备显示名和服务端时间已由 `petdock-cloud` 的 `D-P2-01` 至 `D-P2-08` 冻结；下一步联调 P2-01 控制面基础工程，再进入 `P2-02`。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06、P2-07 已完成系统浏览器 PKCE 登录、loopback、Refresh Token safeStorage、轮换和启动恢复。下一工作项进入 `P2-08`，实现 UserInfo 账号脱敏快照、设备注册与状态、退出登录和设备撤销；备案继续只阻塞正式公网域名联调。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -198,6 +198,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-16 | `petdock-cloud` P2-04 工作区 | 控制面、三语言契约与快照比对 | 通过 | 控制面 44 项、Python 15 项、TypeScript 1 项、Spring 契约 1 项通过；33 个契约文件一致，Desktop 契约未变更 |
 | 2026-08-16 | Desktop P2-04 文档同步工作区 | Desktop 回归 | 通过（使用隔离临时目录） | TypeScript 80 项、契约 14 项、Runtime 82 项、检索六项指标 1.0 和生产构建通过；统一 `npm run check` 在 Runtime 阶段受既有 `temp/pytest-runtime` ACL 阻断，已改用未占用的 ignored basetemp 复验 |
 | 2026-08-16 | Desktop/Cloud P2-06 工作区 | Cloud Python 契约、Spring/JUnit、Desktop TypeScript、Mock OIDC、生产制品扫描和快照比对 | 通过 | Cloud 14 项契约测试、Spring 61 项测试通过；Desktop 92 项单元测试、14 项契约测试、类型检查和生产制品端点扫描通过；33 个契约文件一致；真实公网域名浏览器联调未运行（备案未完成） |
+| 2026-08-16 | Desktop P2-07 工作区 | safeStorage 存储、Refresh Grant、启动恢复、轮换并发保护、类型检查、契约和生产构建 | 通过 | Desktop 108 项单元测试、14 项契约测试、类型检查、生产制品端点扫描和真实 Electron safeStorage 加解密往返自检通过；共享开发 OAuth 重启联调未运行 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -292,3 +293,10 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Cloud 修正 `GET /api/v1/features` 为登录前匿名端点，并为 `petdock-desktop` 增加仅限 `127.0.0.1`、固定 `/oauth/callback`、显式随机端口和 `http` 协议的 redirect URI 校验；其他 Client 继续精确匹配。
 - Desktop 新增 Main 侧端点策略、Feature Flag、openid-client Discovery/PKCE、一次性 loopback、登录状态机和受控 IPC；Token 只保存在 Main 内存，`safeStorage` 留给 P2-07。
 - 生产制品扫描仅禁止静态开发服务端点，允许运行时生成 OAuth loopback 地址；应用版本同步到契约最低版本 `0.2.0`。
+
+### 2026-08-16（P2-07 实现工作区）
+
+- Desktop 新增版本化 Refresh Token Store，使用 Electron `safeStorage` 加密，并通过同目录临时文件和原子替换保存；Access Token、ID Token 和完整 Token Response 不持久化。
+- Main 新增 Refresh Token Grant、每次使用后的严格轮换校验、启动会话恢复和 single-flight 并发保护；临时网络故障保留旧密文，`invalid_grant` 才清理并要求重新登录。
+- 服务端已轮换但本地保存失败时只在 Main 内存保留新 Token 并重试落盘，不再次提交已经使用过的旧 Token；Renderer 只接收脱敏状态事件。
+- Desktop 108 项单元测试、14 项契约测试、类型检查、生产构建、端点扫描和真实 Electron `safeStorage` 加解密往返自检通过；未修改 Cloud、数据库、Redis 或 Managed Service v1 公共契约。

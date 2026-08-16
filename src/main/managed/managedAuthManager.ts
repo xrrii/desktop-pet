@@ -10,6 +10,11 @@ import { resolveManagedEndpointPolicy } from './managedEndpointPolicy'
 import { ManagedOidcClient, ManagedOidcClientError } from './managedOAuthClient'
 import { ManagedOAuthLoopbackError, ManagedOAuthLoopbackSession } from './managedOAuthLoopback'
 import type { ManagedEndpointPolicy, ManagedOAuthClient, ManagedTokenSet } from './managedOAuthTypes'
+import {
+  ElectronManagedTokenStore,
+  ManagedTokenStoreError,
+  type ManagedTokenStore
+} from './managedTokenStore'
 
 const DEFAULT_STATUS: ManagedAuthStatus = {
   state: 'disabled',
@@ -25,13 +30,17 @@ const DEFAULT_STATUS: ManagedAuthStatus = {
 export class ManagedAuthManager {
   private status: ManagedAuthStatus = { ...DEFAULT_STATUS }
   private activeLogin: Promise<ManagedAuthStatus> | null = null
+  private activeRefresh: Promise<ManagedAuthStatus> | null = null
   private loopback: ManagedOAuthLoopbackSession | null = null
   private cancelRequested = false
+  private disposed = false
   private accessToken: string | null = null
   private refreshToken: string | null = null
+  private pendingTokenSet: ManagedTokenSet | null = null
 
   private readonly featureFlags: ManagedFeatureFlags
   private readonly oauthClient: ManagedOAuthClient
+  private readonly tokenStore: ManagedTokenStore
 
   constructor(
     private readonly policy: ManagedEndpointPolicy = resolveManagedEndpointPolicy(),
@@ -39,15 +48,20 @@ export class ManagedAuthManager {
     dependencies: {
       featureFlags?: ManagedFeatureFlags
       oauthClient?: ManagedOAuthClient
+      tokenStore?: ManagedTokenStore
       openExternal?: (url: string) => Promise<void>
+      onStatusChange?: (status: ManagedAuthStatus) => void
     } = {}
   ) {
     this.featureFlags = dependencies.featureFlags || new ManagedFeatureFlags(policy, clientVersion)
     this.oauthClient = dependencies.oauthClient || new ManagedOidcClient(policy.issuer)
+    this.tokenStore = dependencies.tokenStore || new ElectronManagedTokenStore()
     this.openExternal = dependencies.openExternal || ((url) => shell.openExternal(url))
+    this.onStatusChange = dependencies.onStatusChange || (() => undefined)
   }
 
   private readonly openExternal: (url: string) => Promise<void>
+  private readonly onStatusChange: (status: ManagedAuthStatus) => void
 
   /** 获取只包含登录状态和稳定错误分类的快照。 */
   getStatus(): ManagedAuthStatus {
@@ -68,6 +82,12 @@ export class ManagedAuthManager {
     if (this.activeLogin) {
       return this.activeLogin
     }
+    if (this.activeRefresh) {
+      return this.activeRefresh
+    }
+    if (this.pendingTokenSet) {
+      return this.startRefreshTask(() => this.persistPendingSession())
+    }
     this.cancelRequested = false
     this.activeLogin = this.runLogin().finally(() => {
       this.activeLogin = null
@@ -75,6 +95,17 @@ export class ManagedAuthManager {
       this.cancelRequested = false
     })
     return this.activeLogin
+  }
+
+  /** 应用启动或后续 Main 调用时恢复并轮换会话；并发调用只使用一次旧 Refresh Token。 */
+  restoreSession(): Promise<ManagedAuthStatus> {
+    if (this.activeRefresh) {
+      return this.activeRefresh
+    }
+    if (this.activeLogin) {
+      return this.activeLogin
+    }
+    return this.startRefreshTask(() => this.runSessionRestore())
   }
 
   /** 取消当前浏览器授权并清理 loopback 监听器。 */
@@ -89,14 +120,17 @@ export class ManagedAuthManager {
     return this.getStatus()
   }
 
-  /** 应用退出时清除短期内存凭据和回调监听器，但不触碰 P2-07 持久化。 */
+  /** 应用退出时清除短期内存凭据和回调监听器，但保留 safeStorage 密文。 */
   dispose(): void {
+    this.disposed = true
     this.cancelRequested = true
     this.loopback?.dispose()
     this.loopback = null
     this.activeLogin = null
+    this.activeRefresh = null
     this.accessToken = null
     this.refreshToken = null
+    this.pendingTokenSet = null
   }
 
   /** 暴露给后续控制面调用的 Main 内存 Access Token，当前不通过 IPC 返回。 */
@@ -116,6 +150,11 @@ export class ManagedAuthManager {
     if (!features.managedLoginEnabled) {
       return this.getStatus()
     }
+    if (!this.tokenStore.isAvailable()) {
+      this.setStatus({ state: 'failed', errorCode: 'managed_token_storage_unavailable' })
+      logError('managed OAuth login failed', { errorCode: 'managed_token_storage_unavailable' })
+      return this.getStatus()
+    }
 
     try {
       this.loopback = await ManagedOAuthLoopbackSession.listen()
@@ -132,8 +171,10 @@ export class ManagedAuthManager {
       const callbackUrl = await callbackPromise
       this.setStatus({ state: 'exchanging_code', errorCode: null })
       const tokenSet = await preparation.exchange(callbackUrl)
-      this.accessToken = tokenSet.accessToken
-      this.refreshToken = tokenSet.refreshToken
+      await this.persistTokenSet(tokenSet, 'token_exchange')
+      if (this.disposed) {
+        return this.getStatus()
+      }
       this.setStatus({ state: 'authenticated', errorCode: null })
       logInfo('managed OAuth login authenticated')
       return this.getStatus()
@@ -149,9 +190,128 @@ export class ManagedAuthManager {
     }
   }
 
+  /** 从版本化密文恢复 Refresh Token，并在成功轮换和落盘后建立 Main 内存会话。 */
+  private async runSessionRestore(): Promise<ManagedAuthStatus> {
+    if (this.pendingTokenSet) {
+      return this.persistPendingSession()
+    }
+
+    const stored = await this.tokenStore.load()
+    if (stored.status === 'missing') {
+      if (this.status.state === 'restoring_session') {
+        this.setStatus({
+          state: this.status.managedLoginEnabled ? 'idle' : 'disabled',
+          errorCode: this.status.managedLoginEnabled ? null : this.status.errorCode
+        })
+      }
+      return this.getStatus()
+    }
+    if (stored.status === 'unavailable') {
+      this.setStatus({ state: 'failed', errorCode: 'managed_token_storage_unavailable' })
+      logError('managed session restore failed', { errorCode: 'managed_token_storage_unavailable' })
+      return this.getStatus()
+    }
+    if (stored.status === 'corrupt') {
+      this.setStatus({ state: 'failed', errorCode: 'managed_token_storage_corrupt' })
+      logError('managed session restore failed', { errorCode: 'managed_token_storage_corrupt' })
+      return this.getStatus()
+    }
+
+    this.setStatus({ state: 'restoring_session', errorCode: null })
+    try {
+      const tokenSet = await this.oauthClient.refresh(stored.refreshToken)
+      await this.persistTokenSet(tokenSet, 'refresh')
+      if (this.disposed) {
+        return this.getStatus()
+      }
+      this.setStatus({ state: 'authenticated', errorCode: null })
+      logInfo('managed session restored')
+      return this.getStatus()
+    } catch (error) {
+      if (isInvalidGrant(error)) {
+        this.accessToken = null
+        this.refreshToken = null
+        this.pendingTokenSet = null
+        await this.tokenStore.clear().catch(() => {
+          logError('managed invalid session credential cleanup failed', {
+            errorCode: 'managed_token_persist_failed'
+          })
+        })
+        this.setStatus({ state: 'reauth_required', errorCode: 'managed_refresh_invalid_grant' })
+        logError('managed session restore failed', { errorCode: 'managed_refresh_invalid_grant' })
+        return this.getStatus()
+      }
+
+      this.accessToken = null
+      this.refreshToken = null
+      const mapped = mapRefreshError(error)
+      this.setStatus({ state: mapped.state, errorCode: mapped.errorCode })
+      logError('managed session restore failed', { errorCode: mapped.errorCode })
+      return this.getStatus()
+    }
+  }
+
+  /** 重试保存已由服务端轮换成功的新 Token，不再次提交已经使用过的旧 Refresh Token。 */
+  private async persistPendingSession(): Promise<ManagedAuthStatus> {
+    const tokenSet = this.pendingTokenSet
+    if (!tokenSet) {
+      return this.getStatus()
+    }
+    this.setStatus({ state: 'restoring_session', errorCode: null })
+    try {
+      await this.persistTokenSet(tokenSet, 'refresh')
+      if (!this.disposed) {
+        this.setStatus({ state: 'authenticated', errorCode: null })
+        logInfo('managed pending session persisted')
+      }
+    } catch (error) {
+      const mapped = mapRefreshError(error)
+      this.setStatus({ state: mapped.state, errorCode: mapped.errorCode })
+      logError('managed pending session persistence failed', { errorCode: mapped.errorCode })
+    }
+    return this.getStatus()
+  }
+
+  /** 持久化新 Refresh Token 后再替换内存会话，保存失败时保留新 Token 供同进程重试。 */
+  private async persistTokenSet(
+    tokenSet: ManagedTokenSet,
+    stage: 'token_exchange' | 'refresh'
+  ): Promise<void> {
+    if (!tokenSet.refreshToken) {
+      throw new ManagedOidcClientError(stage, 'response_invalid')
+    }
+    try {
+      await this.tokenStore.save(tokenSet.refreshToken)
+    } catch (error) {
+      this.pendingTokenSet = tokenSet
+      throw error
+    }
+    this.pendingTokenSet = null
+    if (!this.disposed) {
+      this.accessToken = tokenSet.accessToken
+      this.refreshToken = tokenSet.refreshToken
+    }
+  }
+
+  /** 建立 Refresh Token single-flight，并在完成后释放任务引用。 */
+  private startRefreshTask(operation: () => Promise<ManagedAuthStatus>): Promise<ManagedAuthStatus> {
+    const task = operation().finally(() => {
+      if (this.activeRefresh === task) {
+        this.activeRefresh = null
+      }
+    })
+    this.activeRefresh = task
+    return task
+  }
+
   /** 仅更新指定字段，避免意外把内部 Token 写进状态。 */
   private setStatus(next: Partial<ManagedAuthStatus>): void {
     this.status = { ...this.status, ...next }
+    try {
+      this.onStatusChange(this.getStatus())
+    } catch {
+      logError('managed auth status listener failed')
+    }
   }
 
   /** 应用 Feature Flag 脱敏字段，不覆盖已经认证的状态。 */
@@ -159,14 +319,20 @@ export class ManagedAuthManager {
     features: Awaited<ReturnType<ManagedFeatureFlags['getSnapshot']>>,
     enabledState: ManagedAuthState = 'idle'
   ): void {
+    const preserveSessionState =
+      ['authenticated', 'restoring_session', 'reauth_required'].includes(this.status.state) ||
+      this.status.errorCode?.startsWith('managed_token_') === true ||
+      this.status.errorCode?.startsWith('managed_refresh_') === true
     const nextState = features.managedLoginEnabled
-      ? (this.status.state === 'authenticated' ? 'authenticated' : enabledState)
-      : (this.status.state === 'authenticated' ? 'authenticated' : mapFeatureState(features.errorCode))
+      ? (preserveSessionState ? this.status.state : enabledState)
+      : (preserveSessionState ? this.status.state : mapFeatureState(features.errorCode))
     this.setStatus({
       state: nextState,
       managedLoginEnabled: features.managedLoginEnabled,
       minimumClientVersion: features.minimumClientVersion,
-      errorCode: features.managedLoginEnabled ? null : features.errorCode
+      errorCode: preserveSessionState
+        ? this.status.errorCode
+        : features.managedLoginEnabled ? null : features.errorCode
     })
   }
 }
@@ -184,6 +350,14 @@ function mapFeatureState(errorCode: ManagedAuthErrorCode | null): ManagedAuthSta
 
 /** 将底层 OIDC/loopback 异常映射为不包含敏感详情的本地错误。 */
 function mapLoginError(error: unknown): { state: ManagedAuthState; errorCode: ManagedAuthErrorCode } {
+  if (error instanceof ManagedTokenStoreError) {
+    return {
+      state: 'failed',
+      errorCode: error.reason === 'unavailable'
+        ? 'managed_token_storage_unavailable'
+        : 'managed_token_persist_failed'
+    }
+  }
   if (error instanceof ManagedOAuthLoopbackError) {
     if (error.reason === 'cancelled') {
       return { state: 'cancelled', errorCode: 'oauth_cancelled' }
@@ -200,6 +374,32 @@ function mapLoginError(error: unknown): { state: ManagedAuthState; errorCode: Ma
     return { state: 'failed', errorCode: 'oauth_discovery_failed' }
   }
   return { state: 'failed', errorCode: 'oauth_token_exchange_failed' }
+}
+
+/** 将刷新与恢复异常映射为不含服务端响应正文的稳定本地状态。 */
+function mapRefreshError(error: unknown): { state: ManagedAuthState; errorCode: ManagedAuthErrorCode } {
+  if (error instanceof ManagedTokenStoreError) {
+    return {
+      state: 'failed',
+      errorCode: error.reason === 'unavailable'
+        ? 'managed_token_storage_unavailable'
+        : 'managed_token_persist_failed'
+    }
+  }
+  if (error instanceof ManagedOidcClientError && error.reason === 'response_invalid') {
+    return { state: 'failed', errorCode: 'managed_refresh_response_invalid' }
+  }
+  if (error instanceof ManagedOidcClientError && error.stage === 'discovery') {
+    return { state: 'offline', errorCode: 'managed_refresh_failed' }
+  }
+  return { state: 'offline', errorCode: 'managed_refresh_failed' }
+}
+
+/** 检测服务端明确返回的失效、过期、撤销或复用结果。 */
+function isInvalidGrant(error: unknown): boolean {
+  return error instanceof ManagedOidcClientError &&
+    error.stage === 'refresh' &&
+    error.reason === 'invalid_grant'
 }
 
 /** 测试和后续流程使用的 Token 类型守卫，当前仅保证 Main 内部类型闭合。 */

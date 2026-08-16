@@ -90,7 +90,9 @@ const screenshotManager = new ScreenshotManager(
   (result) => petWindow?.webContents.send('assistant:attachments-staged', result),
   (message) => petWindow?.webContents.send('assistant:attachment-stage-error', message)
 )
-const managedAuthManager = new ManagedAuthManager(undefined, app.getVersion())
+const managedAuthManager = new ManagedAuthManager(undefined, app.getVersion(), {
+  onStatusChange: (status) => petWindow?.webContents.send('managed:status-changed', status)
+})
 
 /**
  * 打开 Artifact 原生保存对话框；仅在自动化 Smoke 明确注入变量时提供确定性选择结果。
@@ -744,6 +746,10 @@ app.whenReady().then(() => {
   registerIpc()
   openPetWindow()
   screenshotManager.registerGlobalShortcut()
+  void managedAuthManager.restoreSession().catch(() => {
+    // 认证编排器正常失败都会返回脱敏状态；这里只兜底未预期的启动异常。
+    logError('managed session restore unexpectedly failed')
+  })
   void assistantManager.start().catch((error: unknown) => {
     logError('assistant runtime failed to start', error)
   })

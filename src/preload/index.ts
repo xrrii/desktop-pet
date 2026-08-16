@@ -243,6 +243,14 @@ const api = {
     ipcRenderer.on('assistant:status', listener)
     return () => ipcRenderer.removeListener('assistant:status', listener)
   },
+  /** 订阅 Main 发布的脱敏 Managed 认证状态，不包含任何 Token。 */
+  onManagedAuthStatus: (callback: (status: ManagedAuthStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: ManagedAuthStatus): void => {
+      callback(status)
+    }
+    ipcRenderer.on('managed:status-changed', listener)
+    return () => ipcRenderer.removeListener('managed:status-changed', listener)
+  },
   onAssistantLayout: (callback: (layout: AssistantWindowLayout) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, layout: AssistantWindowLayout): void => {
       callback(layout)

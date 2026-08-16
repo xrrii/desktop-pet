@@ -5,7 +5,9 @@ export type ManagedAuthState =
   | 'preparing'
   | 'waiting_callback'
   | 'exchanging_code'
+  | 'restoring_session'
   | 'authenticated'
+  | 'reauth_required'
   | 'cancelled'
   | 'timed_out'
   | 'failed'
@@ -23,6 +25,12 @@ export type ManagedAuthErrorCode =
   | 'oauth_timeout'
   | 'oauth_cancelled'
   | 'oauth_token_exchange_failed'
+  | 'managed_token_storage_unavailable'
+  | 'managed_token_storage_corrupt'
+  | 'managed_token_persist_failed'
+  | 'managed_refresh_invalid_grant'
+  | 'managed_refresh_failed'
+  | 'managed_refresh_response_invalid'
 
 /** Main 向 Renderer 返回的脱敏认证快照。 */
 export interface ManagedAuthStatus {
