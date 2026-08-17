@@ -7,7 +7,7 @@
 - 最后更新：2026-08-17
 - 适用阶段：Managed Service Phase 2
 - 适用仓库：`desktop-pet`、`petdock-web`、`petdock-cloud`
-- 当前入口：云端身份、设备、授权与 Runtime Session 基础已完成，桌面 `P2-06` 至 `P2-10` 已完成，下一工作项为官网 `P2-W01`
+- 当前入口：桌面 `P2-06` 至 `P2-10` 与官网 `P2-W01` 已完成，下一工作项为官网 `P2-W02`
 
 本文档承载 Phase 2 的详细设计、跨仓库拆分、开发环境、实现顺序和验收要求。总体架构、安全边界和阶段定义仍以 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md` 为准，接口字段和协议语义仍以 `contracts/managed-service/v1` 权威契约为准。
 
@@ -329,7 +329,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 
 本次冻结已确定 OIDC Discovery/UserInfo/Token Response、RFC 7009 主动撤销、`managed_login_enabled` 服务端下发、开发端点覆盖和生产固定校验、设备显示名与重复注册、HTTP `Date` 服务端时间，以及 PostgreSQL/Redis 的 shared-dev 和生产环境隔离规则。
 
-云端已完成 P2-01、P2-02、P2-04、P2-05、P2-08 UserInfo 衔接和 P2-09 Runtime Session 回归覆盖，具备持久化用户目录、设备、授权记录、Runtime Token 签发、撤销审计、签名密钥轮换基础和安全审计回归门禁；Entitlement 管理与 Usage API 按确认延后。桌面端 P2-06 至 P2-10 已完成，下一步按已冻结的官网 Web API、Web Session、CSRF 和错误语义实现 `petdock-web` 的 P2-W01。
+云端已完成 P2-01、P2-02、P2-04、P2-05、P2-08、P2-09 和 P2-W01，具备持久化用户目录、设备、授权记录、Runtime Token、官网账号与 Redis Web Session；Entitlement 管理与 Usage API 按确认延后。桌面端 P2-06 至 P2-10 已完成，`petdock-web` P2-W01 已通过真实 HTTPS Cookie/CSRF 联调，下一步评审 P2-W02 OAuth 授权确认。
 
 ## 13. 实施顺序
 
@@ -341,7 +341,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 6. `P2-08`：账号/设备脱敏快照、退出和撤销（已完成）。
 7. `P2-09`：Runtime Token Broker 和本地 Runtime Session API（已完成）。
 8. `P2-10`：离线、过期、时钟偏差、重复登录和并发刷新（已完成）。
-9. `P2-W01` 至 `P2-W04`：官网页面和授权确认。
+9. `P2-W01`：官网账号与 Web Session（已完成）；`P2-W02` 至 `P2-W04`：授权确认和后续业务页面。
 10. `P2-11`：官网管理入口和返回应用刷新。
 11. 备案完成后执行真实域名、TLS、系统浏览器和打包版跨端登录验收。
 

@@ -243,3 +243,12 @@
 - 当前 `authorization_consent_enabled` 继续关闭，不新增自定义 Consent API。
 - P2-W02 复用 Spring Authorization Server 标准 `/oauth2/authorize` 与官网登录 Session；交互式设备授权确认必须在单独开启 Consent 前再次评审。
 - 官网 Web Session 与桌面 Access/Refresh Token 完全隔离；P2-W01~W04 完成后再实施 Desktop `P2-11` 管理入口。
+
+### `D-P2-14` 官网注册用户的 OIDC subject
+
+状态：`Frozen`
+
+- 官网注册新用户时，由控制面生成独立于用户表主键、username 和邮箱的不可变 subject，格式固定为 `usr_<UUID v4>`。
+- subject 只在服务端创建用户时生成一次并持久化到 `users.subject`；Web 请求和 Web 账号响应不得接收或返回该字段。
+- OIDC ID Token 和 UserInfo 继续使用 `users.subject` 作为 `sub`，不得改用 username、邮箱或 `users.id`，避免账号字段变化和内部主键暴露影响 OIDC 身份稳定性。
+- `users.subject` 现有唯一约束是最终冲突防线；生成发生极低概率冲突时必须重新生成，不得回退为可预测标识。

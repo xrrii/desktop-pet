@@ -72,6 +72,11 @@
 - `email`、`emailVerified` 只作为现有账号的只读脱敏字段返回；邮箱绑定、验证、变更和通知延后。
 - `passwordEnabled` 只表示当前账号是否存在可用密码哈希，不暴露哈希内容。
 
+### 5.4 内部 subject
+
+- 官网注册用户的 subject 由控制面按 `usr_<UUID v4>` 生成，与用户表主键、username 和邮箱相互独立，创建后不可修改。
+- subject 用于稳定的 OIDC `sub`，不属于 Web 账号请求或响应字段，不得进入前端日志、持久化存储或页面内容。
+
 ## 6. 错误与审计
 
 - 所有 Web API 错误使用统一 `ErrorEnvelope`，包含 `code`、稳定中文 `message`、`requestId`、`retryable` 和可空 `retryAfterSeconds`。

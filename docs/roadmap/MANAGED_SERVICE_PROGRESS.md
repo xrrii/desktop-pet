@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-16
+最后更新时间：2026-08-17
 
 ## 1. 新会话快速开始
 
@@ -51,19 +51,19 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 P2-10 Done，Desktop/Cloud Runtime Session Bridge 已完成，官网进入 P2-W01~W04 准备
+当前阶段：Phase 2 P2-W01 Done，官网账号与 Web Session 已完成
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调）
-独立官网前端：`petdock-web` 工程骨架 Ready，P2-W01~W04 业务页面尚未开始（独立仓库）
-Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
+独立官网前端：`petdock-web` P2-W01 Done，P2-W02~W04 尚未开始（独立仓库）
+Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：按已冻结的官网 Web API/Web Session 契约实现 `petdock-web` 的 P2-W01；Cloud 随后实现对应 Web Session/账号服务
+下一建议工作项：评审 P2-W02 OAuth 授权确认页与 Consent 边界；P2-W03 设备、订单、用量页面继续等待对应服务端能力
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计、外部签名密钥轮换和 Runtime Session API，并冻结独立官网 Web API/Web Session 契约；Desktop 已完成 P2-06 至 P2-10 的身份、Token 生命周期和 Runtime Session Bridge。`petdock-web` 已建立可构建骨架，但业务页面和服务端官网接口仍未完成；Entitlement 管理、Usage、支付闭环和桌面真实公网登录继续延后。备案继续只阻塞正式公网联调。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计、签名密钥轮换及 P2-W01 官网 Session/账号 API；Desktop 已完成 P2-06 至 P2-10。`petdock-web` 已完成 P2-W01 页面并通过真实 HTTPS Cookie/CSRF 联调；Entitlement 管理、Usage、支付闭环和桌面真实公网登录继续延后。备案继续只阻塞正式公网联调。
 
 ## 4. 产品与仓库边界
 
@@ -143,7 +143,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成系统浏览器 PKCE 登录、loopback、Refresh Token safeStorage、轮换和启动恢复、UserInfo 账号脱敏快照、设备注册与状态、退出登录、设备撤销、Runtime Token Broker、本地 Runtime Session Bridge、时钟偏差校正、离线退避和并发刷新协调。`petdock-web` 工程骨架已就绪，官网 Web API/Web Session 契约已在 Cloud 权威源冻结，下一工作项是实现 `P2-W01`；`P2-11` 排在 W01~W04 之后。备案继续只阻塞正式公网域名联调。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 注册、登录、资料、账号安全和 Web Session，并通过真实 HTTPS 双 Session 验收。下一工作项是评审 P2-W02；P2-W03 设备、订单、用量不在本轮，`P2-11` 仍排在 W01~W04 之后。备案继续只阻塞正式公网域名联调。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -203,6 +203,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-16 | Desktop P2-10 工作区 | Token 生命周期、时钟偏差、离线退避、Runtime 恢复和 Main-only 认证控制 | 通过 | Desktop `npm run typecheck`、149 项单测、87 项 Runtime 测试、14 项契约测试、检索评测六项指标 1.0、生产构建和端点扫描通过；Cloud Maven 因当前机器仅有 JDK 17 未运行，待 JDK 21 环境复验 |
 | 2026-08-16 | `petdock-web` 初始化工作区 | `npm install`、`npm run typecheck`、`npm run build`、Vite HTTP 200 和 `npm audit` | 通过 | Vite 7、React 19、TypeScript 5.9 工程骨架可构建；npm audit 0 漏洞；业务页面和官网 API 尚未实现 |
 | 2026-08-16 | Desktop/Cloud 官网契约同步工作区 | Web OpenAPI、Session/CSRF 文档、错误目录、样例和跨语言门禁 | 通过 | Cloud 契约 Python 15 项、全量 pytest 16 项、TypeScript 1 项、Spring/JUnit 1 项；契约制品 38 个文件；Desktop/Cloud 逐文件 SHA-256 38 个文件一致 |
+| 2026-08-17 | Web/Cloud P2-W01 工作区 | Web/Cloud 自动门禁与真实 HTTPS Cookie/CSRF 联调 | 通过 | Web Vitest 11 项、Playwright Mock 3 项、类型检查和构建；Cloud JDK 21 Maven 82 项中 78 项通过、4 项 Docker 容器测试跳过；真实 PostgreSQL/Redis 双 Session 改密撤销通过 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -343,3 +344,8 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Cloud 权威源新增独立 `web-control-plane.yaml`、`WEB_IDENTITY_AND_SESSION.md`、Session Schema、匿名/已登录样例和官网错误码；Desktop 已整体同步 38 个契约文件。
 - 官网固定使用 `__Host-petdock_web_session` HttpOnly Cookie、`X-PetDock-CSRF`、精确生产 Origin 和 `Cache-Control: no-store`；官网 API 与桌面 Bearer API 分离。
 - 当前只冻结注册、登录、退出、资料和密码修改；邮箱验证、密码找回、MFA、支付、Entitlement/Usage 和自定义 OAuth Consent 延后。
+
+### 2026-08-17（P2-W01 subject 决定同步）
+
+- Cloud 冻结 `D-P2-14`：官网注册用户使用独立、不可变的 `usr_<UUID v4>` subject，不复用用户表主键、username 或邮箱。
+- Desktop 同步 `DECISION_REGISTER.md` 和 `WEB_IDENTITY_AND_SESSION.md` 两份消费快照；不改变桌面代码、OpenAPI、数据库或 Token 契约。
