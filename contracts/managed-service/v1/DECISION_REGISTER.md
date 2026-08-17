@@ -236,13 +236,16 @@
 - 注册必须提交 `displayName`；资料接口本轮只允许更新显示名。邮箱绑定、验证、修改、忘记密码、MFA 和账号删除延后。
 - 登录失败统一返回 `invalid_credentials`，不得通过响应区分用户名不存在、密码错误、账号暂停或密码凭据不可用。
 
-### `D-P2-13` OAuth Consent 与官网设备授权
+### `D-P2-13` OAuth Consent 与官网桌面授权
 
 状态：`Frozen`
 
-- 当前 `authorization_consent_enabled` 继续关闭，不新增自定义 Consent API。
-- P2-W02 复用 Spring Authorization Server 标准 `/oauth2/authorize` 与官网登录 Session；交互式设备授权确认必须在单独开启 Consent 前再次评审。
-- 官网 Web Session 与桌面 Access/Refresh Token 完全隔离；P2-W01~W04 完成后再实施 Desktop `P2-11` 管理入口。
+- P2-W02 将桌面 Public Client 的 `authorization_consent_enabled` 固定为 `true`，对应 Spring Authorization Server `requireAuthorizationConsent=true`；继续使用标准 `/oauth2/authorize` 和现有 JDBC Consent 持久化，不新增 JSON Consent API 或自定义 Token 协议。
+- OAuth 浏览器交互固定使用 `/oauth/login`、`/oauth/register`、`/oauth/resume` 和 `/oauth/consent`；登录或注册后只能由服务端 SavedRequest 恢复本机 `/oauth2/authorize`，不得接受任意 `returnTo` 或外部跳转地址。
+- `account.petdock.site` 使用独立 Host-only `__Host-petdock_web_session`，不共享 `api.petdock.site` 的同名 Cookie，也不降低 `__Host-` 属性或建立父域 Cookie；两者复用同一用户目录、账号应用服务、Spring Session 机制和 Redis，但 Session 实例与退出行为相互隔离。首次桌面授权可能需要在账号主机重新登录。
+- 页面确认的是固定 `PetDock Desktop` Client 及本次请求的已登记权限，不展示或采集尚未建立的具体设备信息；设备事实只在授权码交换后按现有设备注册契约建立。
+- 当前官方权限采用整体同意或整体拒绝，不提供逐项勾选；首次授权或权限扩大时展示 Consent，相同用户、Client 和权限集合的重复授权可复用持久化 Consent 跳过页面。
+- 拒绝授权通过标准 `error=access_denied` 和原始 `state` 返回已校验 loopback；官网与账号主机 Session 均与桌面 Access/Refresh Token 完全隔离。P2-W01~W04 完成后再实施 Desktop `P2-11` 管理入口。
 
 ### `D-P2-14` 官网注册用户的 OIDC subject
 

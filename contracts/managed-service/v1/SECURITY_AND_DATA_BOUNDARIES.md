@@ -4,7 +4,8 @@
 
 | 凭据 | 持有者 | 持久化 | 禁止暴露给 |
 | --- | --- | --- | --- |
-| 官网 Web Session | 系统浏览器、控制面 | `__Host-petdock_web_session` HttpOnly 安全 Cookie，Session 状态可在 Redis | Electron、Python Runtime |
+| 官网 API Web Session | 系统浏览器、控制面 | `api.petdock.site` Host-only `__Host-petdock_web_session`，Session 状态可在 Redis | 账号主机、Electron、Python Runtime |
+| OAuth 账号主机 Session | 系统浏览器、控制面 | `account.petdock.site` Host-only `__Host-petdock_web_session`，Session 状态可在 Redis | 官网 API 主机、Electron、Python Runtime |
 | 桌面 Refresh Token | Electron Main | `safeStorage` | Renderer、Python Runtime、官网前端 |
 | 官方 Runtime Token | Electron Main、Python Runtime 内存 | 不持久化 | Renderer、日志、官网前端 |
 | 本地 Runtime Token | Electron Main、Python Runtime | 每次启动临时值 | Renderer、云端 |
@@ -21,7 +22,7 @@
 | Rerank | 查询和候选片段 | 查询及候选正文 |
 | Web Search | 搜索关键词和必要搜索选项 | 搜索关键词正文日志 |
 
-官网 Web API 只接受来自 `https://petdock.site` 的受控浏览器请求，使用 HttpOnly Session Cookie 和 `X-PetDock-CSRF` Header；Cookie、CSRF Token、密码和完整 username 不进入日志。官网 Web Session 不是桌面 OAuth Token，也不能换取 Runtime Token 或 Provider Key。
+官网 Web API 只接受来自 `https://petdock.site` 的受控浏览器请求，使用 API 主机 Host-only HttpOnly Session Cookie 和 `X-PetDock-CSRF` Header。OAuth 页面只从 `https://account.petdock.site` 同源加载，并使用账号主机独立的 Host-only HttpOnly Session Cookie；两个主机不得共享父域 Cookie、Session ID 或登录跳转票据。Cookie、Session ID、CSRF Token、密码、完整 username、授权码、`state`、PKCE 参数和完整 redirect URI 不进入日志。任一 Web Session 都不是桌面 OAuth Token，也不能换取 Runtime Token 或 Provider Key。
 
 Managed Web Search 第一版不接收网页正文读取 URL，也不提供 `/ai/v1/web/fetch`。URL 校验、DNS 固定、SSRF 防护和正文抓取由 Electron Main 执行。
 

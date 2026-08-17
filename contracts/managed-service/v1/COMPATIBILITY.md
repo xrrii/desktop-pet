@@ -32,9 +32,11 @@
 - 最低版本和 Managed 紧急开关由服务端配置；关闭 Managed 不得影响本地 BYOK。
 - 破坏性变更使用新 URL 主版本和新契约目录，不原地覆盖 v1。
 
-## 5. 官网 Web Session
+## 5. 官网与 OAuth Web Session
 
 - 官网 Web API 与桌面 Bearer API 分文件定义，使用 `/api/v1/web/*` 路径和 `__Host-petdock_web_session` HttpOnly Cookie。
+- `api.petdock.site` 与 `account.petdock.site` 使用相同 Cookie 名称时仍必须分别建立 Host-only Session，不得通过设置父域 `Domain` 使已有 Session 跨主机可见。首次桌面授权需要重新登录属于 v1 预期行为。
 - Web Session、CSRF Header、登录态和资料响应中的未知可选字段必须按通用降级处理；Session ID、CSRF Token 和密码不得进入日志或前端持久化。
 - 官网普通退出只结束当前 Web Session，不改变桌面 Access/Refresh Token、Token Family、设备或 Runtime Session。
 - 官网账号字段和接口可以在 v1 内增加可选字段，但不得改变 username 规范、CSRF 要求、Cookie 安全属性或桌面/官网信任域边界。
+- 启用标准 Authorization Consent 不改变 Public Client ID、PKCE、loopback、Token Response 或错误回调协议。首次授权和权限扩大可以增加页面交互，相同权限的重复授权可以跳过页面；旧桌面客户端必须继续按标准 `access_denied` 处理拒绝结果。

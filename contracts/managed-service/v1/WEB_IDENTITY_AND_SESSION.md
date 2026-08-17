@@ -1,6 +1,6 @@
 # PetDock Web 身份与会话契约
 
-本文档冻结官网 `P2-W01` 所需的 Web API、HttpOnly Session、CSRF 和账号字段。它与 `openapi/web-control-plane.yaml`、`error-codes/error-codes.json` 和 `DECISION_REGISTER.md` 一起构成官网契约；不改变桌面 OAuth、Refresh Token 或 Runtime Token 契约。
+本文档冻结官网 `P2-W01` 所需的 Web API、HttpOnly Session、CSRF 和账号字段，以及 `P2-W02` 账号主机复用这些能力时的最小边界。它与 `openapi/web-control-plane.yaml`、`DESKTOP_OAUTH.md`、`error-codes/error-codes.json` 和 `DECISION_REGISTER.md` 一起构成官网与 OAuth 浏览器交互契约；不改变桌面 Refresh Token 或 Runtime Token 契约。
 
 ## 1. 仓库、域名与接口边界
 
@@ -87,15 +87,19 @@
 
 以下审计事件在实现 P2-W01 时必须覆盖：`web_registration_succeeded`、`web_registration_failed`、`web_login_succeeded`、`web_login_failed`、`web_logout_succeeded`、`web_profile_updated`、`web_password_changed`、`web_csrf_rejected`。事件不得写入密码、Cookie、CSRF Token、完整 username、邮箱正文或异常堆栈。
 
-## 7. OAuth 与后续工作项
+## 7. OAuth 浏览器交互与后续工作项
 
-- 桌面 OAuth Issuer、Authorization Endpoint、Token Endpoint 和 PKCE 规则保持现有 `IDENTITY_AND_SESSION.md` 不变。
-- 当前 `authorization_consent_enabled` 仍关闭；P2-W02 不新增自定义 Consent API。标准 `/oauth2/authorize` 在官网登录 Session 下继续由 Spring Authorization Server 处理，交互式设备授权确认待单独开启并评审。
+- 桌面 OAuth Issuer、Authorization Endpoint、Token Endpoint、PKCE 和 loopback 规则保持 `IDENTITY_AND_SESSION.md` 与 `DESKTOP_OAUTH.md` 不变。
+- P2-W02 将 `petdock-desktop` 的 `authorization_consent_enabled` 固定为 `true`，对应 `requireAuthorizationConsent=true`；同意和拒绝只通过 Spring Authorization Server 标准 GET/POST `/oauth2/authorize` 处理，不新增 JSON Consent API。
+- `account.petdock.site` 复用同一用户目录、账号应用服务、Spring Session 机制和 Redis，但建立独立 Host-only `__Host-petdock_web_session`；它不共享 `api.petdock.site` 的同名 Cookie，不设置父域 `Domain`，退出任一 Session 不隐式清除另一个 Session 或桌面 Token。
+- 账号主机只开放 `GET /api/v1/web/session`、`POST /api/v1/web/auth/login` 和 `POST /api/v1/web/auth/register` 三个最小接口别名。现有 `web-control-plane.yaml` 仍描述官网 API 服务，不因这些受限入口增加新的 Consent API。
+- OAuth 页面固定为 `/oauth/login`、`/oauth/register` 和 `/oauth/consent`。登录或注册成功后只能访问 `GET /oauth/resume`，由服务端 SavedRequest 恢复已校验的本机 `/oauth2/authorize`；不得接受任意 `returnTo` 或完整外部 URL。
+- Consent 只确认固定 `PetDock Desktop` Client 和本次请求的已登记权限，不展示具体设备。当前官方权限整体同意或整体拒绝；首次授权或权限扩大时展示，相同用户、Client 和权限集合的重复授权可以复用持久化 Consent。
 - 密码找回、邮箱验证、MFA、账号删除、全部桌面设备退出、套餐、充值、订单、Entitlement 管理、Usage API 和支付回调不属于本轮契约。
 - Desktop `P2-11` 在 P2-W01~W04 完成后实施，使用系统浏览器打开官网管理入口，不共享 Cookie 或桌面 Token。
 
 ## 8. 兼容与回滚
 
-- v1 只增加本文件和独立 `web-control-plane.yaml`，不改变现有桌面 OpenAPI 的字段、路径、认证方式或错误语义。
+- P2-W02 不改变 `web-control-plane.yaml` 或现有桌面 OpenAPI 的字段、路径、认证方式和错误语义；OAuth 页面与标准协议端点由本文档和 `DESKTOP_OAUTH.md` 冻结。
 - 未登录时 Web API 不影响桌面 BYOK；关闭官网 Web Session 或官网 Feature Flag 不删除用户、设备、Refresh Token Family 或本地配置。
 - 业务实现发布前必须先通过契约测试、CSRF/Session 安全测试、MockMvc 和 Redis Session 集成测试；契约冻结不代表服务端功能已经完成。

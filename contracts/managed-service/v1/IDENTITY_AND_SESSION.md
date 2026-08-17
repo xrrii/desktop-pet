@@ -26,7 +26,9 @@ Discovery 响应至少包含以下字段和值：
 | `token_endpoint_auth_methods_supported` | 包含 `none` |
 | `code_challenge_methods_supported` | 仅包含 `S256` |
 
-桌面 Public Client ID 固定为 `petdock-desktop`，不配置 `client_secret`。桌面授权请求至少包含 `scope=openid desktop.session`。
+桌面 Public Client ID 固定为 `petdock-desktop`，不配置 `client_secret`。桌面授权请求至少包含 `scope=openid desktop.session`，并且只能增加已登记的 `profile`、`email`。
+
+`petdock-desktop` 固定启用 Spring Authorization Server 标准 Authorization Consent。首次授权或权限扩大时展示固定 Client 和权限说明，相同用户、Client 和权限集合的重复授权可以复用持久化 Consent；当前官方权限整体同意或整体拒绝，不按具体设备逐项授权。浏览器页面、账号主机 Session 和恢复规则以 `DESKTOP_OAUTH.md` 为准。
 
 ## 2. UserInfo 与账号脱敏快照
 

@@ -329,7 +329,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 
 本次冻结已确定 OIDC Discovery/UserInfo/Token Response、RFC 7009 主动撤销、`managed_login_enabled` 服务端下发、开发端点覆盖和生产固定校验、设备显示名与重复注册、HTTP `Date` 服务端时间，以及 PostgreSQL/Redis 的 shared-dev 和生产环境隔离规则。
 
-云端已完成 P2-01、P2-02、P2-04、P2-05、P2-08、P2-09 和 P2-W01，具备持久化用户目录、设备、授权记录、Runtime Token、官网账号与 Redis Web Session；Entitlement 管理与 Usage API 按确认延后。桌面端 P2-06 至 P2-10 已完成，`petdock-web` P2-W01 已通过真实 HTTPS Cookie/CSRF 联调，下一步评审 P2-W02 OAuth 授权确认。
+云端已完成 P2-01、P2-02、P2-04、P2-05、P2-08、P2-09 和 P2-W01，具备持久化用户目录、设备、授权记录、Runtime Token、官网账号与 Redis Web Session；Entitlement 管理与 Usage API 按确认延后。桌面端 P2-06 至 P2-10 已完成，`petdock-web` P2-W01 已通过真实 HTTPS Cookie/CSRF 联调；P2-W02 标准 Consent、账号主机独立 Session 和页面边界已冻结，下一步进入 Web/Cloud 并行实现。
 
 ## 13. 实施顺序
 
@@ -341,7 +341,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 6. `P2-08`：账号/设备脱敏快照、退出和撤销（已完成）。
 7. `P2-09`：Runtime Token Broker 和本地 Runtime Session API（已完成）。
 8. `P2-10`：离线、过期、时钟偏差、重复登录和并发刷新（已完成）。
-9. `P2-W01`：官网账号与 Web Session（已完成）；`P2-W02` 至 `P2-W04`：授权确认和后续业务页面。
+9. `P2-W01`：官网账号与 Web Session（已完成）；`P2-W02`：契约已冻结、业务实现待开始；`P2-W03` 至 `P2-W04`：后续业务页面。
 10. `P2-11`：官网管理入口和返回应用刷新。
 11. 备案完成后执行真实域名、TLS、系统浏览器和打包版跨端登录验收。
 

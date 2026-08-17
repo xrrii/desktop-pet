@@ -26,7 +26,8 @@ http://127.0.0.1:49152/oauth/callback
 
 ## 3. 会话隔离
 
-- 官网前端使用控制面签发的 HttpOnly 安全 Cookie 或等价 Web Session。
+- 官网业务 API 与 OAuth 账号主机都使用控制面签发的 HttpOnly 安全 Cookie，但分别建立独立的 Host-only Web Session。
+- `api.petdock.site` 与 `account.petdock.site` 可以使用同名 `__Host-petdock_web_session`；Cookie 均不得设置 `Domain`，浏览器不得在两个主机间共享 Session。用户已登录官网时，首次桌面授权仍可能需要在账号主机重新登录。
 - Electron 只获得桌面 Access/Refresh Token，不读取官网 Cookie。
 - 桌面 Refresh Token 只由 Main 使用 `safeStorage` 持久化，不下发 Renderer 或 Python Runtime。
 - Python Runtime 只接收 15 分钟官方 Runtime Token，不接收桌面 Refresh Token。
@@ -54,3 +55,24 @@ state=<high-entropy-random>
 - 桌面 Refresh Token 的绝对有效期为 30 天，每次使用都必须轮换。
 - 已轮换 Refresh Token 再次出现时，撤销当前设备对应的整个 Token Family。
 - `petdock.site` 已完成购买；DNS 解析和证书签发完成前，不开放公网登录流量。
+
+## 6. 系统浏览器交互
+
+- 正式 OAuth 交互页面只从 `https://account.petdock.site` 同源加载，入口固定为 `/oauth/login`、`/oauth/register`、`/oauth/consent` 和稳定错误页。
+- 未登录的 Authorization Request 由服务端 HttpSession RequestCache 保存。登录或注册成功后，前端只能访问 `GET /oauth/resume`；该端点只恢复服务端保存且已校验为本机 `/oauth2/authorize` 的请求，并返回 `302`，不得接收任意 `returnTo`、完整 Authorization URL 或外部跳转地址。
+- 账号主机只允许反向代理 `GET /api/v1/web/session`、`POST /api/v1/web/auth/login` 和 `POST /api/v1/web/auth/register` 三个账号接口，用于建立独立账号主机 Session；不得把整个官网 Web API 暴露为无约束别名。
+- OAuth 页面不得在 Storage、日志、分析系统、错误正文或页面快照中保存授权码、Token、密码、Cookie、`state`、PKCE 参数或完整 redirect URI。
+
+## 7. 标准 Authorization Consent
+
+- `petdock-desktop` 固定启用 `requireAuthorizationConsent=true`，使用 Spring Authorization Server 标准 GET/POST `/oauth2/authorize` 和现有 JDBC Consent 持久化，不新增 JSON Consent API、自定义授权协议或 Consent 业务表。
+- Consent 页面展示固定名称 `PetDock Desktop`、发布方 `PetDock` 和本次请求的已登记权限。请求必须包含 `openid`、`desktop.session`，并且只能增加已登记的 `profile`、`email`。
+- 当前官方权限作为完整集合整体同意或整体拒绝，不提供逐项勾选。首次授权或权限扩大时必须展示 Consent；相同用户、Client 和权限集合的重复授权可以复用持久化 Consent 跳过页面。
+- Consent 确认的是 OAuth Client，不是具体设备。页面不得展示或采集设备 ID、硬件序列号、主机名、IP 定位或设备显示名；设备只在授权码交换成功后按现有设备注册契约建立。
+- 拒绝授权必须通过标准 `error=access_denied` 和原始 `state` 返回已校验 loopback，不签发 Token、不持久化 Refresh Token，也不创建设备。
+
+## 8. 开发与发布门禁
+
+- 本地或 shared-dev 完成门禁必须使用两个独立测试主机名和受信 HTTPS 证书，分别模拟 `api` 与 `account` 的 Host-only Cookie；同一 `127.0.0.1` 主机的不同端口不能证明 Cookie 隔离。
+- ICP 备案未完成时可以进行本地、shared-dev、Testcontainers 和分离测试主机 HTTPS 联调；正式域名公网登录仍须等待备案、DNS、TLS 和入口网关配置全部就绪。
+- P2-W02 只有在真实 Spring Authorization Server、分离 Host Session、系统浏览器和 Desktop loopback/PKCE 跨端联调通过后才能标记为完成；Mock 测试不能替代该门禁。

@@ -278,6 +278,28 @@ def test_phase_two_identity_decisions_are_frozen() -> None:
     assert "authorization_consent_enabled" in register
 
 
+def test_p2_w02_oauth_browser_consent_boundary_is_frozen() -> None:
+    """确保 P2-W02 的标准 Consent、双主机 Session 和客户端授权语义不会回退。"""
+    register = (CONTRACT_ROOT / "DECISION_REGISTER.md").read_text(encoding="utf-8")
+    desktop_oauth = (CONTRACT_ROOT / "DESKTOP_OAUTH.md").read_text(encoding="utf-8")
+    web_identity = (CONTRACT_ROOT / "WEB_IDENTITY_AND_SESSION.md").read_text(
+        encoding="utf-8"
+    )
+
+    for document in (register, desktop_oauth, web_identity):
+        assert "requireAuthorizationConsent=true" in document
+        assert "不新增 JSON Consent API" in document
+        assert "整体同意或整体拒绝" in document
+    assert "GET /oauth/resume" in desktop_oauth
+    assert "HttpSession RequestCache" in desktop_oauth
+    assert "不得接收任意 `returnTo`" in desktop_oauth
+    assert "两个独立测试主机名" in desktop_oauth
+    assert "不展示或采集尚未建立的具体设备信息" in register
+    assert "api.petdock.site" in web_identity
+    assert "account.petdock.site" in web_identity
+    assert "不共享 `api.petdock.site` 的同名 Cookie" in web_identity
+
+
 def test_control_plane_feature_flag_contract_is_present() -> None:
     """确保桌面端 Feature Flag 可在登录前读取并使用蛇形字段。"""
     document = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
