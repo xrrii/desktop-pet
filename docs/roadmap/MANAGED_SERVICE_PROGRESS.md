@@ -205,7 +205,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-16 | Desktop/Cloud 官网契约同步工作区 | Web OpenAPI、Session/CSRF 文档、错误目录、样例和跨语言门禁 | 通过 | Cloud 契约 Python 15 项、全量 pytest 16 项、TypeScript 1 项、Spring/JUnit 1 项；契约制品 38 个文件；Desktop/Cloud 逐文件 SHA-256 38 个文件一致 |
 | 2026-08-17 | Web/Cloud P2-W01 工作区 | Web/Cloud 自动门禁与真实 HTTPS Cookie/CSRF 联调 | 通过 | Web Vitest 11 项、Playwright Mock 3 项、类型检查和构建；Cloud JDK 21 Maven 82 项中 78 项通过、4 项 Docker 容器测试跳过；真实 PostgreSQL/Redis 双 Session 改密撤销通过 |
 | 2026-08-17 | Desktop/Cloud P2-W02 契约工作区 | 标准 Consent、双主机 Session、OAuth 页面边界与快照比对 | 通过 | Cloud 与 Desktop 各 16 项契约测试通过；38 个受控文件 SHA-256 一致；业务实现尚未开始 |
-| 2026-08-18 | Web/Cloud/Desktop P2-W02 实现工作区 | 标准 Consent、分离 Host HTTPS、真实 loopback/PKCE、设备同步与拒绝授权 | 通过 | Desktop 类型检查、149 项单测、生产构建和 16 项契约测试；真实 HTTPS 跨端授权/拒绝 2 项；Cloud/Web 全量门禁和 38 文件快照比对通过 |
+| 2026-08-18 | Web/Cloud/Desktop P2-W02 实现与收尾工作区 | 标准 Consent、分离 Host HTTPS、真实 loopback/PKCE、设备同步、拒绝授权与提交后修复 | 通过 | Desktop 类型检查、155 项 Vitest、16 项契约、87 项 Runtime、检索评测、生产构建和生产依赖审计（0 漏洞）通过；Web 22 项 Vitest、Playwright Mock 6 项通过/1 项按环境跳过、生产构建和生产依赖审计（0 漏洞）通过；Cloud pytest 17 项、JDK 21 Maven 101 项全部通过，Testcontainers PostgreSQL/Redis 已实际运行；真实 HTTPS 跨端测试 2 项通过；Desktop/Cloud 38 个契约文件一致 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -362,4 +362,5 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Web/Cloud 完成 OAuth 登录、注册、标准 Consent、固定 SavedRequest 恢复、账号主机独立 Session 和脱敏授权审计。
 - Desktop 按 loopback 回调中的标准 `error=access_denied` 映射 `authorization_denied`，不再依赖第三方库异常消息。
 - 使用 Desktop 真实 OIDC、loopback、控制面和设备身份模块通过受信本地 HTTPS 门禁，覆盖 Token 交换、UserInfo、设备同步、Consent 复用、双 Host-only Cookie、撤销与拒绝授权。
+- 最终门禁结果：Desktop Vitest 155 项、契约 16 项、Runtime 87 项；Web Vitest 22 项、Playwright Mock 6 项通过且 1 项按环境跳过；Cloud pytest 17 项、JDK 21 Maven 101 项全部通过，Testcontainers PostgreSQL/Redis 已实际运行；真实 HTTPS 跨端测试 2 项通过，Desktop/Cloud 38 个契约文件一致，Desktop/Web 生产依赖审计均为 0 漏洞。
 - 正式公网域名、生产证书和打包版 Desktop 验收等待备案，不把设备管理、订单或用量页面计入 P2-W02。
