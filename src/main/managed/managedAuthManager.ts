@@ -380,7 +380,11 @@ export class ManagedAuthManager {
         })
         await this.runtimeTokenBroker?.clear()
         this.setStatus({ state: 'reauth_required', errorCode: 'managed_refresh_invalid_grant' })
-        logError('managed session restore failed', { errorCode: 'managed_refresh_invalid_grant' })
+        logError('Managed 会话恢复失败', {
+          errorCode: 'managed_refresh_invalid_grant',
+          stage: 'refresh',
+          reason: 'invalid_grant'
+        })
         return this.getStatus()
       }
 
@@ -389,7 +393,10 @@ export class ManagedAuthManager {
       this.refreshToken = null
       const mapped = mapRefreshError(error)
       this.setStatus({ state: mapped.state, errorCode: mapped.errorCode })
-      logError('managed session restore failed', { errorCode: mapped.errorCode })
+      logError('Managed 会话恢复失败', {
+        errorCode: mapped.errorCode,
+        ...managedErrorDiagnostic(error)
+      })
       return this.getStatus()
     }
   }
@@ -820,6 +827,17 @@ function mapRefreshError(error: unknown): { state: ManagedAuthState; errorCode: 
     return { state: 'offline', errorCode: 'managed_refresh_failed' }
   }
   return { state: 'offline', errorCode: 'managed_refresh_failed' }
+}
+
+/** 只记录稳定阶段与原因，禁止把 OAuth 原始异常或凭据写入日志。 */
+function managedErrorDiagnostic(error: unknown): {
+  stage: ManagedOidcClientError['stage'] | 'local'
+  reason: ManagedOidcClientError['reason']
+} {
+  if (error instanceof ManagedOidcClientError) {
+    return { stage: error.stage, reason: error.reason }
+  }
+  return { stage: 'local', reason: null }
 }
 
 /** 将账号同步错误映射为稳定的 Renderer 错误分类。 */

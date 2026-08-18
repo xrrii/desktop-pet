@@ -75,6 +75,12 @@ describe('ManagedOidcClient', () => {
         refreshToken: 'mock-refresh-token',
         tokenType: 'Bearer'
       })
+      await expect(prepared.exchange(new URL(
+        'http://127.0.0.1:49152/oauth/callback?error=access_denied&state=' + prepared.state
+      ))).rejects.toMatchObject({ stage: 'authorization_denied' })
+      await expect(prepared.exchange(new URL(
+        'http://127.0.0.1:49152/oauth/callback?error=access_denied&state=wrong-state'
+      ))).rejects.toMatchObject({ stage: 'token_exchange' })
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
     }
@@ -160,6 +166,39 @@ describe('ManagedOidcClient', () => {
     try {
       await expect(new ManagedOidcClient(new URL(`http://127.0.0.1:${port}`)).refresh('reused-refresh-token'))
         .rejects.toMatchObject({ stage: 'refresh', reason: 'invalid_grant' })
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+    }
+  })
+
+  it('将 Token Endpoint 的非 OAuth 响应识别为协议错误', async () => {
+    const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
+      if (request.url === '/.well-known/openid-configuration') {
+        const issuer = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+        writeJson(response, 200, {
+          issuer,
+          authorization_endpoint: `${issuer}/oauth2/authorize`,
+          token_endpoint: `${issuer}/oauth2/token`,
+          jwks_uri: `${issuer}/.well-known/jwks.json`,
+          grant_types_supported: ['refresh_token'],
+          token_endpoint_auth_methods_supported: ['none']
+        })
+        return
+      }
+      if (request.url === '/oauth2/token') {
+        response.statusCode = 401
+        response.end()
+        return
+      }
+      response.statusCode = 404
+      response.end()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = (server.address() as { port: number }).port
+
+    try {
+      await expect(new ManagedOidcClient(new URL(`http://127.0.0.1:${port}`)).refresh('old-refresh-token'))
+        .rejects.toMatchObject({ stage: 'refresh', reason: 'response_invalid' })
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
     }

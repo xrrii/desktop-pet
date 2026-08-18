@@ -38,6 +38,7 @@ import { ManagedRuntimeTokenBroker } from './managed/managedRuntimeTokenBroker'
 import { ManagedRuntimeAuthRefreshHandler } from './managed/managedRuntimeAuthRefreshHandler'
 import { ManagedServerClock } from './managed/managedServerClock'
 import { ScreenshotManager } from './screenshotManager'
+import { configureSingleInstance } from './singleInstance'
 import { setAssistantTheme } from './theme'
 import {
   createUserPet,
@@ -85,6 +86,11 @@ let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
 let smokeArtifactSaveCancelled = false
 const pendingPetSpritesheetSelections = new Map<string, { filePath: string; fileName: string }>()
+const isPrimaryInstance = configureSingleInstance(app, {
+  getWindow: () => petWindow,
+  openWindow: () => openPetWindow(),
+  logInfo: (message) => logInfo(message)
+})
 const managedEndpointPolicy = resolveManagedEndpointPolicy()
 const managedServerClock = new ManagedServerClock()
 const managedRuntimeSessionBridge = new ManagedRuntimeSessionBridge()
@@ -771,29 +777,31 @@ function registerIpc(): void {
   })
 }
 
-app.whenReady().then(() => {
-  logInfo('app ready')
-  ensureUserPetsRoot()
-  ensureSelectedPetIsAvailable()
-  registerIpc()
-  openPetWindow()
-  screenshotManager.registerGlobalShortcut()
-  void managedAuthManager.restoreSession().catch(() => {
-    // 认证编排器正常失败都会返回脱敏状态；这里只兜底未预期的启动异常。
-    logError('managed session restore unexpectedly failed')
-  })
-  void assistantManager.start().catch((error: unknown) => {
-    logError('assistant runtime failed to start', error)
-  })
+if (isPrimaryInstance) {
+  app.whenReady().then(() => {
+    logInfo('app ready')
+    ensureUserPetsRoot()
+    ensureSelectedPetIsAvailable()
+    registerIpc()
+    openPetWindow()
+    screenshotManager.registerGlobalShortcut()
+    void managedAuthManager.restoreSession().catch(() => {
+      // 认证编排器正常失败都会返回脱敏状态；这里只兜底未预期的启动异常。
+      logError('managed session restore unexpectedly failed')
+    })
+    void assistantManager.start().catch((error: unknown) => {
+      logError('assistant runtime failed to start', error)
+    })
 
-  app.on('activate', () => {
-    if (!petWindow || petWindow.isDestroyed()) {
-      openPetWindow()
-    } else {
-      petWindow.showInactive()
-    }
+    app.on('activate', () => {
+      if (!petWindow || petWindow.isDestroyed()) {
+        openPetWindow()
+      } else {
+        petWindow.showInactive()
+      }
+    })
   })
-})
+}
 
 function openPetWindow(): void {
   const window = createPetWindow()

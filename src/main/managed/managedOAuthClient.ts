@@ -52,6 +52,12 @@ export class ManagedOidcClient implements ManagedOAuthClient {
       authorizationUrl,
       state,
       exchange: async (callbackUrl: URL): Promise<ManagedTokenSet> => {
+        if (
+          callbackUrl.searchParams.get('error') === 'access_denied'
+          && callbackUrl.searchParams.get('state') === state
+        ) {
+          throw new ManagedOidcClientError('authorization_denied')
+        }
         try {
           const response = await client.authorizationCodeGrant(configuration, callbackUrl, {
             pkceCodeVerifier: codeVerifier,
@@ -88,6 +94,9 @@ export class ManagedOidcClient implements ManagedOAuthClient {
     } catch (error) {
       if (isInvalidGrantError(error)) {
         throw new ManagedOidcClientError('refresh', 'invalid_grant')
+      }
+      if (isOAuthProtocolResponseError(error)) {
+        throw new ManagedOidcClientError('refresh', 'response_invalid')
       }
       const responseStatus = getResponseStatus(error)
       if (responseStatus === 429 || (responseStatus !== null && responseStatus >= 500)) {
@@ -226,6 +235,17 @@ function isInvalidGrantError(error: unknown): boolean {
       typeof error === 'object' &&
       'error' in error &&
       (error as { error?: unknown }).error === 'invalid_grant'
+  )
+}
+
+/** 识别 OAuth 客户端已收到但无法按协议解析的响应，不把服务端协议错误误报为断网。 */
+function isOAuthProtocolResponseError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string' &&
+      (error as { code: string }).code.startsWith('OAUTH_RESPONSE_')
   )
 }
 
