@@ -1,0 +1,15 @@
+{
+  "version": 4,
+  "status": "active",
+  "billingMode": "pay_as_you_go",
+  "plan": null,
+  "capabilities": {
+    "chat": {
+      "enabled": true,
+      "quotaMode": "metered",
+      "remaining": null,
+      "unit": "tokens"
+    }
+  },
+  "expiresAt": null
+}

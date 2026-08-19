@@ -327,6 +327,9 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
         "/api/v1/web/auth/logout",
         "/api/v1/web/profile",
         "/api/v1/web/account/password",
+        "/api/v1/web/entitlements",
+        "/api/v1/web/devices",
+        "/api/v1/web/devices/{deviceId}",
     }
     security_scheme = document["components"]["securitySchemes"]["webSession"]
     assert security_scheme["type"] == "apiKey"
@@ -335,7 +338,7 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
     assert document["paths"]["/api/v1/web/session"]["get"]["security"] == []
     for path in document["paths"]:
         for method, operation in document["paths"][path].items():
-            if method.lower() not in {"get", "post", "put", "patch"}:
+            if method.lower() not in {"get", "post", "put", "patch", "delete"}:
                 continue
             references = {
                 parameter["$ref"]
@@ -343,6 +346,67 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
                 if isinstance(parameter, dict) and "$ref" in parameter
             }
             assert "#/components/parameters/RequestId" in references
-            if method.lower() in {"post", "put", "patch"}:
+            if method.lower() in {"post", "put", "patch", "delete"}:
                 assert "#/components/parameters/CsrfToken" in references
     assert "desktopOAuth" not in document["components"]["securitySchemes"]
+
+
+def test_p2_w03_device_and_billing_modes_are_frozen() -> None:
+    """冻结活动设备管理及未开通、套餐、按量三种服务访问状态。"""
+    web = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    desktop = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
+    register = (CONTRACT_ROOT / "DECISION_REGISTER.md").read_text(encoding="utf-8")
+    web_identity = (CONTRACT_ROOT / "WEB_IDENTITY_AND_SESSION.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert web["paths"]["/api/v1/web/entitlements"]["get"]["operationId"] == "getWebEntitlements"
+    assert web["paths"]["/api/v1/web/devices"]["get"]["operationId"] == "listWebDevices"
+    assert web["paths"]["/api/v1/web/devices"]["delete"]["operationId"] == "revokeAllWebDevices"
+    assert web["paths"]["/api/v1/web/devices/{deviceId}"]["delete"]["operationId"] == "revokeWebDevice"
+    assert web["components"]["parameters"]["PageSize"]["schema"]["maximum"] == 50
+    assert "current" not in web["components"]["schemas"]["WebDevice"]["properties"]
+
+    entitlement = desktop["components"]["schemas"]["EntitlementSnapshot"]
+    assert entitlement["oneOf"] == [
+        {"$ref": "#/components/schemas/InactiveEntitlementSnapshot"},
+        {"$ref": "#/components/schemas/SubscriptionEntitlementSnapshot"},
+        {"$ref": "#/components/schemas/PayAsYouGoEntitlementSnapshot"},
+    ]
+    subscription = desktop["components"]["schemas"]["SubscriptionEntitlementSnapshot"]
+    pay_as_you_go = desktop["components"]["schemas"]["PayAsYouGoEntitlementSnapshot"]
+    inactive = desktop["components"]["schemas"]["InactiveEntitlementSnapshot"]
+    assert subscription["properties"]["billingMode"]["const"] == "subscription"
+    assert subscription["properties"]["plan"]["type"] == "string"
+    assert subscription["properties"]["capabilities"]["minProperties"] == 1
+    assert pay_as_you_go["properties"]["billingMode"]["const"] == "pay_as_you_go"
+    assert pay_as_you_go["properties"]["plan"]["type"] == "null"
+    assert pay_as_you_go["properties"]["expiresAt"]["type"] == "null"
+    assert pay_as_you_go["properties"]["capabilities"]["minProperties"] == 1
+    assert inactive["properties"]["status"]["const"] == "inactive"
+    assert inactive["properties"]["billingMode"]["type"] == "null"
+    assert desktop["components"]["schemas"]["MeteredCapabilityEntitlement"]["properties"]["remaining"]["type"] == "null"
+    assert "billingMode" in desktop["components"]["schemas"]["UsageSummary"]["required"]
+
+    inactive_example = _read_json(EXAMPLE_ROOT / "entitlement-inactive.json")
+    subscription_example = _read_json(EXAMPLE_ROOT / "entitlement-subscription.json")
+    metered_example = _read_json(EXAMPLE_ROOT / "entitlement-pay-as-you-go.json")
+    assert inactive_example["status"] == "inactive"
+    assert subscription_example["billingMode"] == "subscription"
+    assert subscription_example["capabilities"]["chat"]["remaining"] >= 0
+    assert metered_example["billingMode"] == "pay_as_you_go"
+    assert metered_example["plan"] is None
+    assert metered_example["expiresAt"] is None
+    assert metered_example["capabilities"]["chat"]["remaining"] is None
+
+    error_catalog = _read_json(CONTRACT_ROOT / "error-codes" / "error-codes.json")
+    capability_error = next(
+        item for item in error_catalog["errors"] if item["code"] == "capability_not_entitled"
+    )
+    assert capability_error["message"] == "当前服务方案未授权此能力。"
+
+    for document in (register, web_identity):
+        assert "pay_as_you_go" in document
+        assert "不表示免费、无限或额度耗尽" in document
+    assert "不得未经用户确认自动切换到按量扣费" in register
+    assert "当前免费 Beta 只产生套餐模式快照" in register

@@ -1,6 +1,6 @@
 # PetDock Web 身份与会话契约
 
-本文档冻结官网 `P2-W01` 所需的 Web API、HttpOnly Session、CSRF 和账号字段，以及 `P2-W02` 账号主机复用这些能力时的最小边界。它与 `openapi/web-control-plane.yaml`、`DESKTOP_OAUTH.md`、`error-codes/error-codes.json` 和 `DECISION_REGISTER.md` 一起构成官网与 OAuth 浏览器交互契约；不改变桌面 Refresh Token 或 Runtime Token 契约。
+本文档冻结官网 `P2-W01` 的账号与会话、`P2-W02` 的账号主机复用边界，以及 `P2-W03` 的服务方案和设备管理接口。它与 `openapi/web-control-plane.yaml`、`DESKTOP_OAUTH.md`、`error-codes/error-codes.json` 和 `DECISION_REGISTER.md` 一起构成官网与 OAuth 浏览器交互契约；不改变桌面 Refresh Token 或 Runtime Token 的信任边界。
 
 ## 1. 仓库、域名与接口边界
 
@@ -33,8 +33,10 @@
 - `POST /api/v1/web/auth/logout`
 - `PATCH /api/v1/web/profile`
 - `PUT /api/v1/web/account/password`
+- `DELETE /api/v1/web/devices/{deviceId}`
+- `DELETE /api/v1/web/devices`
 
-缺失、格式不合法、过期或不匹配统一返回 `csrf_invalid`。服务端不得接受查询参数、JSON 字段或自定义 Cookie 中的 CSRF 值代替 Header。CORS 只允许必要的 `GET`、`POST`、`PATCH`、`PUT` 方法和 `Content-Type`、`X-PetDock-Request-Id`、`X-PetDock-CSRF` 请求头，并固定 `Access-Control-Allow-Credentials: true`。
+缺失、格式不合法、过期或不匹配统一返回 `csrf_invalid`。服务端不得接受查询参数、JSON 字段或自定义 Cookie 中的 CSRF 值代替 Header。CORS 只允许必要的 `GET`、`POST`、`PATCH`、`PUT`、`DELETE` 方法和 `Content-Type`、`X-PetDock-Request-Id`、`X-PetDock-CSRF` 请求头，并固定 `Access-Control-Allow-Credentials: true`。
 
 ## 4. Session 生命周期
 
@@ -87,7 +89,47 @@
 
 以下审计事件在实现 P2-W01 时必须覆盖：`web_registration_succeeded`、`web_registration_failed`、`web_login_succeeded`、`web_login_failed`、`web_logout_succeeded`、`web_profile_updated`、`web_password_changed`、`web_csrf_rejected`。事件不得写入密码、Cookie、CSRF Token、完整 username、邮箱正文或异常堆栈。
 
-## 7. OAuth 浏览器交互与后续工作项
+## 7. P2-W03 服务方案与设备管理
+
+### 7.1 Web API
+
+P2-W03 在官网 API 主机新增：
+
+```text
+GET    /api/v1/web/entitlements
+GET    /api/v1/web/devices?page=1&pageSize=20
+DELETE /api/v1/web/devices/{deviceId}
+DELETE /api/v1/web/devices
+```
+
+- 四个接口都要求已登录 Web Session，并返回或遵守 `Cache-Control: no-store`。
+- 两个 `DELETE` 必须校验 `X-PetDock-CSRF`，不允许自动重试。
+- `account.petdock.site` 不开放上述接口别名；账号主机继续只开放 Session、登录和注册三个最小 Web API。
+
+### 7.2 服务访问与计费模式
+
+`EntitlementSnapshot` 使用三种互斥状态：
+
+| 状态 | `status` | `billingMode` | `plan` | Capability `remaining` |
+| --- | --- | --- | --- | --- |
+| 未开通 | `inactive` | `null` | `null` | 不返回 Capability |
+| 套餐订阅 | `active` | `subscription` | 非空套餐标识 | 非负整数，表示套餐剩余额度 |
+| 按量计费 | `active` | `pay_as_you_go` | `null` | `null`，表示按实际用量结算 |
+
+按量模式的 `remaining=null` 不表示免费、无限或额度耗尽，`expiresAt=null` 表示没有套餐有效期，未来账期由 Usage 和账单契约表达。套餐模式和按量模式均必须由服务端 Entitlement 明确授权；客户端不能根据 `billingMode` 自行扩大能力。
+
+当前免费 Beta 只启用 `subscription`。`pay_as_you_go` 先作为正式收费阶段的兼容协议冻结；P2-W03 不提供模式切换、价格、余额、充值、扣费、订单或退款接口，也不得在前端构造这些数据。
+
+### 7.3 设备列表与撤销
+
+- 列表只返回当前用户的活动设备，按 `lastSeenAt DESC, id DESC` 稳定排序并分页；默认 `pageSize=20`，上限 50。
+- 设备字段只包含 `id`、`displayName`、`platform`、`createdAt` 和 `lastSeenAt`。`lastSeenAt` 当前表示最近登记时间，不表示实时在线。
+- 官网不返回 `current`，也不接受 Device Header、URL 参数或桌面 Token 来标记当前设备。
+- 撤销不存在或不属于当前用户的设备统一返回 `device_not_found`，不泄露设备归属。
+- 单设备撤销和全部设备撤销联动失效设备相关的 OAuth Access/Refresh Token、Token Family、Runtime Session 和撤销缓存事实；当前 Web Session 保持有效。
+- 全部撤销作用于服务端在事务中选出的全部活动设备，不受当前页面分页限制；空集合时幂等返回 `204`。
+
+## 8. OAuth 浏览器交互与后续工作项
 
 - 桌面 OAuth Issuer、Authorization Endpoint、Token Endpoint、PKCE 和 loopback 规则保持 `IDENTITY_AND_SESSION.md` 与 `DESKTOP_OAUTH.md` 不变。
 - P2-W02 将 `petdock-desktop` 的 `authorization_consent_enabled` 固定为 `true`，对应 `requireAuthorizationConsent=true`；同意和拒绝只通过 Spring Authorization Server 标准 GET/POST `/oauth2/authorize` 处理，不新增 JSON Consent API。
@@ -95,11 +137,11 @@
 - 账号主机只开放 `GET /api/v1/web/session`、`POST /api/v1/web/auth/login` 和 `POST /api/v1/web/auth/register` 三个最小接口别名。现有 `web-control-plane.yaml` 仍描述官网 API 服务，不因这些受限入口增加新的 Consent API。
 - OAuth 页面固定为 `/oauth/login`、`/oauth/register` 和 `/oauth/consent`。登录或注册成功后只能访问 `GET /oauth/resume`，由服务端 SavedRequest 恢复已校验的本机 `/oauth2/authorize`；不得接受任意 `returnTo` 或完整外部 URL。
 - Consent 只确认固定 `PetDock Desktop` Client 和本次请求的已登记权限，不展示具体设备。当前官方权限整体同意或整体拒绝；首次授权或权限扩大时展示，相同用户、Client 和权限集合的重复授权可以复用持久化 Consent。
-- 密码找回、邮箱验证、MFA、账号删除、全部桌面设备退出、套餐、充值、订单、Entitlement 管理、Usage API 和支付回调不属于本轮契约。
+- 密码找回、邮箱验证、MFA、账号删除、按量模式启用、充值、订单、Usage API 和支付回调仍不属于当前实现；P2-W03 设备与只读服务快照以第 7 节为准。
 - Desktop `P2-11` 在 P2-W01~W04 完成后实施，使用系统浏览器打开官网管理入口，不共享 Cookie 或桌面 Token。
 
-## 8. 兼容与回滚
+## 9. 兼容与回滚
 
-- P2-W02 不改变 `web-control-plane.yaml` 或现有桌面 OpenAPI 的字段、路径、认证方式和错误语义；OAuth 页面与标准协议端点由本文档和 `DESKTOP_OAUTH.md` 冻结。
+- P2-W03 只增加独立 Web API，并在尚未实现或发布的 Entitlement/Usage 响应上完成首次交付前模型校正；已实现的 P2-W01/P2-W02 字段、路径和认证语义不变。
 - 未登录时 Web API 不影响桌面 BYOK；关闭官网 Web Session 或官网 Feature Flag 不删除用户、设备、Refresh Token Family 或本地配置。
 - 业务实现发布前必须先通过契约测试、CSRF/Session 安全测试、MockMvc 和 Redis Session 集成测试；契约冻结不代表服务端功能已经完成。

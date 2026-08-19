@@ -15,7 +15,7 @@
     { "code": "password_authentication_unavailable", "httpStatus": 409, "retryable": false, "message": "当前账号没有可用的密码凭据。" },
     { "code": "runtime_session_not_found", "httpStatus": 404, "retryable": false, "message": "未找到指定 Runtime Session。" },
     { "code": "capability_disabled", "httpStatus": 403, "retryable": false, "message": "当前能力已关闭。" },
-    { "code": "capability_not_entitled", "httpStatus": 403, "retryable": false, "message": "当前套餐未授权此能力。" },
+    { "code": "capability_not_entitled", "httpStatus": 403, "retryable": false, "message": "当前服务方案未授权此能力。" },
     { "code": "quota_exhausted", "httpStatus": 429, "retryable": false, "message": "当前能力额度已用完。" },
     { "code": "rate_limited", "httpStatus": 429, "retryable": true, "message": "请求过于频繁，请稍后重试。" },
     { "code": "provider_unavailable", "httpStatus": 503, "retryable": true, "message": "官方能力暂时不可用。" },

@@ -46,12 +46,30 @@ class ManagedServiceExamplesTest {
         assertTrue(authenticatedWebSession.path("authenticated").asBoolean());
         assertEquals("demo_user", authenticatedWebSession.path("user").path("username").asText());
         assertTrue(authenticatedWebSession.path("user").path("passwordEnabled").asBoolean());
+        JsonNode inactiveEntitlement = read("entitlement-inactive.json");
+        assertEquals("inactive", inactiveEntitlement.path("status").asText());
+        assertTrue(inactiveEntitlement.path("billingMode").isNull());
+        JsonNode subscriptionEntitlement = read("entitlement-subscription.json");
+        assertEquals("subscription", subscriptionEntitlement.path("billingMode").asText());
+        assertEquals("quota", subscriptionEntitlement.path("capabilities").path("chat").path("quotaMode").asText());
+        assertTrue(subscriptionEntitlement.path("capabilities").path("chat").path("remaining").asLong() >= 0);
+        JsonNode meteredEntitlement = read("entitlement-pay-as-you-go.json");
+        assertEquals("pay_as_you_go", meteredEntitlement.path("billingMode").asText());
+        assertTrue(meteredEntitlement.path("plan").isNull());
+        assertTrue(meteredEntitlement.path("expiresAt").isNull());
+        assertEquals("metered", meteredEntitlement.path("capabilities").path("chat").path("quotaMode").asText());
+        assertTrue(meteredEntitlement.path("capabilities").path("chat").path("remaining").isNull());
         for (String name : List.of("runtime-token-header.json", "request-context.json", "managed-auth-refresh-event.json", "managed-auth-result.json")) {
             JsonNode value = read(name);
             assertTrue(value.isObject() && value.size() > 0);
             assertEquals(value, mapper.readTree(mapper.writeValueAsBytes(value)));
         }
-        for (String name : List.of("web-session-anonymous.json", "web-session-authenticated.json")) {
+        for (String name : List.of(
+                "web-session-anonymous.json",
+                "web-session-authenticated.json",
+                "entitlement-inactive.json",
+                "entitlement-subscription.json",
+                "entitlement-pay-as-you-go.json")) {
             JsonNode value = read(name);
             assertTrue(value.isObject() && value.size() > 0);
             assertEquals(value, mapper.readTree(mapper.writeValueAsBytes(value)));

@@ -108,6 +108,20 @@ X-PetDock-Request-Id: <uuid>
 
 当前设备由服务端将桌面 Access Token 所属的 OAuth 授权记录与设备绑定后解析，不新增设备请求头，也不接受客户端通过 Header 覆盖当前设备。首次成功调用 `POST /api/v1/devices` 时，一个尚未绑定的 OAuth 授权只能绑定一个 `deviceId`；后续 Refresh Token 轮换保持同一绑定。`GET /api/v1/devices/current` 在授权尚未绑定设备时返回 `device_not_found`。
 
-## 8. 服务端时间
+## 8. Entitlement 与计费模式快照
+
+桌面端通过 `GET /api/v1/entitlements` 读取脱敏服务访问快照。该快照区分：
+
+- `inactive`：当前没有可用的 Managed 服务授权，`billingMode`、`plan`、`version` 和 `expiresAt` 均为 `null`，Capability 为空。
+- `subscription`：用户使用套餐订阅，`plan` 为非空套餐标识，Capability 使用 `quotaMode=quota` 且 `remaining` 为非负整数。
+- `pay_as_you_go`：用户不订阅套餐并显式采用按量计费，`plan=null`、`expiresAt=null`，Capability 使用 `quotaMode=metered` 且 `remaining=null`。
+
+按量模式的 `remaining=null` 表示该能力按实际用量结算，不表示免费、无限或额度耗尽。两种活动计费模式均必须具有服务端 Entitlement，Runtime Token 仍只签发已授权 Capability；客户端不得把计费模式当作授权本身。
+
+套餐模式和按量模式不会自动互相切换。当前免费 Beta 只启用套餐模式；按量模式的价格、币种、余额或授信、结算、订单和退款在 Phase 5 冻结并实现前不得向用户开放。
+
+P2-W03 对尚未实现和发布的 Entitlement/Usage 响应进行首次交付前模型校正，固定样例覆盖三种状态；这不改变已经发布的账号、设备、OAuth 或 Runtime Token 字段。
+
+## 9. 服务端时间
 
 控制面每个 HTTP 响应由 Web 容器写入标准 HTTP `Date` Header，使用 UTC。客户端只使用该 Header 估算时钟偏差，不依赖业务 JSON 中的 `serverTime` 字段，也不得因缺少该 Header 延长 Token、撤销或配额有效期。

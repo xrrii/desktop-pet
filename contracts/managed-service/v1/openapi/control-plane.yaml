@@ -85,7 +85,7 @@ paths:
   /api/v1/entitlements:
     get:
       operationId: getEntitlements
-      summary: 获取当前套餐和能力快照
+      summary: 获取当前服务访问和能力快照
       tags: [Entitlement]
       parameters:
         - $ref: '#/components/parameters/ClientVersion'
@@ -212,26 +212,78 @@ components:
         status: { type: string, enum: [active, revoked] }
         createdAt: { type: string, format: date-time }
         lastSeenAt: { type: string, format: date-time }
-    CapabilityEntitlement:
+    QuotaCapabilityEntitlement:
       type: object
       additionalProperties: false
-      required: [enabled, remaining, unit]
+      required: [enabled, quotaMode, remaining, unit]
       properties:
         enabled: { type: boolean }
+        quotaMode: { type: string, const: quota }
         remaining: { type: integer, minimum: 0 }
         unit: { type: string, enum: [tokens, requests] }
-    EntitlementSnapshot:
+    MeteredCapabilityEntitlement:
       type: object
       additionalProperties: false
-      required: [version, plan, capabilities, expiresAt]
+      required: [enabled, quotaMode, remaining, unit]
+      properties:
+        enabled: { type: boolean }
+        quotaMode: { type: string, const: metered }
+        remaining:
+          type: 'null'
+          description: 按实际用量结算，不表示免费、无限或额度耗尽。
+        unit: { type: string, enum: [tokens, requests] }
+    InactiveEntitlementSnapshot:
+      type: object
+      additionalProperties: false
+      required: [version, status, billingMode, plan, capabilities, expiresAt]
+      properties:
+        version: { type: 'null' }
+        status: { type: string, const: inactive }
+        billingMode: { type: 'null' }
+        plan: { type: 'null' }
+        capabilities:
+          type: object
+          maxProperties: 0
+          additionalProperties: false
+        expiresAt: { type: 'null' }
+    SubscriptionEntitlementSnapshot:
+      type: object
+      additionalProperties: false
+      required: [version, status, billingMode, plan, capabilities, expiresAt]
       properties:
         version: { type: integer, minimum: 1 }
+        status: { type: string, const: active }
+        billingMode: { type: string, const: subscription }
         plan: { type: string, minLength: 1, maxLength: 64 }
         capabilities:
           type: object
+          minProperties: 1
           additionalProperties:
-            $ref: '#/components/schemas/CapabilityEntitlement'
+            $ref: '#/components/schemas/QuotaCapabilityEntitlement'
         expiresAt: { type: string, format: date-time }
+    PayAsYouGoEntitlementSnapshot:
+      type: object
+      additionalProperties: false
+      required: [version, status, billingMode, plan, capabilities, expiresAt]
+      properties:
+        version: { type: integer, minimum: 1 }
+        status: { type: string, const: active }
+        billingMode: { type: string, const: pay_as_you_go }
+        plan: { type: 'null' }
+        capabilities:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            $ref: '#/components/schemas/MeteredCapabilityEntitlement'
+        expiresAt:
+          type: 'null'
+          description: 按量服务没有套餐有效期；账期由 Usage 和账单契约表达。
+    EntitlementSnapshot:
+      description: 未开通、套餐订阅或按量计费三种互斥服务访问状态。
+      oneOf:
+        - $ref: '#/components/schemas/InactiveEntitlementSnapshot'
+        - $ref: '#/components/schemas/SubscriptionEntitlementSnapshot'
+        - $ref: '#/components/schemas/PayAsYouGoEntitlementSnapshot'
     FeatureFlagSnapshot:
       type: object
       additionalProperties: false
@@ -257,19 +309,36 @@ components:
         issuedAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
         entitlementVersion: { type: integer, minimum: 1 }
-    UsageCapabilitySummary:
+    QuotaUsageCapabilitySummary:
       type: object
       additionalProperties: false
-      required: [used, remaining, unit]
+      required: [quotaMode, used, remaining, unit]
       properties:
+        quotaMode: { type: string, const: quota }
         used: { type: integer, minimum: 0 }
         remaining: { type: integer, minimum: 0 }
         unit: { type: string, enum: [tokens, requests] }
+    MeteredUsageCapabilitySummary:
+      type: object
+      additionalProperties: false
+      required: [quotaMode, used, remaining, unit]
+      properties:
+        quotaMode: { type: string, const: metered }
+        used: { type: integer, minimum: 0 }
+        remaining:
+          type: 'null'
+          description: 按实际用量结算，不表示免费、无限或额度耗尽。
+        unit: { type: string, enum: [tokens, requests] }
+    UsageCapabilitySummary:
+      oneOf:
+        - $ref: '#/components/schemas/QuotaUsageCapabilitySummary'
+        - $ref: '#/components/schemas/MeteredUsageCapabilitySummary'
     UsageSummary:
       type: object
       additionalProperties: false
-      required: [periodStart, periodEnd, capabilities]
+      required: [billingMode, periodStart, periodEnd, capabilities]
       properties:
+        billingMode: { type: string, enum: [subscription, pay_as_you_go] }
         periodStart: { type: string, format: date-time }
         periodEnd: { type: string, format: date-time }
         capabilities:

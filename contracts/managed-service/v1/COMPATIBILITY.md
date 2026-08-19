@@ -40,3 +40,10 @@
 - 官网普通退出只结束当前 Web Session，不改变桌面 Access/Refresh Token、Token Family、设备或 Runtime Session。
 - 官网账号字段和接口可以在 v1 内增加可选字段，但不得改变 username 规范、CSRF 要求、Cookie 安全属性或桌面/官网信任域边界。
 - 启用标准 Authorization Consent 不改变 Public Client ID、PKCE、loopback、Token Response 或错误回调协议。首次授权和权限扩大可以增加页面交互，相同权限的重复授权可以跳过页面；旧桌面客户端必须继续按标准 `access_denied` 处理拒绝结果。
+
+## 6. P2-W03 首次交付前模型校正
+
+- `GET /api/v1/entitlements` 和 `GET /api/v1/usage/summary` 在 P2-W03 前尚无服务端实现、桌面调用方或普通用户流量；为支持套餐订阅与按量计费并列模式，本次在首次交付前一次性校正其响应模型。
+- 校正后 `EntitlementSnapshot` 明确区分未开通、套餐订阅和按量计费，`UsageSummary` 明确返回计费模式；套餐或余额数值不得用于推断 Provider 成本。
+- 本次校正必须整体同步全部消费快照和 Web 生成类型，并在 P2-W03 实现前完成。它不是已发布 v1 可以原地破坏字段的先例。
+- P2-W03 实现并发布后，本节涉及的必填字段、可空性、枚举和语义继续受第 1、2、4 节约束；后续破坏性调整必须使用新 URL 主版本和新契约目录。

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: PetDock Web Control Plane API
   version: 1.0.0
-  description: 官网使用的 Web Session、账号和资料接口。桌面 Bearer API 由 control-plane.yaml 单独定义。
+  description: 官网使用的 Web Session、账号、服务方案和设备管理接口。桌面 Bearer API 由 control-plane.yaml 单独定义。
 x-petdock-contract-version: 1
 servers:
   - url: https://api.petdock.site
@@ -12,6 +12,10 @@ tags:
     description: 官网 HttpOnly Session 与登录生命周期
   - name: Web Profile
     description: 官网当前用户资料与密码
+  - name: Web Service
+    description: 官网当前服务访问与计费模式快照
+  - name: Web Device
+    description: 官网活动桌面设备查询与显式撤销
 paths:
   /api/v1/web/session:
     get:
@@ -198,6 +202,98 @@ paths:
           $ref: '#/components/responses/CsrfInvalid'
         '409':
           $ref: '#/components/responses/PasswordAuthenticationUnavailable'
+  /api/v1/web/entitlements:
+    get:
+      tags: [Web Service]
+      summary: 获取当前服务访问和能力快照
+      description: 返回未开通、套餐订阅或按量计费三种互斥状态；当前免费 Beta 只启用套餐订阅。
+      operationId: getWebEntitlements
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 当前服务访问和能力快照
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: './control-plane.yaml#/components/schemas/EntitlementSnapshot'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /api/v1/web/devices:
+    get:
+      tags: [Web Device]
+      summary: 分页获取当前账号的活动桌面设备
+      description: 只返回活动设备；lastSeenAt 表示最近登记时间，不表示实时在线。
+      operationId: listWebDevices
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 活动桌面设备分页
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebDevicePage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+    delete:
+      tags: [Web Device]
+      summary: 撤销当前账号的全部活动桌面设备
+      description: 联动失效全部活动设备的 OAuth Token、Token Family 和 Runtime Session；不退出当前官网 Session。空集合时幂等成功。
+      operationId: revokeAllWebDevices
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: 全部活动设备已撤销或原本为空
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+  /api/v1/web/devices/{deviceId}:
+    delete:
+      tags: [Web Device]
+      summary: 撤销指定活动桌面设备
+      description: 联动失效对应 OAuth Token、Token Family 和 Runtime Session；不退出当前官网 Session。
+      operationId: revokeWebDevice
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: 设备已撤销
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+        '404':
+          $ref: '#/components/responses/DeviceNotFound'
 components:
   securitySchemes:
     webSession:
@@ -221,9 +317,33 @@ components:
         type: string
         minLength: 32
         maxLength: 256
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
   headers:
     NoStore:
-      description: 禁止浏览器和中间代理缓存会话或资料响应。
+      description: 禁止浏览器和中间代理缓存会话、资料或业务快照响应。
       schema:
         type: string
         const: no-store
@@ -271,6 +391,12 @@ components:
             $ref: '#/components/schemas/ErrorEnvelope'
     PasswordAuthenticationUnavailable:
       description: 当前账号没有可用的密码凭据
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    DeviceNotFound:
+      description: 设备不存在、已撤销或不属于当前用户，不泄露设备归属
       content:
         application/json:
           schema:
@@ -361,6 +487,51 @@ components:
           maxLength: 128
         newPassword:
           $ref: '#/components/schemas/NewPassword'
+    WebDevice:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, platform, createdAt, lastSeenAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        platform:
+          type: string
+          const: windows
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: 最近一次设备注册或重新登记时间，不表示实时在线。
+    WebDevicePage:
+      type: object
+      additionalProperties: false
+      required: [version, page, pageSize, total, items]
+      properties:
+        version:
+          type: integer
+          const: 1
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 50
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebDevice'
     Username:
       type: string
       minLength: 3

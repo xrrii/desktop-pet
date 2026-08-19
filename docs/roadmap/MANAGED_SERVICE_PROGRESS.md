@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-18
+最后更新时间：2026-08-19
 
 ## 1. 新会话快速开始
 
@@ -51,19 +51,19 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 P2-W02 Done，本地分离 Host 真实 HTTPS 跨端门禁通过
+当前阶段：Phase 2 P2-W03 Contract Frozen，Cloud/Web 业务实现尚未开始
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调）
-独立官网前端：`petdock-web` P2-W01、P2-W02 Done；P2-W03~W04 尚未开始（独立仓库）
+独立官网前端：`petdock-web` P2-W01、P2-W02 Done；P2-W03 Contract Frozen，P2-W04 尚未开始（独立仓库）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：先评审 P2-W03 已具备的控制面能力与页面范围；Entitlement、Usage 和支付能力未实现前不得臆造前端闭环
+下一建议工作项：完成 P2-W03 业务 UI 规范后，按已冻结契约并行实现 Cloud/Web；Usage 和支付/按量结算能力未实现前不得臆造前端闭环
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计、签名密钥轮换、P2-W01 官网 Session/账号 API 和 P2-W02 标准 Consent；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 映射。`petdock-web` 已完成 P2-W01、P2-W02 页面及真实 HTTPS 跨端联调；Entitlement 管理、Usage、支付闭环和桌面真实公网登录继续延后。备案继续只阻塞正式公网联调。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计、签名密钥轮换、P2-W01 官网 Session/账号 API 和 P2-W02 标准 Consent，并冻结 P2-W03 服务方案/设备管理契约；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 映射。`petdock-web` 已完成 P2-W01、P2-W02 页面及真实 HTTPS 跨端联调；P2-W03 业务实现、Usage、支付/按量结算闭环和桌面真实公网登录继续延后。备案继续只阻塞正式公网联调。
 
 ## 4. 产品与仓库边界
 
@@ -143,7 +143,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 和 P2-W02，并通过真实 HTTPS 双 Session、标准 Consent、随机 loopback/PKCE、设备同步与撤销验收。下一步评审 P2-W03 设备、订单和用量页面与既有服务端能力的差距，`P2-11` 仍排在 W01~W04 之后。备案继续只阻塞正式公网域名与打包版联调。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 和 P2-W02，并通过真实 HTTPS 双 Session、标准 Consent、随机 loopback/PKCE、设备同步与撤销验收。P2-W03 已冻结未开通、订阅套餐和按量计费三态服务快照及 Web 设备管理接口；下一步完成业务 UI 规范后进入 Cloud/Web 实现，`P2-11` 仍排在 W01~W04 之后。备案继续只阻塞正式公网域名与打包版联调。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -206,6 +206,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-17 | Web/Cloud P2-W01 工作区 | Web/Cloud 自动门禁与真实 HTTPS Cookie/CSRF 联调 | 通过 | Web Vitest 11 项、Playwright Mock 3 项、类型检查和构建；Cloud JDK 21 Maven 82 项中 78 项通过、4 项 Docker 容器测试跳过；真实 PostgreSQL/Redis 双 Session 改密撤销通过 |
 | 2026-08-17 | Desktop/Cloud P2-W02 契约工作区 | 标准 Consent、双主机 Session、OAuth 页面边界与快照比对 | 通过 | Cloud 与 Desktop 各 16 项契约测试通过；38 个受控文件 SHA-256 一致；业务实现尚未开始 |
 | 2026-08-18 | Web/Cloud/Desktop P2-W02 实现与收尾工作区 | 标准 Consent、分离 Host HTTPS、真实 loopback/PKCE、设备同步、拒绝授权与提交后修复 | 通过 | Desktop 类型检查、155 项 Vitest、16 项契约、87 项 Runtime、检索评测、生产构建和生产依赖审计（0 漏洞）通过；Web 22 项 Vitest、Playwright Mock 6 项通过/1 项按环境跳过、生产构建和生产依赖审计（0 漏洞）通过；Cloud pytest 17 项、JDK 21 Maven 101 项全部通过，Testcontainers PostgreSQL/Redis 已实际运行；真实 HTTPS 跨端测试 2 项通过；Desktop/Cloud 38 个契约文件一致 |
+| 2026-08-19 | Desktop/Cloud/Web P2-W03 契约工作区 | 服务方案三态、Web 设备管理、跨语言样例、快照与生成类型 | 通过 | Cloud 契约 Python 17 项、全量 pytest 18 项、TypeScript 1 项、Spring 1 项及 41 文件制品校验通过；Desktop 17 项契约测试和 SHA-256 比对通过；Web 类型生成、22 项测试和生产构建通过 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -364,3 +365,10 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - 使用 Desktop 真实 OIDC、loopback、控制面和设备身份模块通过受信本地 HTTPS 门禁，覆盖 Token 交换、UserInfo、设备同步、Consent 复用、双 Host-only Cookie、撤销与拒绝授权。
 - 最终门禁结果：Desktop Vitest 155 项、契约 16 项、Runtime 87 项；Web Vitest 22 项、Playwright Mock 6 项通过且 1 项按环境跳过；Cloud pytest 17 项、JDK 21 Maven 101 项全部通过，Testcontainers PostgreSQL/Redis 已实际运行；真实 HTTPS 跨端测试 2 项通过，Desktop/Cloud 38 个契约文件一致，Desktop/Web 生产依赖审计均为 0 漏洞。
 - 正式公网域名、生产证书和打包版 Desktop 验收等待备案，不把设备管理、订单或用量页面计入 P2-W02。
+
+### 2026-08-19（P2-W03 产品/API 契约冻结）
+
+- Cloud 权威源冻结 Web Session 下的服务方案、活动设备分页、单设备撤销和全部设备撤销接口，Desktop 整体同步 41 个 v1 受控文件。
+- 服务快照区分 `inactive`、`subscription` 和 `pay_as_you_go`；用户显式选择订阅或按量且不自动切换，当前免费 Beta 只开放订阅模式。
+- 按量模式不关联套餐或套餐有效期，`plan=null`、`expiresAt=null`、`remaining=null` 只表示按实际用量结算；价格、开通、支付、结算和账单继续留给 Phase 5。
+- 三语言契约测试、41 文件制品校验、Desktop 快照比对和 Web 测试/生产构建通过；本次未修改 Desktop 业务代码，P2-W03 Cloud/Web 业务实现尚未开始。

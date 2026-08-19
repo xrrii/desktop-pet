@@ -43,7 +43,23 @@ test('Managed Service v1 固定样例兼容 TypeScript', async () => {
   assert.equal(authenticatedWebSession.user.username, 'demo_user')
   assert.equal(authenticatedWebSession.user.passwordEnabled, true)
 
-  for (const name of ['runtime-token-header.json', 'request-context.json', 'managed-auth-refresh-event.json', 'managed-auth-result.json', 'web-session-anonymous.json', 'web-session-authenticated.json']) {
+  const inactiveEntitlement = await example<any>('entitlement-inactive.json')
+  assert.equal(inactiveEntitlement.status, 'inactive')
+  assert.equal(inactiveEntitlement.billingMode, null)
+
+  const subscriptionEntitlement = await example<any>('entitlement-subscription.json')
+  assert.equal(subscriptionEntitlement.billingMode, 'subscription')
+  assert.equal(subscriptionEntitlement.capabilities.chat.quotaMode, 'quota')
+  assert.ok(subscriptionEntitlement.capabilities.chat.remaining >= 0)
+
+  const meteredEntitlement = await example<any>('entitlement-pay-as-you-go.json')
+  assert.equal(meteredEntitlement.billingMode, 'pay_as_you_go')
+  assert.equal(meteredEntitlement.plan, null)
+  assert.equal(meteredEntitlement.expiresAt, null)
+  assert.equal(meteredEntitlement.capabilities.chat.quotaMode, 'metered')
+  assert.equal(meteredEntitlement.capabilities.chat.remaining, null)
+
+  for (const name of ['runtime-token-header.json', 'request-context.json', 'managed-auth-refresh-event.json', 'managed-auth-result.json', 'web-session-anonymous.json', 'web-session-authenticated.json', 'entitlement-inactive.json', 'entitlement-subscription.json', 'entitlement-pay-as-you-go.json']) {
     const value = await example<Record<string, unknown>>(name)
     assert.ok(Object.keys(value).length > 0)
     assert.deepEqual(JSON.parse(JSON.stringify(value)), value)

@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "status": "active",
+  "billingMode": "subscription",
+  "plan": "beta",
+  "capabilities": {
+    "chat": {
+      "enabled": true,
+      "quotaMode": "quota",
+      "remaining": 1000000,
+      "unit": "tokens"
+    }
+  },
+  "expiresAt": "2026-09-01T00:00:00Z"
+}

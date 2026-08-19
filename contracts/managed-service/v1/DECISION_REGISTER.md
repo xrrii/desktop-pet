@@ -74,10 +74,12 @@
 状态：`Frozen`
 
 - 第一阶段只提供白名单 `Beta` 套餐，价格为 0，不接入充值和退款闭环。
+- 正式收费阶段同时支持套餐订阅和按量计费；用户可以不订阅套餐，显式选择按量计费。两种模式是并列选择，套餐额度耗尽后不得未经用户确认自动切换到按量扣费。
+- 当前免费 Beta 只启用套餐订阅模式。按量计费的价格、币种、计费精度、余额或授信、结算、退款和欠费处理必须在 Phase 5 另行冻结并通过支付合规评审后才能启用。
 - 第一批只开放 Managed Chat，其他 Managed 能力保持关闭。
-- 输入 Token 和输出 Token 分别计量，用户界面只展示统一 Managed 额度，不暴露 Provider 成本和单价。
+- 输入 Token 和输出 Token 分别计量，用户界面只展示统一 Managed 用量或额度，不暴露 Provider 成本和内部单价；正式按量计费面向用户的 PetDock 价格必须在 Phase 5 单独冻结并明确展示。
 - 免费额度按自然月重置，不结转；具体额度数值通过服务端套餐配置维护，不写入跨端契约。
-- 额度用尽后 Managed 停止，不自动回退到 BYOK；用户可以手动切换能力来源。
+- 订阅套餐额度用尽后 Managed 停止，不自动切换为按量扣费，也不自动回退到 BYOK；用户可以手动切换能力来源。
 - Phase 3 只验证幂等预占、结算、释放和 Usage Event，不把 Beta 账本作为正式收费账本。
 
 ### `D-P0-14` 首个 Provider 与逻辑模型
@@ -255,3 +257,15 @@
 - subject 只在服务端创建用户时生成一次并持久化到 `users.subject`；Web 请求和 Web 账号响应不得接收或返回该字段。
 - OIDC ID Token 和 UserInfo 继续使用 `users.subject` 作为 `sub`，不得改用 username、邮箱或 `users.id`，避免账号字段变化和内部主键暴露影响 OIDC 身份稳定性。
 - `users.subject` 现有唯一约束是最终冲突防线；生成发生极低概率冲突时必须重新生成，不得回退为可预测标识。
+
+### `D-P2-15` P2-W03 业务中心、设备管理与计费模式快照
+
+状态：`Frozen`
+
+- 官网业务中心使用现有 Web Session，新增当前服务方案、活动设备列表、单设备撤销和全部设备撤销接口；官网仍不得复用桌面 Bearer API 或调用 AI 数据面。
+- 设备列表只返回当前用户的活动设备及脱敏字段，不返回已撤销历史、主机名、硬件序列号、IP、Token Family、Runtime Session 或 OAuth 授权标识。官网无法识别正在访问页面的桌面设备，因此不得展示或接受“当前设备”标记。
+- 单设备和全部设备撤销都必须显式确认并携带 Session 绑定的 CSRF Header；撤销联动失效 OAuth Access/Refresh Token、Token Family 和 Runtime Session，但不退出当前官网 Session。
+- 服务访问快照固定区分 `inactive`、`subscription` 和 `pay_as_you_go`：未开通时没有计费模式；套餐模式必须有套餐标识、有效期和数值剩余额度；按量模式不关联套餐或套餐有效期，`plan=null`、`expiresAt=null`、`remaining=null` 表示按实际用量计费，不表示免费、无限或额度耗尽。
+- Entitlement 继续决定能力是否可用，计费模式只决定授权用量如何结算。按量用户仍必须具有服务端授权，不能因为没有套餐而绕过 Capability、版本、设备或 Runtime Token 校验。
+- 当前免费 Beta 只产生套餐模式快照；按量模式先冻结协议，不在 P2-W03 开放选择、充值或扣费。正式启用前必须完成 Phase 5 的价格展示、用户确认、支付/结算和账单能力。
+- P2-W03 只为充值、订单和用量保留稳定页面路由及准确未开放状态，不新增虚构余额、订单或 Usage 数据。真实 Usage API 属于 Phase 3，正式支付和交易闭环属于 Phase 5。
