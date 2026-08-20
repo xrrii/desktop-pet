@@ -338,6 +338,47 @@ describe('ManagedAuthManager', () => {
     expect(manager.getAccessTokenForMain()).toBeNull()
   })
 
+  it('恢复请求会等待正在进行的退出命令，避免重新写回已登录状态', async () => {
+    const tokenStore = new FakeTokenStore()
+    tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }
+    const sessionManager = managedSessionManagerDouble()
+    let resolveLogout: (() => void) | null = null
+    sessionManager.revokeRefreshToken.mockImplementation(
+      () => new Promise<void>((resolve) => { resolveLogout = resolve })
+    )
+    const refresh = vi.fn(async (refreshToken: string): Promise<ManagedTokenSet> => {
+      expect(refreshToken).toBe('old-refresh-token')
+      return tokenSet('access-token', 'rotated-refresh-token')
+    })
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      tokenStore,
+      oauthClient: oauthClientWithRefresh(refresh),
+      accountSessionManager: sessionManager.value
+    })
+
+    await expect(manager.restoreSession()).resolves.toMatchObject({ state: 'authenticated', sessionSyncState: 'ready' })
+    refresh.mockClear()
+
+    const logoutPromise = manager.logout()
+    const restorePromise = manager.restoreSession()
+    let restoreSettled = false
+    void restorePromise.then(() => { restoreSettled = true })
+
+    await Promise.resolve()
+    expect(refresh).not.toHaveBeenCalled()
+    expect(restoreSettled).toBe(false)
+
+    if (!resolveLogout) {
+      throw new Error('logout resolver missing')
+    }
+    const completeLogout: () => void = resolveLogout
+    completeLogout()
+
+    await expect(logoutPromise).resolves.toMatchObject({ sessionSyncState: 'idle', account: null, device: null })
+    await expect(restorePromise).resolves.toMatchObject({ sessionSyncState: 'idle', account: null, device: null })
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
   it('当前设备撤销只使用 Main 会话中的设备 ID并清理认证状态', async () => {
     const tokenStore = new FakeTokenStore()
     tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }

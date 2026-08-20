@@ -87,7 +87,6 @@ if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
 let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
 let smokeArtifactSaveCancelled = false
-let pendingManagedPortalRefresh = false
 let activeManagedPortalRefresh: Promise<void> | null = null
 const pendingPetSpritesheetSelections = new Map<string, { filePath: string; fileName: string }>()
 const isPrimaryInstance = configureSingleInstance(app, {
@@ -464,12 +463,16 @@ function registerIpc(): void {
     )
     try {
       await shell.openExternal(url.href)
-      pendingManagedPortalRefresh = true
       return true
     } catch (error) {
       logError('managed portal failed to open', error)
       throw error
     }
+  })
+
+  ipcMain.handle('managed:refresh-portal-return', (event) => {
+    requirePetSender(event)
+    return refreshManagedPortalStatus()
   })
 
   ipcMain.handle('managed:login', (event) => {
@@ -829,12 +832,6 @@ if (isPrimaryInstance) {
 function openPetWindow(): void {
   const window = createPetWindow()
   petWindow = window
-  window.on('focus', () => {
-    if (!pendingManagedPortalRefresh) {
-      return
-    }
-    void refreshManagedPortalStatus()
-  })
   window.once('closed', () => {
     if (petWindow === window) {
       petWindow = null
@@ -855,14 +852,14 @@ function refreshManagedPortalStatus(): Promise<void> {
   if (activeManagedPortalRefresh) {
     return activeManagedPortalRefresh
   }
-  const task = (async () => {
+  let task: Promise<void> | null = null
+  task = (async () => {
     try {
       await managedAuthManager.refreshFeatures()
       await managedAuthManager.restoreSession()
     } catch (error) {
       logError('managed portal return refresh failed', error)
     } finally {
-      pendingManagedPortalRefresh = false
       if (activeManagedPortalRefresh === task) {
         activeManagedPortalRefresh = null
       }

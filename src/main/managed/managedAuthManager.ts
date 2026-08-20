@@ -169,6 +169,9 @@ export class ManagedAuthManager {
     if (this.activeLogin) {
       return this.activeLogin
     }
+    if (this.activeSessionCommand) {
+      return this.activeSessionCommand.then(() => this.restoreSession())
+    }
     if (this.activeTerminalCleanup) {
       return this.activeTerminalCleanup.then(() => this.restoreSession())
     }

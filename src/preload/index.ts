@@ -109,6 +109,8 @@ const api = {
   /** 打开 Main 白名单内的官网业务页，不允许 Renderer 传入任意 URL。 */
   openManagedPortal: (target: ManagedPortalTarget): Promise<boolean> =>
     ipcRenderer.invoke('managed:open-portal', target),
+  /** 浏览器回到应用后刷新一次脱敏账号与设备摘要，不返回 Token。 */
+  refreshManagedPortalStatus: (): Promise<void> => ipcRenderer.invoke('managed:refresh-portal-return'),
   /** 请求 Main 通过系统浏览器开始 PKCE 登录。 */
   loginManaged: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:login'),
   /** 取消当前 PKCE 登录并关闭 Main loopback 监听器。 */

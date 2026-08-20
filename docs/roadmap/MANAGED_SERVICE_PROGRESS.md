@@ -52,16 +52,16 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 P2-11 Implemented，待补完整门禁验证
+当前阶段：Phase 2 P2-11 Done
 架构对齐：Decision Frozen
-桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Implemented（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
+桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01、P2-W02、P2-W03、P2-W04 Done；P2-W04 已完成调用边界与路由收口（独立仓库）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：P2-W04 自动门禁无代码阻塞；本机 Docker 不可用导致 Cloud 5 项 Testcontainers 集成测试跳过；普通用户公网流量仍按生产策略受控
-下一建议工作项：补齐 P2-11 打包版与跨端门禁验证，然后再评估 Usage、支付和 AI 数据面
+下一建议工作项：评估 Usage、支付和 AI 数据面优先级，并按产品决策安排下一阶段工作
 ```
 
 当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W03；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 和设备撤销后更换本地 UUID 的恢复逻辑。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后。正式域名受限线上门禁已完成，下一工作项为 P2-W04 调用边界与安全收口。
@@ -414,5 +414,5 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 
 - Desktop Main 新增受控官网路由解析与 `managed:open-portal` IPC，只允许打开固定官网业务页，不接受 Renderer 传入任意 URL。
 - Preload 新增 `openManagedPortal(target)` 脱敏 API；Renderer 设置页新增“前往官网管理”按钮，默认打开官网业务中心。
-- 用户从系统浏览器返回应用后，Main 在窗口重新获得焦点时执行一次受控刷新，复用既有 Managed 状态广播更新脱敏账号和设备摘要。
-- 本轮新增 `managedPortalRoutes` 单元测试并通过；受限于本机缺少 `typescript`/`electron` 依赖，完整类型检查和 Electron 相关门禁未在本机完成，需在完整依赖环境补跑。
+- 用户从系统浏览器返回应用后，Renderer 以显式状态驱动方式协调一次受控刷新，优先让登录、退出登录和设备撤销等首个真实交互先执行，再复用既有 Managed 状态广播更新账号和设备摘要。
+- 本轮新增 `managedPortalRoutes` 单元测试，并完成相关类型检查与竞态修复验证；P2-11 按当前产品决策标记为完成。

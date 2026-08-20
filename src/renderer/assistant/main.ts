@@ -251,6 +251,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let managedAuthStatus: ManagedAuthStatus | null = null
   let managedAuthBusy = false
   let managedPortalBusy = false
+  let managedPortalReturnPending = false
+  let managedPortalReturnArmed = false
+  let managedPortalReturnInteractionObserved = false
+  let managedPortalReturnFocusRevision = 0
   let pendingSkillPreview: AssistantSkillInstallPreview | null = null
   let pendingSkillUninstall: AssistantSkillSummary | null = null
   let selectedSkillId: string | null = null
@@ -291,6 +295,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
   window.desktopPet.onManagedAuthStatus(renderManagedAuthStatus)
   void window.desktopPet.getManagedAuthStatus().then(renderManagedAuthStatus).catch(showError)
+  window.addEventListener('focus', armManagedPortalReturnRefresh)
+  document.addEventListener('pointerdown', handleManagedPortalReturnPointerDown, true)
+  document.addEventListener('click', handleManagedPortalReturnClick, true)
   window.desktopPet.onAssistantOpenMemory(() => {
     if (!busy) {
       if (memoryMode) {
@@ -731,6 +738,95 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     managedOpenPortal.disabled = managedPortalBusy
   }
 
+  /** Renderer 记住一次“从官网返回后需要刷新”的意图，只在 Managed 设置页内消费。 */
+  function markManagedPortalReturnPending(): void {
+    managedPortalReturnPending = true
+    managedPortalReturnArmed = false
+    managedPortalReturnInteractionObserved = false
+    managedPortalReturnFocusRevision += 1
+  }
+
+  /** 用户显式执行 Managed 操作或离开设置页时，取消这次官网返回自动刷新。 */
+  function cancelManagedPortalReturnRefresh(): void {
+    managedPortalReturnPending = false
+    managedPortalReturnArmed = false
+    managedPortalReturnInteractionObserved = false
+    managedPortalReturnFocusRevision += 1
+  }
+
+  /**
+   * 窗口重新获焦后先进入 armed 状态：
+   * - 若本轮没有真实交互，则下一帧直接刷新；
+   * - 若用户先点了 Managed 显式按钮，则取消自动刷新，让显式操作优先。
+   */
+  function armManagedPortalReturnRefresh(): void {
+    if (!settingsMode || !managedPortalReturnPending || managedPortalBusy || managedAuthBusy) {
+      return
+    }
+    managedPortalReturnArmed = true
+    managedPortalReturnInteractionObserved = false
+    const revision = ++managedPortalReturnFocusRevision
+    requestAnimationFrame(() => {
+      if (revision !== managedPortalReturnFocusRevision) {
+        return
+      }
+      if (
+        !managedPortalReturnPending ||
+        !managedPortalReturnArmed ||
+        managedPortalReturnInteractionObserved ||
+        managedPortalBusy ||
+        managedAuthBusy ||
+        !settingsMode ||
+        !document.hasFocus()
+      ) {
+        return
+      }
+      void refreshManagedPortalReturnStatus()
+    })
+  }
+
+  /** 先记录本轮是否真的发生了用户交互，以阻止获焦后的“抢跑刷新”。 */
+  function handleManagedPortalReturnPointerDown(event: PointerEvent): void {
+    if (!managedPortalReturnPending || !managedPortalReturnArmed || !settingsMode) {
+      return
+    }
+    managedPortalReturnInteractionObserved = true
+    if (isManagedAuthActionTarget(event.target)) {
+      cancelManagedPortalReturnRefresh()
+    }
+  }
+
+  /** 首个非 Managed 显式点击完成后再刷新；若首个点击就是显式按钮，则彻底跳过自动刷新。 */
+  function handleManagedPortalReturnClick(event: MouseEvent): void {
+    if (!managedPortalReturnPending || !managedPortalReturnArmed || !settingsMode) {
+      return
+    }
+    managedPortalReturnArmed = false
+    managedPortalReturnInteractionObserved = false
+    if (isManagedAuthActionTarget(event.target)) {
+      cancelManagedPortalReturnRefresh()
+      return
+    }
+    setTimeout(() => {
+      if (
+        !managedPortalReturnPending ||
+        managedPortalBusy ||
+        managedAuthBusy ||
+        !settingsMode ||
+        !document.hasFocus()
+      ) {
+        return
+      }
+      void refreshManagedPortalReturnStatus()
+    }, 0)
+  }
+
+  /** 受控识别会抢占自动刷新的 Managed 显式操作入口。 */
+  function isManagedAuthActionTarget(target: EventTarget | null): boolean {
+    const element = target instanceof Element ? target : null
+    return Boolean(element?.closest('#managed-login, #managed-logout, #managed-revoke-device, #managed-open-portal'))
+  }
+
   /** 将 Main 稳定状态转换为设置页短文案。 */
   function managedStatusLabel(status: ManagedAuthStatus): string {
     if (status.sessionSyncState === 'logging_out') return '正在退出'
@@ -760,6 +856,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 从设置页发起 Main 托管的 PKCE 登录。 */
   async function startManagedLogin(): Promise<void> {
     if (managedAuthBusy) return
+    cancelManagedPortalReturnRefresh()
     managedAuthBusy = true
     try {
       renderManagedAuthStatus(managedAuthStatus || await window.desktopPet.getManagedAuthStatus())
@@ -775,6 +872,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 通过 RFC 7009 退出当前桌面会话。 */
   async function logoutManaged(): Promise<void> {
     if (managedAuthBusy) return
+    cancelManagedPortalReturnRefresh()
     managedAuthBusy = true
     try {
       renderManagedAuthStatus(await window.desktopPet.logoutManaged())
@@ -790,6 +888,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   async function revokeManagedCurrentDevice(): Promise<void> {
     if (managedAuthBusy) return
     if (!window.confirm('撤销当前设备后需要重新登录，是否继续？')) return
+    cancelManagedPortalReturnRefresh()
     managedAuthBusy = true
     try {
       renderManagedAuthStatus(await window.desktopPet.revokeManagedCurrentDevice())
@@ -804,6 +903,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 打开 Main 白名单内的官网业务页；Renderer 只提交固定目标枚举。 */
   async function openManagedPortal(target: ManagedPortalTarget): Promise<void> {
     if (managedPortalBusy) return
+    cancelManagedPortalReturnRefresh()
     managedPortalBusy = true
     clearError()
     if (managedAuthStatus) {
@@ -811,6 +911,30 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     try {
       await window.desktopPet.openManagedPortal(target)
+      markManagedPortalReturnPending()
+    } catch (error) {
+      showError(error)
+    } finally {
+      managedPortalBusy = false
+      if (managedAuthStatus) {
+        renderManagedAuthStatus(managedAuthStatus)
+      }
+    }
+  }
+
+  /** 从官网回到桌面后刷新一次脱敏状态；显式 Managed 操作拥有更高优先级。 */
+  async function refreshManagedPortalReturnStatus(): Promise<void> {
+    if (!managedPortalReturnPending || managedPortalBusy || managedAuthBusy) return
+    managedPortalReturnPending = false
+    managedPortalReturnArmed = false
+    managedPortalReturnInteractionObserved = false
+    managedPortalBusy = true
+    clearError()
+    if (managedAuthStatus) {
+      renderManagedAuthStatus(managedAuthStatus)
+    }
+    try {
+      await window.desktopPet.refreshManagedPortalStatus()
     } catch (error) {
       showError(error)
     } finally {
@@ -848,6 +972,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 从统一配置页进入一个能力子页面，子页面返回时恢复配置页。 */
   async function openSettingsChild(open: () => Promise<void>): Promise<void> {
     if (busy) return
+    cancelManagedPortalReturnRefresh()
     returnToSettings = true
     settingsMode = false
     settingsView.hidden = true
@@ -857,6 +982,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
   /** 关闭统一配置页并恢复聊天输入状态。 */
   function closeSettingsView(): void {
+    cancelManagedPortalReturnRefresh()
     settingsMode = false
     settingsView.hidden = true
     conversation.hidden = false
