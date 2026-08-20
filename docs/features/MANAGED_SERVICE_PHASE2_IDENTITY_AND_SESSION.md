@@ -4,10 +4,10 @@
 
 - 状态：Active
 - 建立日期：2026-08-15
-- 最后更新：2026-08-18
+- 最后更新：2026-08-20
 - 适用阶段：Managed Service Phase 2
 - 适用仓库：`desktop-pet`、`petdock-web`、`petdock-cloud`
-- 当前入口：桌面 `P2-06` 至 `P2-10` 与官网 `P2-W01`、`P2-W02` 已完成，下一步评审 `P2-W03` 能力边界
+- 当前入口：桌面 `P2-06` 至 `P2-11` 与官网 `P2-W01` 至 `P2-W04` 已完成；下一步实施 `P2-W05` 正式官网首页
 
 本文档承载 Phase 2 的详细设计、跨仓库拆分、开发环境、实现顺序和验收要求。总体架构、安全边界和阶段定义仍以 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md` 为准，接口字段和协议语义仍以 `contracts/managed-service/v1` 权威契约为准。
 
@@ -55,6 +55,7 @@ Phase 2 完成以下基础设施：
 - Main 向 Python Runtime 注入、刷新和清除短期 Runtime Token。
 - 桌面端账号、设备、套餐和能力状态的脱敏展示。
 - “前往官网管理”入口和返回应用后的状态刷新。
+- 按已冻结视觉规范交付正式官网首页，作为 Phase 3 前的公开产品入口。
 
 ### 3.2 非目标
 
@@ -343,9 +344,10 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 6. `P2-08`：账号/设备脱敏快照、退出和撤销（已完成）。
 7. `P2-09`：Runtime Token Broker 和本地 Runtime Session API（已完成）。
 8. `P2-10`：离线、过期、时钟偏差、重复登录和并发刷新（已完成）。
-9. `P2-W01`：官网账号与 Web Session（已完成）；`P2-W02`：OAuth 登录与标准 Consent（已完成）；`P2-W03` 至 `P2-W04`：后续业务页面。
-10. `P2-11`：官网管理入口和返回应用刷新。
-11. 按 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md` 执行生产隔离部署、正式域名、TLS、系统浏览器和打包版跨端登录验收。
+9. `P2-W01` 至 `P2-W04`：官网账号、OAuth、业务页面与调用边界（已完成）。
+10. `P2-11`：官网管理入口和返回应用刷新（已完成）。
+11. `P2-W05`：按已冻结视觉规范实现正式官网首页，完成后再进入 Phase 3。
+12. 按 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md` 执行生产隔离部署、正式域名、TLS、系统浏览器和打包版跨端登录验收。
 
 ## 14. 测试与安全验收
 
@@ -382,7 +384,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 
 只有同时满足以下条件才可将 Phase 2 标记为 `Done`：
 
-- `P2-00` 至 `P2-11` 以及 `P2-W01` 至 `P2-W04` 的阶段范围完成。
+- `P2-00` 至 `P2-11` 以及 `P2-W01` 至 `P2-W05` 的阶段范围完成。
 - Renderer、Python Runtime 和日志均看不到 Refresh Token 与 Runtime Token。
 - 应用重启后能够安全恢复桌面会话。
 - 设备撤销、Token 轮换、重放检测和 Runtime Token 刷新通过跨端验收。
@@ -390,4 +392,5 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 - 官网 Web Session 与桌面 Refresh Token 完全隔离。
 - 生产隔离部署完成后，正式域名、DNS、TLS、来源 IP 白名单和系统浏览器真实登录通过验收。
 - Phase 2 没有向普通用户开放 Managed 模型流量。
+- 正式官网首页内容与当前产品事实一致，并通过响应式、Canvas、可访问性、性能、生产构建和正式 HTTPS 验收。
 - 云端契约、服务集成、桌面源码、打包态和提交前脱敏检查全部通过。

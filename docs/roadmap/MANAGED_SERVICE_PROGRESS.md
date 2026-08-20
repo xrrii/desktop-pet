@@ -52,19 +52,19 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 P2-11 Done
+当前阶段：Phase 2 P2-11 Done，P2-W05 官方首页 Decision Frozen
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
-独立官网前端：`petdock-web` P2-W01、P2-W02、P2-W03、P2-W04 Done；P2-W04 已完成调用边界与路由收口（独立仓库）
+独立官网前端：`petdock-web` P2-W01 至 P2-W04 Done；P2-W05 正式官网首页 Decision Frozen（独立仓库）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：P2-W04 自动门禁无代码阻塞；本机 Docker 不可用导致 Cloud 5 项 Testcontainers 集成测试跳过；普通用户公网流量仍按生产策略受控
-下一建议工作项：评估 Usage、支付和 AI 数据面优先级，并按产品决策安排下一阶段工作
+当前阻塞：P2-W05 无代码阻塞；普通用户公网流量仍按生产策略受控
+下一建议工作项：实施 P2-W05 正式官网首页，完成 Phase 2 后再进入 Phase 3 Managed Chat MVP
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W03；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 和设备撤销后更换本地 UUID 的恢复逻辑。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后。正式域名受限线上门禁已完成，下一工作项为 P2-W04 调用边界与安全收口。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W04，Desktop 已完成 P2-06 至 P2-11。正式域名受限线上门禁已完成；下一工作项为 P2-W05 正式官网首页。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后到对应阶段。
 
 ## 4. 产品与仓库边界
 
@@ -134,7 +134,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | 阶段 | 状态 | 开始条件 | 首个桌面工作项 |
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
-| Phase 2 官网、身份、设备和会话 | `In Progress` | 服务器、备案、DNS、TLS 已就绪；生产隔离部署与线上门禁待完成 | `P2-02` 用户、设备、授权记录与持久化 |
+| Phase 2 官网、身份、设备和会话 | `In Progress` | P2-11 与 P2-W01 至 W04 已完成；等待 P2-W05 正式官网首页 | `P2-W05` 正式官网首页 |
 | Phase 3 Managed Chat MVP | `Not Started` | Phase 1、2 完成 | `P3-10` `ManagedChatProvider` |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
@@ -144,7 +144,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 至 P2-W03，并通过真实 HTTPS、数据库/Redis 和设备撤销传播验收。正式域名受限线上门禁已通过，下一步完成 P2-W04 调用边界与安全收口；`P2-11` 仍排在 W01~W04 之后。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；Desktop P2-06 至 P2-11、Web/Cloud P2-W01 至 P2-W04 已完成并通过正式 HTTPS 验收。Phase 3 前先实施 P2-W05 正式官网首页，按既有视觉规范交付品牌、隐私、双模式、下载和账号入口；不得提前开放 Managed Chat、Usage 或支付能力。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -409,6 +409,12 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - OAuth/PKCE、Consent 同意与拒绝、Refresh、UserInfo、官网 Session、设备同步、设备撤销、账号切换和未知路径拒绝均未发现异常。
 - 复验记录只保留脱敏结果，不记录 Token、Cookie、密码、授权参数、生产日志、真实账号或完整跳转地址。
 - P2-W04 提交后线上复验通过，下一工作项为 Desktop P2-11 官网管理入口与返回应用后的状态刷新。
+
+### 2026-08-20（P2-W05 正式官网首页顺序冻结）
+
+- Desktop P2-11 已完成；在 Phase 3 Managed Chat MVP 前新增 P2-W05 正式官网首页工作项。
+- P2-W05 使用 Web 已冻结的“星域粒子网络 + 像素猫”视觉规范，交付品牌、功能、隐私、双模式、下载和账号入口，不实现 Managed Chat、Usage 或支付。
+- P2-W05 完成并通过响应式、Canvas、可访问性、性能、生产构建和正式 HTTPS 验收后，Phase 2 才标记为 `Done`。
 
 ### 2026-08-20（P2-11 桌面端官网管理入口实现）
 
