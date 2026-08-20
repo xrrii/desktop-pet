@@ -7,7 +7,7 @@
 - 最后更新：2026-08-20
 - 适用阶段：Managed Service Phase 2
 - 适用仓库：`desktop-pet`、`petdock-web`、`petdock-cloud`
-- 当前入口：桌面 `P2-06` 至 `P2-11` 与官网 `P2-W01` 至 `P2-W04` 已完成；下一步实施 `P2-W05` 正式官网首页
+- 当前入口：Phase 2 已完成；桌面 `P2-06` 至 `P2-11`、官网 `P2-W01` 至 `P2-W05` 与正式 HTTPS 验收均已通过，下一步进入 Phase 3 方案冻结
 
 本文档承载 Phase 2 的详细设计、跨仓库拆分、开发环境、实现顺序和验收要求。总体架构、安全边界和阶段定义仍以 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md` 为准，接口字段和协议语义仍以 `contracts/managed-service/v1` 权威契约为准。
 
@@ -346,7 +346,7 @@ Renderer 只读取脱敏快照，建议覆盖以下状态，不携带 Token 或�
 8. `P2-10`：离线、过期、时钟偏差、重复登录和并发刷新（已完成）。
 9. `P2-W01` 至 `P2-W04`：官网账号、OAuth、业务页面与调用边界（已完成）。
 10. `P2-11`：官网管理入口和返回应用刷新（已完成）。
-11. `P2-W05`：按已冻结视觉规范实现正式官网首页，完成后再进入 Phase 3。
+11. `P2-W05`：按已冻结视觉规范实现正式官网首页（已完成并通过正式 HTTPS 验收）。
 12. 按 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md` 执行生产隔离部署、正式域名、TLS、系统浏览器和打包版跨端登录验收。
 
 ## 14. 测试与安全验收

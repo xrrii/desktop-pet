@@ -51,20 +51,20 @@ Phase 2 详细开发方案
 ## 3. 当前总览
 
 ```text
-总体状态：In Progress
-当前阶段：Phase 2 P2-11 Done，P2-W05 官方首页 Decision Frozen
+总体状态：Phase 2 Done
+当前阶段：Phase 3 Managed Chat MVP 方案待输出与冻结
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
-独立官网前端：`petdock-web` P2-W01 至 P2-W04 Done；P2-W05 正式官网首页 Decision Frozen（独立仓库）
+独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：P2-W05 无代码阻塞；普通用户公网流量仍按生产策略受控
-下一建议工作项：实施 P2-W05 正式官网首页，完成 Phase 2 后再进入 Phase 3 Managed Chat MVP
+当前阻塞：无；Windows 安装包尚未发布，官网入口继续准确显示待发布状态，不阻塞 Phase 3 方案设计
+下一建议工作项：输出并冻结 Phase 3 Managed Chat MVP 方案
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W04，Desktop 已完成 P2-06 至 P2-11。正式域名受限线上门禁已完成；下一工作项为 P2-W05 正式官网首页。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后到对应阶段。
+当前已完成方案冻结、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象和 Phase 2 全部工作项。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W05，Desktop 已完成 P2-06 至 P2-11；P2-W05 官网生产制品已上线并通过正式 HTTPS 验收。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后到对应阶段。
 
 ## 4. 产品与仓库边界
 
@@ -134,7 +134,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | 阶段 | 状态 | 开始条件 | 首个桌面工作项 |
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
-| Phase 2 官网、身份、设备和会话 | `In Progress` | P2-11 与 P2-W01 至 W04 已完成；等待 P2-W05 正式官网首页 | `P2-W05` 正式官网首页 |
+| Phase 2 官网、身份、设备和会话 | `Done` | P2-11、P2-W01 至 W05 与正式 HTTPS 验收均已完成 | Phase 3 方案冻结 |
 | Phase 3 Managed Chat MVP | `Not Started` | Phase 1、2 完成 | `P3-10` `ManagedChatProvider` |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
@@ -144,7 +144,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；Desktop P2-06 至 P2-11、Web/Cloud P2-W01 至 P2-W04 已完成并通过正式 HTTPS 验收。Phase 3 前先实施 P2-W05 正式官网首页，按既有视觉规范交付品牌、隐私、双模式、下载和账号入口；不得提前开放 Managed Chat、Usage 或支付能力。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销、安全审计和正式官网首页均已完成；Desktop P2-06 至 P2-11、Web/Cloud P2-W01 至 P2-W05 已通过自动门禁与正式 HTTPS 验收。下一步输出并冻结 Phase 3 Managed Chat MVP 方案；方案冻结前不得开放 Managed Chat、Usage 或支付能力。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -209,6 +209,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-18 | Web/Cloud/Desktop P2-W02 实现与收尾工作区 | 标准 Consent、分离 Host HTTPS、真实 loopback/PKCE、设备同步、拒绝授权与提交后修复 | 通过 | Desktop 类型检查、155 项 Vitest、16 项契约、87 项 Runtime、检索评测、生产构建和生产依赖审计（0 漏洞）通过；Web 22 项 Vitest、Playwright Mock 6 项通过/1 项按环境跳过、生产构建和生产依赖审计（0 漏洞）通过；Cloud pytest 17 项、JDK 21 Maven 101 项全部通过，Testcontainers PostgreSQL/Redis 已实际运行；真实 HTTPS 跨端测试 2 项通过；Desktop/Cloud 38 个契约文件一致 |
 | 2026-08-19 | Desktop/Cloud/Web P2-W03 契约工作区 | 服务方案三态、Web 设备管理、跨语言样例、快照与生成类型 | 通过 | Cloud 契约 Python 17 项、全量 pytest 18 项、TypeScript 1 项、Spring 1 项及 41 文件制品校验通过；Desktop 17 项契约测试和 SHA-256 比对通过；Web 类型生成、22 项测试和生产构建通过 |
 | 2026-08-20 | Desktop/Cloud/Web P2-W04 实现与收尾工作区 | 调用边界、精确路由、生产端点和安全链 | 通过（Docker 集成项条件通过） | Desktop Vitest 159、契约 17、Runtime 87、检索评估、类型检查、生产构建和依赖审计 0 漏洞；Web Vitest 35、Playwright E2E 10 通过/1 跳过、生产构建、Nginx 精确路由和依赖审计 0 漏洞；Cloud pytest 18、JDK 21 Maven 120 中 115 通过/5 跳过且无失败；Testcontainers PostgreSQL/Redis 因本机无可用 Docker 未运行；41 个契约文件一致 |
+| 2026-08-20 | Desktop/Cloud/Web P2-W05 首页与线上收尾 | 官方首页实现、浏览器视觉验收、生产发布与正式 HTTPS 复验 | 通过 | Web Vitest 37、Playwright E2E 12 通过/1 既有真实环境用例跳过、生产构建、Canvas 像素、截图和 390px/320px 无横向溢出通过；官网生产制品已上线，首页、账号/OAuth、Desktop 登录、Consent、Refresh、UserInfo、设备同步与撤销未发现异常；Windows 安装包仍待发布，官网入口保持禁用状态 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -422,3 +423,10 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Preload 新增 `openManagedPortal(target)` 脱敏 API；Renderer 设置页新增“前往官网管理”按钮，默认打开官网业务中心。
 - 用户从系统浏览器返回应用后，Renderer 以显式状态驱动方式协调一次受控刷新，优先让登录、退出登录和设备撤销等首个真实交互先执行，再复用既有 Managed 状态广播更新账号和设备摘要。
 - 本轮新增 `managedPortalRoutes` 单元测试，并完成相关类型检查与竞态修复验证；P2-11 按当前产品决策标记为完成。
+
+### 2026-08-20（P2-W05 官方首页实现完成）
+
+- `petdock-web` 已按冻结的“星域粒子网络 + 像素猫”规范交付正式首页，Desktop 不新增实现，仅同步产品入口、BYOK/官方托管边界和下载制品待发布事实。
+- Web 端已通过 37 项 Vitest、12 项 Playwright E2E（另 1 项既有真实环境用例按环境跳过）、Canvas 非空像素、桌面截图及 390px/320px 无横向溢出验收；生产依赖审计为 0 漏洞。
+- P2-W05 官网生产制品已上线并通过正式 HTTPS 复验；首页、账号/OAuth、Desktop 登录、Consent、Refresh、UserInfo、设备同步和撤销均未发现异常。
+- Phase 2 标记为 `Done`；Windows 安装包仍待独立发布，官网入口继续准确显示禁用状态，下一工作项为输出并冻结 Phase 3 Managed Chat MVP 方案。

@@ -723,7 +723,7 @@ Phase 2 的详细模块、共享开发环境、跨仓库顺序和验收方案见
 - `P2-W02` 实现 OAuth 设备授权确认页，并使用官网 Web Session 与控制面交互。
 - `P2-W03` 实现服务方案、充值、订单、设备列表和用量看板的基础页面及路由；服务方案兼容订阅与按量两种模式，支付和按量结算闭环随 Phase 5 正式收费能力完善。
 - `P2-W04` 官网前端只消费控制面 Web API，不调用 AI 数据面，不读取桌面 Token。
-- `P2-W05` 按已冻结的首页视觉规范实现正式官网首页，交付品牌、功能、隐私、双模式、下载和账号入口；完成后再进入 Phase 3。
+- `P2-W05` 已按冻结的首页视觉规范交付正式官网首页，包含品牌、功能、隐私、双模式、下载和账号入口，并已通过正式 HTTPS 复验；Phase 2 已完成，下一步进入 Phase 3 方案冻结。
 
 #### Spring Boot 工作项
 
@@ -1091,7 +1091,7 @@ Feature Flag 必须能按环境、用户组、客户端版本和百分比灰度�
 ```text
 [x] Phase 0 契约与安全边界冻结
 [x] Phase 1 本地 Provider 抽象完成，BYOK 零回归
-[ ] Phase 2 登录、设备、Token 和 Entitlement 完成
+[x] Phase 2 登录、设备、Token 和 Entitlement 完成
 [ ] Phase 3 Managed Chat MVP 完成
 [ ] Phase 4-E Managed Embedding 完成
 [ ] Phase 4-V Managed Vision 完成
