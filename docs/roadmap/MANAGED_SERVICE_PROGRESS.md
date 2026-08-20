@@ -402,3 +402,10 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - 自动门禁已按本次实际结果记录：Desktop 159/17/87，Web 35、E2E 10 通过/1 跳过，Cloud pytest 18、Maven 120 中 115 通过/5 跳过、41 个契约文件一致；5 项 Cloud Testcontainers 集成测试因本机无可用 Docker 跳过。
 - 本轮未在本机重新部署正式域名；线上结果沿用 2026-08-20 已完成的受限门禁，新版本上线后需按生产指南重跑 Desktop PKCE、账号切换、撤销和未知路径 `404` 冒烟。
 - P2-W04 标记为 `Done`；P2-11、Usage、支付和 FastAPI AI 数据面继续延后，普通用户公网流量保持受控。
+
+### 2026-08-20（P2-W04 提交后正式线上复验）
+
+- 已基于提交后的三仓版本完成正式 HTTPS 线上联调复验，Desktop、官网、账号主机和控制面调用边界工作正常。
+- OAuth/PKCE、Consent 同意与拒绝、Refresh、UserInfo、官网 Session、设备同步、设备撤销、账号切换和未知路径拒绝均未发现异常。
+- 复验记录只保留脱敏结果，不记录 Token、Cookie、密码、授权参数、生产日志、真实账号或完整跳转地址。
+- P2-W04 提交后线上复验通过，下一工作项为 Desktop P2-11 官网管理入口与返回应用后的状态刷新。
