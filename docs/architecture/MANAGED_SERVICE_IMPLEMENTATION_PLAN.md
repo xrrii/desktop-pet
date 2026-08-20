@@ -758,9 +758,15 @@ Phase 2 的详细模块、共享开发环境、跨仓库顺序和验收方案见
 
 ### Phase 3：官方 Chat MVP
 
+详细开发方案见 `docs/features/MANAGED_SERVICE_PHASE3_CHAT_MVP.md`。该方案已冻结 Phase 3 的三仓职责、调用拓扑、Beta 配额状态机、流式协议、验证门禁和回滚边界；实现开始前必须先完成 `P3-00`，不得绕过权威契约直接开发业务代码。
+
 #### 目标
 
 打通第一条真实官方流量链路，只支持 Chat，其他官方能力保持关闭。
+
+#### 契约闭合工作项
+
+- `P3-00` 在 `petdock-cloud/contracts/managed-service/v1` 闭合 Managed Chat Feature Flag、内部配额预占/结算、Chat SSE 顺序与终止语义、Web Usage Summary、请求指纹和幂等冲突规则；完成跨语言契约测试、Desktop 快照同步和逐文件 SHA-256 比对后，才允许进入业务实现。
 
 #### FastAPI 工作项
 

@@ -10,12 +10,13 @@
 
 1. 阅读本文档，确认当前阶段、下一工作项和阻塞项。
 2. 阅读 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md`，以其中冻结的架构、安全和阶段要求为准。
-3. 进入 Phase 2 时阅读 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`，确认开发环境、身份、设备和 Token 细节。
-4. 正式部署或线上联调时阅读 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md`。
-5. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
-6. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
-7. 执行 `git status --short`，区分已有用户改动和本次改动。
-8. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
+3. 进入 Phase 3 时阅读 `docs/features/MANAGED_SERVICE_PHASE3_CHAT_MVP.md`，确认调用拓扑、契约门禁、配额状态机和三仓边界。
+4. 需要回看 Phase 2 身份基础时阅读 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`。
+5. 正式部署或线上联调时阅读 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md`。
+6. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
+7. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
+8. 执行 `git status --short`，区分已有用户改动和本次改动。
+9. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
 
 文档优先级：
 
@@ -28,6 +29,9 @@
 
 Phase 2 详细开发方案
   docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md
+
+Phase 3 Managed Chat MVP 详细开发方案
+  docs/features/MANAGED_SERVICE_PHASE3_CHAT_MVP.md
 
 现有本地 Assistant 设计
   docs/architecture/AI_ASSISTANT_ARCHITECTURE.md
@@ -51,8 +55,8 @@ Phase 2 详细开发方案
 ## 3. 当前总览
 
 ```text
-总体状态：Phase 2 Done
-当前阶段：Phase 3 Managed Chat MVP 方案待输出与冻结
+总体状态：Phase 3 Decision Frozen
+当前阶段：Phase 3 Managed Chat MVP Decision Frozen
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
@@ -60,11 +64,11 @@ Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01�
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：无；Windows 安装包尚未发布，官网入口继续准确显示待发布状态，不阻塞 Phase 3 方案设计
-下一建议工作项：输出并冻结 Phase 3 Managed Chat MVP 方案
+当前阻塞：无；Windows 安装包尚未发布，官网入口继续准确显示待发布状态，不阻塞 P3-00 契约闭合
+下一建议工作项：P3-00 Managed Chat 跨仓契约闭合门禁
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象和 Phase 2 全部工作项。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W05，Desktop 已完成 P2-06 至 P2-11；P2-W05 官网生产制品已上线并通过正式 HTTPS 验收。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后到对应阶段。
+当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象和 Phase 2 全部工作项。Phase 3 Managed Chat MVP 开发方案已冻结，但契约和业务实现尚未开始；下一步先完成 `P3-00`，Usage 正式账本、支付/按量结算闭环和 Chat 以外的 Managed 能力继续延后到对应阶段。
 
 ## 4. 产品与仓库边界
 
@@ -135,7 +139,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
 | Phase 2 官网、身份、设备和会话 | `Done` | P2-11、P2-W01 至 W05 与正式 HTTPS 验收均已完成 | Phase 3 方案冻结 |
-| Phase 3 Managed Chat MVP | `Not Started` | Phase 1、2 完成 | `P3-10` `ManagedChatProvider` |
+| Phase 3 Managed Chat MVP | `Decision Frozen` | Phase 1、2 完成 | `P3-00` 跨仓契约闭合门禁 |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
 | Phase 6 服务端 Agent | `Deferred` | Phase 5 后重新评审 | 不得提前复制本地 Agent |
@@ -144,7 +148,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销、安全审计和正式官网首页均已完成；Desktop P2-06 至 P2-11、Web/Cloud P2-W01 至 P2-W05 已通过自动门禁与正式 HTTPS 验收。下一步输出并冻结 Phase 3 Managed Chat MVP 方案；方案冻结前不得开放 Managed Chat、Usage 或支付能力。
+Phase 3 Managed Chat MVP 方案已经冻结。下一步执行 `P3-00`：先在 Cloud 权威源闭合 Managed Chat 开关、内部配额协议、SSE 终止语义、Web Usage Summary、请求指纹和幂等冲突规则，再同步 Desktop 快照并通过跨语言测试与逐文件 SHA-256 比对。`P3-00` 完成前不得进入 FastAPI、Spring Boot、Desktop Runtime/UI 或 Web 业务实现。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -430,3 +434,9 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Web 端已通过 37 项 Vitest、12 项 Playwright E2E（另 1 项既有真实环境用例按环境跳过）、Canvas 非空像素、桌面截图及 390px/320px 无横向溢出验收；生产依赖审计为 0 漏洞。
 - P2-W05 官网生产制品已上线并通过正式 HTTPS 复验；首页、账号/OAuth、Desktop 登录、Consent、Refresh、UserInfo、设备同步和撤销均未发现异常。
 - Phase 2 标记为 `Done`；Windows 安装包仍待独立发布，官网入口继续准确显示禁用状态，下一工作项为输出并冻结 Phase 3 Managed Chat MVP 方案。
+
+### 2026-08-20（Phase 3 Managed Chat MVP 方案冻结）
+
+- 新增 `docs/features/MANAGED_SERVICE_PHASE3_CHAT_MVP.md`，冻结只开放 `chat-standard` 的范围、本地 Agent 与工具执行边界、FastAPI 直连拓扑、Beta 配额状态机、流式错误语义、三仓实施波次、验证门禁和回滚要求。
+- Phase 3 状态更新为 `Decision Frozen`，表示方案已确定但契约、代码和验收尚未开始；Managed Chat、真实 Usage Summary 和任何支付能力均未因此开放。
+- 下一工作项固定为 `P3-00`：所有公共协议先在 Cloud v1 权威契约闭合，通过跨语言契约测试、Desktop 快照同步和逐文件 SHA-256 比对后，再进入 `P3-01` 至 `P3-16`。
