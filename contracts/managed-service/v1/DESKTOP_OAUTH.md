@@ -59,7 +59,7 @@ state=<high-entropy-random>
 ## 6. 系统浏览器交互
 
 - 正式 OAuth 交互页面只从 `https://account.petdock.site` 同源加载，入口固定为 `/oauth/login`、`/oauth/register`、`/oauth/consent` 和稳定错误页。
-- Desktop 用户显式点击登录时附带标准 `prompt=login`；账号主机必须清理当前账号主机 Session 后进入登录页，确保用户可以切换账号。应用启动时的本地 Refresh Token 恢复不使用该参数。
+- Desktop 用户显式点击登录时附带标准 `prompt=login`；账号主机必须清理当前账号主机 Session 后进入登录页，确保用户可以切换账号。登录成功后 `/oauth/resume` 消费该一次性提示再恢复授权请求，避免重复清理新 Session。应用启动时的本地 Refresh Token 恢复不使用该参数。
 - 未登录的 Authorization Request 由服务端 HttpSession RequestCache 保存。登录或注册成功后，前端只能访问 `GET /oauth/resume`；该端点只恢复服务端保存且已校验为本机 `/oauth2/authorize` 的请求，并返回 `302`，不得接收任意 `returnTo`、完整 Authorization URL 或外部跳转地址。
 - 账号主机只允许反向代理 `GET /api/v1/web/session`、`POST /api/v1/web/auth/login` 和 `POST /api/v1/web/auth/register` 三个账号接口，用于建立独立账号主机 Session；不得把整个官网 Web API 暴露为无约束别名。
 - OAuth 页面不得在 Storage、日志、分析系统、错误正文或页面快照中保存授权码、Token、密码、Cookie、`state`、PKCE 参数或完整 redirect URI。
