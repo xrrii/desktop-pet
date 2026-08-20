@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-19
+最后更新时间：2026-08-20
 
 ## 1. 新会话快速开始
 
@@ -58,13 +58,13 @@ Phase 2 详细开发方案
 独立官网前端：`petdock-web` P2-W01、P2-W02、P2-W03 Done；P2-W04 尚未开始（独立仓库）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
-云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，生产隔离部署与受限线上门禁尚未完成
+云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：P2-W04 本地开发无阻塞；普通用户公网流量等待生产隔离部署和来源 IP 白名单线上门禁
-下一建议工作项：完成 P2-W04 调用边界与安全收口，并按权威指南执行正式域名、系统浏览器和打包版 Desktop 验收
+当前阻塞：P2-W04 本地开发无阻塞；普通用户公网流量仍按生产策略受控
+下一建议工作项：完成 P2-W04 调用边界与安全收口，再实施 Desktop P2-11 官网管理入口
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W03；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 和设备撤销后更换本地 UUID 的恢复逻辑。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后。备案、正式 DNS 和 TLS 条件已具备，下一门禁是生产隔离部署和来源 IP 白名单下的真实域名/打包版验收。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W03；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 和设备撤销后更换本地 UUID 的恢复逻辑。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后。正式域名受限线上门禁已完成，下一工作项为 P2-W04 调用边界与安全收口。
 
 ## 4. 产品与仓库边界
 
@@ -144,7 +144,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 至 P2-W03，并通过真实 HTTPS、数据库/Redis 和设备撤销传播验收。下一步完成 P2-W04 调用边界与安全收口；正式部署按 Cloud 权威指南先完成生产隔离和来源 IP 白名单门禁，`P2-11` 仍排在 W01~W04 之后。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 至 P2-W03，并通过真实 HTTPS、数据库/Redis 和设备撤销传播验收。正式域名受限线上门禁已通过，下一步完成 P2-W04 调用边界与安全收口；`P2-11` 仍排在 W01~W04 之后。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -380,3 +380,11 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Cloud 新增 `docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md` 作为三仓正式部署、来源 IP 白名单线上联调、回滚和后续迭代的权威步骤。
 - 日常开发继续使用本地 Mock/Testcontainers 和 `shared-dev`；当前 `staging` 仍固定正式端点，不能作为独立公网预发布环境。
 - 普通用户流量仍未开放，待生产 PostgreSQL/Redis/JWT 密钥隔离、Nginx 精确路由及打包版 Desktop 门禁通过后再决定。
+
+### 2026-08-20（正式域名受限线上门禁完成）
+
+- 使用正式 HTTPS 域名完成受限线上联调；普通用户公网流量的生产策略保持不变。
+- Desktop 真实 OAuth Authorization Code + PKCE、loopback 回调、Consent 同意/拒绝、Refresh、UserInfo、设备同步、退出后重新登录和账号切换均通过。
+- 官网真实登录、账号主机独立 Session、OAuth 登录恢复、服务快照、设备分页、单设备撤销和全部设备撤销均通过；撤销传播后的 Desktop 重新认证行为正常。
+- 线上 PostgreSQL/Redis 事实与撤销投影链路已完成验证；记录未包含 Token、Cookie、密码、授权参数、生产日志或真实账号信息。
+- 正式域名受限线上门禁由“待完成”更新为“通过”；下一工作项仍为 P2-W04，完成后再实施 Desktop P2-11。
