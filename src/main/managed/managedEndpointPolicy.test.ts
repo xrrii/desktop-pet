@@ -9,6 +9,15 @@ describe('resolveManagedEndpointPolicy', () => {
     })).toThrow()
   })
 
+  it('已打包 Desktop 拒绝通过环境变量切换到开发环境', () => {
+    expect(() => resolveManagedEndpointPolicy('local-mock', {
+      PETDOCK_MANAGED_ISSUER: 'http://127.0.0.1:18080',
+      PETDOCK_MANAGED_CONTROL_PLANE_URL: 'http://127.0.0.1:18081'
+    }, true)).toThrow('已打包 Desktop')
+    expect(resolveManagedEndpointPolicy(undefined, {}, true).controlPlaneBaseUrl.href)
+      .toBe('https://api.petdock.site/')
+  })
+
   it('开发环境只接受回环和私有网地址', () => {
     expect(resolveManagedEndpointPolicy('local-mock', {
       PETDOCK_MANAGED_ISSUER: 'http://127.0.0.1:18080',

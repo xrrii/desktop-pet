@@ -10,9 +10,13 @@ const OVERRIDE_KEYS = ['PETDOCK_MANAGED_ISSUER', 'PETDOCK_MANAGED_CONTROL_PLANE_
  */
 export function resolveManagedEndpointPolicy(
   environmentValue = process.env.PETDOCK_MANAGED_ENVIRONMENT,
-  environment = process.env
+  environment = process.env,
+  packagedBuild = false
 ): ManagedEndpointPolicy {
-  const selected = (environmentValue?.trim() || 'production') as ManagedEnvironment
+  if (packagedBuild && environmentValue?.trim() && environmentValue.trim() !== 'production') {
+    throw new Error('已打包 Desktop 禁止覆盖 Managed Service 环境。')
+  }
+  const selected = (packagedBuild ? 'production' : (environmentValue?.trim() || 'production')) as ManagedEnvironment
   if (!['local-mock', 'shared-dev', 'staging', 'production'].includes(selected)) {
     throw new Error('Managed Service 环境配置无效。')
   }

@@ -52,16 +52,16 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 P2-W03 Done，准备进入 P2-W04
+当前阶段：Phase 2 P2-W04 Done，准备进入 Desktop P2-11
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调）
-独立官网前端：`petdock-web` P2-W01、P2-W02、P2-W03 Done；P2-W04 尚未开始（独立仓库）
+独立官网前端：`petdock-web` P2-W01、P2-W02、P2-W03、P2-W04 Done；P2-W04 已完成调用边界与路由收口（独立仓库）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：P2-W04 本地开发无阻塞；普通用户公网流量仍按生产策略受控
-下一建议工作项：完成 P2-W04 调用边界与安全收口，再实施 Desktop P2-11 官网管理入口
+当前阻塞：P2-W04 自动门禁无代码阻塞；本机 Docker 不可用导致 Cloud 5 项 Testcontainers 集成测试跳过；普通用户公网流量仍按生产策略受控
+下一建议工作项：输出并实施 Desktop P2-11 官网管理入口
 ```
 
 当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W03；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 和设备撤销后更换本地 UUID 的恢复逻辑。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后。正式域名受限线上门禁已完成，下一工作项为 P2-W04 调用边界与安全收口。
@@ -208,6 +208,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-17 | Desktop/Cloud P2-W02 契约工作区 | 标准 Consent、双主机 Session、OAuth 页面边界与快照比对 | 通过 | Cloud 与 Desktop 各 16 项契约测试通过；38 个受控文件 SHA-256 一致；业务实现尚未开始 |
 | 2026-08-18 | Web/Cloud/Desktop P2-W02 实现与收尾工作区 | 标准 Consent、分离 Host HTTPS、真实 loopback/PKCE、设备同步、拒绝授权与提交后修复 | 通过 | Desktop 类型检查、155 项 Vitest、16 项契约、87 项 Runtime、检索评测、生产构建和生产依赖审计（0 漏洞）通过；Web 22 项 Vitest、Playwright Mock 6 项通过/1 项按环境跳过、生产构建和生产依赖审计（0 漏洞）通过；Cloud pytest 17 项、JDK 21 Maven 101 项全部通过，Testcontainers PostgreSQL/Redis 已实际运行；真实 HTTPS 跨端测试 2 项通过；Desktop/Cloud 38 个契约文件一致 |
 | 2026-08-19 | Desktop/Cloud/Web P2-W03 契约工作区 | 服务方案三态、Web 设备管理、跨语言样例、快照与生成类型 | 通过 | Cloud 契约 Python 17 项、全量 pytest 18 项、TypeScript 1 项、Spring 1 项及 41 文件制品校验通过；Desktop 17 项契约测试和 SHA-256 比对通过；Web 类型生成、22 项测试和生产构建通过 |
+| 2026-08-20 | Desktop/Cloud/Web P2-W04 实现与收尾工作区 | 调用边界、精确路由、生产端点和安全链 | 通过（Docker 集成项条件通过） | Desktop Vitest 159、契约 17、Runtime 87、检索评估、类型检查、生产构建和依赖审计 0 漏洞；Web Vitest 35、Playwright E2E 10 通过/1 跳过、生产构建、Nginx 精确路由和依赖审计 0 漏洞；Cloud pytest 18、JDK 21 Maven 120 中 115 通过/5 跳过且无失败；Testcontainers PostgreSQL/Redis 因本机无可用 Docker 未运行；41 个契约文件一致 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -388,3 +389,16 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - 官网真实登录、账号主机独立 Session、OAuth 登录恢复、服务快照、设备分页、单设备撤销和全部设备撤销均通过；撤销传播后的 Desktop 重新认证行为正常。
 - 线上 PostgreSQL/Redis 事实与撤销投影链路已完成验证；记录未包含 Token、Cookie、密码、授权参数、生产日志或真实账号信息。
 - 正式域名受限线上门禁由“待完成”更新为“通过”；下一工作项仍为 P2-W04，完成后再实施 Desktop P2-11。
+
+### 2026-08-20（P2-W04 方案冻结）
+
+- 三仓 P2-W04 方案已输出于 `petdock-web/docs/plans/P2_W04_DEVELOPMENT_PLAN.md`，Desktop 本期只复核生产端点固定、Main-only Token 边界和发布制品扫描，不实现 P2-11。
+- P2-W04 实现与自动门禁已完成；Desktop P2-11 等待正式评审后立项。
+
+### 2026-08-20（P2-W04 实现与收尾完成）
+
+- Desktop 打包构建强制 production 端点；Cloud 分离 Desktop/API Bearer、官网 Web Session 和 OAuth `/oauth/resume` 安全链，并增加 Web Session 越界访问 Desktop API 的回归测试。
+- Web 请求层仅允许官网 Web API 相对路径，生产 Origin 固定为官方控制面/账号主机；Nginx 与 Vite 代理改为 OAuth、Discovery、JWKS、userinfo 和账号 Session 的精确路径与方法限制，未知路径保持 `404`。
+- 自动门禁已按本次实际结果记录：Desktop 159/17/87，Web 35、E2E 10 通过/1 跳过，Cloud pytest 18、Maven 120 中 115 通过/5 跳过、41 个契约文件一致；5 项 Cloud Testcontainers 集成测试因本机无可用 Docker 跳过。
+- 本轮未在本机重新部署正式域名；线上结果沿用 2026-08-20 已完成的受限门禁，新版本上线后需按生产指南重跑 Desktop PKCE、账号切换、撤销和未知路径 `404` 冒烟。
+- P2-W04 标记为 `Done`；P2-11、Usage、支付和 FastAPI AI 数据面继续延后，普通用户公网流量保持受控。

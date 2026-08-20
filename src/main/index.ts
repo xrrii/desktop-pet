@@ -91,7 +91,7 @@ const isPrimaryInstance = configureSingleInstance(app, {
   openWindow: () => openPetWindow(),
   logInfo: (message) => logInfo(message)
 })
-const managedEndpointPolicy = resolveManagedEndpointPolicy()
+const managedEndpointPolicy = resolveManagedEndpointPolicy(undefined, process.env, app.isPackaged)
 const managedServerClock = new ManagedServerClock()
 const managedRuntimeSessionBridge = new ManagedRuntimeSessionBridge()
 const managedRuntimeTokenBroker = new ManagedRuntimeTokenBroker(
