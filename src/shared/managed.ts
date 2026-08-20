@@ -67,6 +67,9 @@ export type ManagedAuthErrorCode =
   | 'managed_device_not_found'
   | 'managed_unsupported_client_version'
 
+/** Renderer 只能请求受控官网业务页，不允许提交任意 URL。 */
+export type ManagedPortalTarget = 'overview' | 'plans' | 'devices' | 'usage' | 'billing'
+
 /** 只包含 UserInfo 契约允许展示的账号字段。 */
 export interface ManagedAccountSnapshot {
   email: string

@@ -28,7 +28,7 @@ import type {
 } from '../../shared/assistant'
 import type { AvailablePet, PetSpritesheetSelection } from '../../shared/pet'
 import type { AssistantThemeId } from '../../shared/theme'
-import type { ManagedAuthStatus } from '../../shared/managed'
+import type { ManagedAuthStatus, ManagedPortalTarget } from '../../shared/managed'
 import {
   getCommandPaletteState,
   type AssistantCommandOption
@@ -167,6 +167,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const managedLogin = requireElement<HTMLButtonElement>('#managed-login')
   const managedLogout = requireElement<HTMLButtonElement>('#managed-logout')
   const managedRevokeDevice = requireElement<HTMLButtonElement>('#managed-revoke-device')
+  const managedOpenPortal = requireElement<HTMLButtonElement>('#managed-open-portal')
   const settingsOpenPetManager = requireElement<HTMLButtonElement>('#settings-open-pet-manager')
   const settingsOpenWeb = requireElement<HTMLButtonElement>('#settings-open-web')
   const settingsOpenKnowledge = requireElement<HTMLButtonElement>('#settings-open-knowledge')
@@ -249,6 +250,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let modelBusy = false
   let managedAuthStatus: ManagedAuthStatus | null = null
   let managedAuthBusy = false
+  let managedPortalBusy = false
   let pendingSkillPreview: AssistantSkillInstallPreview | null = null
   let pendingSkillUninstall: AssistantSkillSummary | null = null
   let selectedSkillId: string | null = null
@@ -491,6 +493,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   managedLogin.addEventListener('click', () => void startManagedLogin())
   managedLogout.addEventListener('click', () => void logoutManaged())
   managedRevokeDevice.addEventListener('click', () => void revokeManagedCurrentDevice())
+  managedOpenPortal.addEventListener('click', () => void openManagedPortal('overview'))
   skillButton.addEventListener('click', () => {
     if (!busy) {
       if (skillMode) {
@@ -725,6 +728,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     managedLogin.disabled = managedAuthBusy || !status.managedLoginEnabled || !loginEligible
     managedLogout.disabled = managedAuthBusy || (!authenticated && !retainedSession)
     managedRevokeDevice.disabled = managedAuthBusy || !authenticated || !device || device.status !== 'active'
+    managedOpenPortal.disabled = managedPortalBusy
   }
 
   /** 将 Main 稳定状态转换为设置页短文案。 */
@@ -794,6 +798,26 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     } finally {
       managedAuthBusy = false
       if (managedAuthStatus) renderManagedAuthStatus(managedAuthStatus)
+    }
+  }
+
+  /** 打开 Main 白名单内的官网业务页；Renderer 只提交固定目标枚举。 */
+  async function openManagedPortal(target: ManagedPortalTarget): Promise<void> {
+    if (managedPortalBusy) return
+    managedPortalBusy = true
+    clearError()
+    if (managedAuthStatus) {
+      renderManagedAuthStatus(managedAuthStatus)
+    }
+    try {
+      await window.desktopPet.openManagedPortal(target)
+    } catch (error) {
+      showError(error)
+    } finally {
+      managedPortalBusy = false
+      if (managedAuthStatus) {
+        renderManagedAuthStatus(managedAuthStatus)
+      }
     }
   }
 

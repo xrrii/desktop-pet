@@ -26,6 +26,7 @@ import type {
   MemoryItemKind,
   AssistantPermissionResolution
 } from '../shared/assistant'
+import type { ManagedPortalTarget } from '../shared/managed'
 import type { CreatePetInput, PetSpritesheetSelection } from '../shared/pet'
 import { AssistantManager } from './assistant/assistantManager'
 import { writeArtifactAtomically } from './assistant/artifactFileWriter'
@@ -33,6 +34,7 @@ import { logError, logInfo } from './logger'
 import { ManagedAuthManager } from './managed/managedAuthManager'
 import { ManagedControlPlaneClient } from './managed/managedControlPlaneClient'
 import { resolveManagedEndpointPolicy } from './managed/managedEndpointPolicy'
+import { isManagedPortalTarget, resolveManagedPortalUrl } from './managed/managedPortalRoutes'
 import { ManagedRuntimeSessionBridge } from './managed/managedRuntimeSessionBridge'
 import { ManagedRuntimeTokenBroker } from './managed/managedRuntimeTokenBroker'
 import { ManagedRuntimeAuthRefreshHandler } from './managed/managedRuntimeAuthRefreshHandler'
@@ -85,6 +87,8 @@ if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
 let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
 let smokeArtifactSaveCancelled = false
+let pendingManagedPortalRefresh = false
+let activeManagedPortalRefresh: Promise<void> | null = null
 const pendingPetSpritesheetSelections = new Map<string, { filePath: string; fileName: string }>()
 const isPrimaryInstance = configureSingleInstance(app, {
   getWindow: () => petWindow,
@@ -449,6 +453,25 @@ function registerIpc(): void {
     return managedAuthManager.refreshFeatures()
   })
 
+  ipcMain.handle('managed:open-portal', async (event, target: unknown) => {
+    requirePetSender(event)
+    const portalTarget = requireManagedPortalTarget(target)
+    const url = resolveManagedPortalUrl(
+      portalTarget,
+      process.env.PETDOCK_MANAGED_ENVIRONMENT,
+      process.env,
+      app.isPackaged
+    )
+    try {
+      await shell.openExternal(url.href)
+      pendingManagedPortalRefresh = true
+      return true
+    } catch (error) {
+      logError('managed portal failed to open', error)
+      throw error
+    }
+  })
+
   ipcMain.handle('managed:login', (event) => {
     requirePetSender(event)
     return managedAuthManager.login()
@@ -806,6 +829,12 @@ if (isPrimaryInstance) {
 function openPetWindow(): void {
   const window = createPetWindow()
   petWindow = window
+  window.on('focus', () => {
+    if (!pendingManagedPortalRefresh) {
+      return
+    }
+    void refreshManagedPortalStatus()
+  })
   window.once('closed', () => {
     if (petWindow === window) {
       petWindow = null
@@ -819,6 +848,28 @@ function openAssistantForPet(window: BrowserWindow): void {
   void assistantManager.start().catch((error: unknown) => {
     logError('assistant runtime failed to start', error)
   })
+}
+
+/** 浏览器回到应用后，受控刷新官网相关的脱敏状态，避免重复并发刷新。 */
+function refreshManagedPortalStatus(): Promise<void> {
+  if (activeManagedPortalRefresh) {
+    return activeManagedPortalRefresh
+  }
+  const task = (async () => {
+    try {
+      await managedAuthManager.refreshFeatures()
+      await managedAuthManager.restoreSession()
+    } catch (error) {
+      logError('managed portal return refresh failed', error)
+    } finally {
+      pendingManagedPortalRefresh = false
+      if (activeManagedPortalRefresh === task) {
+        activeManagedPortalRefresh = null
+      }
+    }
+  })()
+  activeManagedPortalRefresh = task
+  return task
 }
 
 function requirePetSender(event: IpcMainInvokeEvent | IpcMainEvent): BrowserWindow {
@@ -844,6 +895,14 @@ function requireString(value: unknown): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new TypeError('IPC value must be a non-empty string.')
   }
+}
+
+/** 仅允许 Renderer 请求固定官网管理目标，不接受任意 URL 或查询参数。 */
+function requireManagedPortalTarget(value: unknown): ManagedPortalTarget {
+  if (!isManagedPortalTarget(value)) {
+    throw new TypeError('Managed portal target is invalid.')
+  }
+  return value
 }
 
 /**

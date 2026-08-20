@@ -38,7 +38,7 @@ import type {
 } from '../shared/assistant'
 import type { ScreenshotOverlayPayload, ScreenshotSelectionInput } from '../shared/screenshot'
 import type { AssistantThemeId } from '../shared/theme'
-import type { ManagedAuthStatus } from '../shared/managed'
+import type { ManagedAuthStatus, ManagedPortalTarget } from '../shared/managed'
 import type {
   AvailablePet,
   CreatePetInput,
@@ -106,6 +106,9 @@ const api = {
   getManagedAuthStatus: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:get-status'),
   /** 登录前匿名刷新服务端 Feature Flag，永远不发送 Access Token。 */
   refreshManagedFeatures: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:refresh-features'),
+  /** 打开 Main 白名单内的官网业务页，不允许 Renderer 传入任意 URL。 */
+  openManagedPortal: (target: ManagedPortalTarget): Promise<boolean> =>
+    ipcRenderer.invoke('managed:open-portal', target),
   /** 请求 Main 通过系统浏览器开始 PKCE 登录。 */
   loginManaged: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:login'),
   /** 取消当前 PKCE 登录并关闭 Main loopback 监听器。 */
