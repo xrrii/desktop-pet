@@ -1,0 +1,11 @@
+{
+  "eventVersion": 1,
+  "type": "error",
+  "sequence": 1,
+  "traceId": "dcecb768-9ff5-4ca4-a10b-6a725695ab5b",
+  "requestId": "54ca903e-23da-42bb-a69b-125f3669962b",
+  "code": "provider_unavailable",
+  "message": "官方能力暂时不可用。",
+  "retryable": true,
+  "retryAfterSeconds": 30
+}

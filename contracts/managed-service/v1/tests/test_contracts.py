@@ -23,6 +23,10 @@ EXAMPLE_SCHEMAS = {
     "managed-auth-result.json": "managed-auth-result.schema.json",
     "usage-event.json": "usage-event.schema.json",
     "chat-stream-event.json": "chat-stream-event.schema.json",
+    "chat-stream-tool-call.json": "chat-stream-event.schema.json",
+    "chat-stream-usage.json": "chat-stream-event.schema.json",
+    "chat-stream-completed.json": "chat-stream-event.schema.json",
+    "chat-stream-error.json": "chat-stream-event.schema.json",
     "web-session-anonymous.json": "web-session-snapshot.schema.json",
     "web-session-authenticated.json": "web-session-snapshot.schema.json",
 }
@@ -149,12 +153,13 @@ def test_error_catalog_is_unique_and_has_required_codes() -> None:
 
 
 def test_openapi_documents_have_v1_metadata_and_operations() -> None:
-    """确保四份 OpenAPI 可解析、版本一致且 operationId 不重复。"""
+    """确保五份 OpenAPI 可解析、版本一致且 operationId 不重复。"""
     operation_ids: list[str] = []
     documents = sorted(OPENAPI_ROOT.glob("*.yaml"))
     assert {path.name for path in documents} == {
         "ai-data-plane.yaml",
         "control-plane.yaml",
+        "internal-control-plane.yaml",
         "local-runtime-session.yaml",
         "web-control-plane.yaml",
     }
@@ -328,6 +333,7 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
         "/api/v1/web/profile",
         "/api/v1/web/account/password",
         "/api/v1/web/entitlements",
+        "/api/v1/web/usage/summary",
         "/api/v1/web/devices",
         "/api/v1/web/devices/{deviceId}",
     }
@@ -410,3 +416,140 @@ def test_p2_w03_device_and_billing_modes_are_frozen() -> None:
         assert "不表示免费、无限或额度耗尽" in document
     assert "不得未经用户确认自动切换到按量扣费" in register
     assert "当前免费 Beta 只产生套餐模式快照" in register
+
+
+def test_p3_00_chat_scope_and_feature_flag_are_frozen() -> None:
+    """冻结 Phase 3 可公开操作、唯一逻辑模型和兼容 Feature Flag。"""
+    ai = _read_yaml(OPENAPI_ROOT / "ai-data-plane.yaml")
+    control = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
+
+    assert ai["x-petdock-phase3-public-operations"] == [
+        "POST /ai/v1/chat/completions",
+        "GET /ai/v1/capabilities",
+        "GET /ai/v1/health",
+    ]
+    assert ai["paths"]["/ai/v1/chat/completions"]["post"]["x-petdock-availability"] == "phase-3"
+    assert ai["paths"]["/ai/v1/capabilities"]["get"]["x-petdock-availability"] == "phase-3"
+    assert ai["paths"]["/ai/v1/health"]["get"]["x-petdock-availability"] == "phase-3"
+    for path in ("/ai/v1/embeddings", "/ai/v1/vision/analyze", "/ai/v1/rerank", "/ai/v1/web/search"):
+        operation = next(iter(ai["paths"][path].values()))
+        assert operation["x-petdock-availability"] == "phase-4"
+
+    chat = ai["components"]["schemas"]["ChatRequest"]
+    assert chat["properties"]["logicalModel"]["const"] == "chat-standard"
+    assert chat["properties"]["stream"]["const"] is True
+    assert chat["properties"]["messages"]["maxItems"] == 100
+    assert chat["properties"]["tools"]["maxItems"] == 32
+    tool = ai["components"]["schemas"]["ToolDefinition"]
+    assert tool["additionalProperties"] is False
+    assert set(tool["required"]) == {"type", "function"}
+    parameters = ai["components"]["schemas"]["ToolParametersSchema"]
+    assert set(parameters["required"]) == {"type", "properties", "additionalProperties"}
+    assert parameters["properties"]["additionalProperties"]["const"] is False
+    assert ai["paths"]["/ai/v1/chat/completions"]["post"]["x-petdock-request-body-max-bytes"] == 1024 * 1024
+    assert ai["paths"]["/ai/v1/chat/completions"]["post"]["x-petdock-tool-definition-max-bytes"] == 64 * 1024
+
+    flags = control["components"]["schemas"]["FeatureFlagSnapshot"]
+    assert "managed_chat_enabled" in flags["properties"]
+    assert flags["properties"]["managed_chat_enabled"]["type"] == "boolean"
+    assert "managed_chat_enabled" not in flags["required"]
+    example = _read_json(EXAMPLE_ROOT / "feature-flags.json")
+    assert example["managed_chat_enabled"] is False
+
+
+def test_p3_00_internal_usage_protocol_is_frozen() -> None:
+    """冻结容器内网预占、终态、指纹和幂等冲突语义。"""
+    internal = _read_yaml(OPENAPI_ROOT / "internal-control-plane.yaml")
+    assert internal["x-petdock-network-scope"] == "container-internal-only"
+    assert set(internal["paths"]) == {
+        "/internal/v1/usage/reservations",
+        "/internal/v1/usage/reservations/{requestId}/settle",
+        "/internal/v1/usage/reservations/{requestId}/release",
+        "/internal/v1/usage/reservations/{requestId}/fail",
+    }
+    assert internal["security"] == [{"serviceBearer": []}]
+    reserve_operation = internal["paths"]["/internal/v1/usage/reservations"]["post"]
+    assert "已有任一终态" in reserve_operation["description"]
+    reserve = internal["components"]["schemas"]["UsageReservationRequest"]
+    assert reserve["properties"]["capability"]["const"] == "chat"
+    assert reserve["properties"]["logicalModel"]["const"] == "chat-standard"
+    assert reserve["properties"]["requestFingerprint"]["pattern"] == "^[a-f0-9]{64}$"
+    terminal = internal["components"]["schemas"]["UsageTerminalResponse"]
+    assert set(terminal["properties"]["status"]["enum"]) == {"settled", "released", "failed"}
+    assert "任何差异" in terminal["description"]
+    release = internal["components"]["schemas"]["UsageReleaseRequest"]
+    failure = internal["components"]["schemas"]["UsageFailureRequest"]
+    assert "provider_not_called" in release["properties"]["reason"]["enum"]
+    assert "provider_usage_unknown" in failure["properties"]["reason"]["enum"]
+
+    reservation = _read_json(EXAMPLE_ROOT / "usage-reservation-request.json")
+    assert len(reservation["requestFingerprint"]) == 64
+    assert reservation["estimatedInputUnits"] >= 0
+    assert reservation["maxOutputUnits"] > 0
+    result = _read_json(EXAMPLE_ROOT / "usage-reservation-response.json")
+    assert result["status"] == "reserved"
+    assert result["replayed"] is False
+
+
+def test_p3_00_sse_usage_and_web_summary_are_frozen() -> None:
+    """冻结 SSE 顺序说明、Usage Event 字段和 Web 真实摘要。"""
+    stream_schema = _read_json(SCHEMA_ROOT / "chat-stream-event.schema.json")
+    rules = stream_schema["x-petdock-stream-rules"]
+    assert "严格递增" in rules["sequence"]
+    assert "只能有一个" in rules["terminal"]
+    assert "终止事件之前" in rules["usage"]
+    stream_events = [
+        _read_json(EXAMPLE_ROOT / name)
+        for name in (
+            "chat-stream-event.json",
+            "chat-stream-tool-call.json",
+            "chat-stream-usage.json",
+            "chat-stream-completed.json",
+            "chat-stream-error.json",
+        )
+    ]
+    assert [event["type"] for event in stream_events] == ["delta", "tool_call", "usage", "completed", "error"]
+    successful_stream = stream_events[:4]
+    assert [event["sequence"] for event in successful_stream] == [1, 2, 3, 4]
+    assert len({event["traceId"] for event in successful_stream}) == 1
+    assert len({event["requestId"] for event in successful_stream}) == 1
+    assert successful_stream[-1]["type"] == "completed"
+    assert stream_events[-1]["sequence"] == 1
+    assert stream_events[-1]["type"] == "error"
+
+    usage_schema = _read_json(SCHEMA_ROOT / "usage-event.schema.json")
+    assert {"requestFingerprint", "reservedInputUnits", "reservedOutputUnits", "reason"} <= set(usage_schema["required"])
+    usage = _read_json(EXAMPLE_ROOT / "usage-event.json")
+    assert usage["status"] == "settled"
+    assert usage["reason"] is None
+    assert usage["reservedInputUnits"] >= usage["inputUnits"]
+
+    web = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    operation = web["paths"]["/api/v1/web/usage/summary"]["get"]
+    assert operation["operationId"] == "getWebUsageSummary"
+    assert operation["security"] == [{"webSession": []}]
+    summary = web["components"]["schemas"]["WebUsageSummary"]
+    assert summary["properties"]["chat"]["properties"]["unit"]["const"] == "tokens"
+    example = _read_json(EXAMPLE_ROOT / "web-usage-summary.json")
+    assert example["chat"]["used"] >= 0
+    assert example["chat"]["remaining"] >= 0
+
+
+def test_p3_00_decisions_and_error_codes_are_frozen() -> None:
+    """确保 Phase 3 决策和稳定错误码不会在实现前漂移。"""
+    register = (CONTRACT_ROOT / "DECISION_REGISTER.md").read_text(encoding="utf-8")
+    for number in range(1, 7):
+        assert f"`D-P3-{number:02d}`" in register
+    assert "RFC 8785" in register
+    assert "不存在 -> reserved -> settled|released|failed" in register
+    assert "不得暴露到公网 Nginx" in register
+
+    catalog = _read_json(CONTRACT_ROOT / "error-codes" / "error-codes.json")
+    codes = {item["code"] for item in catalog["errors"]}
+    assert {
+        "idempotency_conflict",
+        "usage_reservation_not_found",
+        "usage_state_conflict",
+        "usage_service_unavailable",
+        "stream_protocol_error",
+    } <= codes

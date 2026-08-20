@@ -1,7 +1,7 @@
 # PetDock Managed Service Phase 3 Chat MVP 开发方案
 
 - 最后更新：2026-08-20
-- 状态：`Decision Frozen`（实现尚未开始）
+- 状态：`In Progress`（`P3-00` 已完成，业务实现尚未开始）
 - 适用仓库：`petdock-cloud`、`desktop-pet`、`petdock-web`
 - 权威契约：`petdock-cloud/contracts/managed-service/v1`
 - 前置条件：Phase 0、Phase 1、Phase 2 均为 `Done`
@@ -142,6 +142,8 @@ FastAPI
 8. 契约版本仍为 v1；只增加可选响应字段和新接口，不改变已发布字段语义。
 
 `P3-00` 完成标准：Cloud 契约测试、Spring 固定样例测试、Desktop 契约测试和逐文件 SHA-256 比对全部通过，三仓生成类型一致。
+
+完成结果：Managed Service v1 权威源提交为 `18c68c3c97479716a535fd9bcb1a293d1e26dedd`，Cloud 与 Desktop 53 个受控文件逐一一致；Python、TypeScript、Spring/Jackson、Desktop 契约测试和 Web OpenAPI 类型生成均已通过。`P3-01` 至 `P3-16` 尚未实现。
 
 ## 6. 配额与 Usage 状态机
 

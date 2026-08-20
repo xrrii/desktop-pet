@@ -4,7 +4,7 @@
   "title": "UsageEvent",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "usageEventId", "traceId", "requestId", "attemptId", "sessionId", "capability", "status", "inputUnits", "outputUnits", "occurredAt"],
+  "required": ["version", "usageEventId", "traceId", "requestId", "attemptId", "sessionId", "capability", "logicalModel", "requestFingerprint", "status", "reservedInputUnits", "reservedOutputUnits", "inputUnits", "outputUnits", "reason", "occurredAt"],
   "properties": {
     "version": { "const": 1 },
     "usageEventId": { "type": "string", "format": "uuid" },
@@ -13,10 +13,40 @@
     "attemptId": { "type": "string", "format": "uuid" },
     "sessionId": { "type": "string", "format": "uuid" },
     "capability": { "enum": ["chat", "embedding", "vision", "rerank", "web_search"] },
-    "logicalModel": { "type": ["string", "null"], "maxLength": 64 },
+    "logicalModel": { "const": "chat-standard" },
+    "requestFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "status": { "enum": ["reserved", "settled", "released", "failed"] },
+    "reservedInputUnits": { "type": "integer", "minimum": 0 },
+    "reservedOutputUnits": { "type": "integer", "minimum": 1 },
     "inputUnits": { "type": "integer", "minimum": 0 },
     "outputUnits": { "type": "integer", "minimum": 0 },
+    "reason": { "enum": [null, "request_rejected", "provider_not_called", "cancelled_before_provider", "provider_usage_unknown", "provider_interrupted", "settlement_unavailable"] },
     "occurredAt": { "type": "string", "format": "date-time" }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["reserved", "settled"] } } },
+      "then": { "properties": { "reason": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "released" } } },
+      "then": {
+        "properties": {
+          "reason": { "enum": ["request_rejected", "provider_not_called", "cancelled_before_provider"] },
+          "inputUnits": { "const": 0 },
+          "outputUnits": { "const": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed" } } },
+      "then": {
+        "properties": {
+          "reason": { "enum": ["provider_usage_unknown", "provider_interrupted", "settlement_unavailable"] },
+          "inputUnits": { "const": 0 },
+          "outputUnits": { "const": 0 }
+        }
+      }
+    }
+  ]
 }

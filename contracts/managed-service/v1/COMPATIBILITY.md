@@ -47,3 +47,10 @@
 - 校正后 `EntitlementSnapshot` 明确区分未开通、套餐订阅和按量计费，`UsageSummary` 明确返回计费模式；套餐或余额数值不得用于推断 Provider 成本。
 - 本次校正必须整体同步全部消费快照和 Web 生成类型，并在 P2-W03 实现前完成。它不是已发布 v1 可以原地破坏字段的先例。
 - P2-W03 实现并发布后，本节涉及的必填字段、可空性、枚举和语义继续受第 1、2、4 节约束；后续破坏性调整必须使用新 URL 主版本和新契约目录。
+
+## 7. Phase 3 首次实现前契约闭合
+
+- Phase 3 为 `FeatureFlagSnapshot` 增加可选 `managed_chat_enabled`。旧客户端可以忽略，新客户端在字段缺失或无效时按关闭处理，因此不改变 `managed_login_enabled` 的既有语义。
+- `POST /ai/v1/chat/completions` 在首次实现前收紧为 `chat-standard`、结构化消息和工具定义；Phase 4 草案操作通过 `x-petdock-availability: phase-4` 保留，但不属于 Phase 3 公网路由。
+- `/api/v1/web/usage/summary` 与 `internal-control-plane.yaml` 是新增接口，不改变既有 Web Session、桌面 OAuth 或公开控制面字段；内部接口不得进入公网入口。
+- Usage Event 在首次生产写入前增加请求指纹、原始预占值和终态原因，用于证明幂等与保守结算；后续已落库后不得再以 v1 兼容方式删除这些字段或改变状态语义。

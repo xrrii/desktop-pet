@@ -14,21 +14,46 @@ describe('ManagedFeatureFlags', () => {
       new Response(JSON.stringify({
         version: 1,
         managed_login_enabled: true,
+        managed_chat_enabled: true,
         minimum_client_version: '0.2.0'
       }), { status: 200 })
     )
 
     await expect(flags.refresh()).resolves.toMatchObject({
       managedLoginEnabled: true,
+      managedChatEnabled: true,
       minimumClientVersion: '0.2.0',
       errorCode: null
     })
+  })
+
+  it('Chat 开关缺失或类型错误时只关闭 Chat', async () => {
+    for (const managedChatValue of [undefined, 'true']) {
+      const payload: Record<string, unknown> = {
+        version: 1,
+        managed_login_enabled: true,
+        minimum_client_version: '0.2.0'
+      }
+      if (managedChatValue !== undefined) {
+        payload.managed_chat_enabled = managedChatValue
+      }
+      const flags = new ManagedFeatureFlags(policy, '0.2.0', async () =>
+        new Response(JSON.stringify(payload), { status: 200 })
+      )
+
+      await expect(flags.refresh()).resolves.toMatchObject({
+        managedLoginEnabled: true,
+        managedChatEnabled: false,
+        errorCode: null
+      })
+    }
   })
 
   it('服务不可用、字段错误和最低版本不满足都安全关闭', async () => {
     const unavailable = new ManagedFeatureFlags(policy, '0.2.0', async () => new Response('', { status: 503 }))
     await expect(unavailable.refresh()).resolves.toMatchObject({
       managedLoginEnabled: false,
+      managedChatEnabled: false,
       errorCode: 'feature_unavailable'
     })
 

@@ -224,6 +224,32 @@ paths:
                 $ref: './control-plane.yaml#/components/schemas/EntitlementSnapshot'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+  /api/v1/web/usage/summary:
+    get:
+      tags: [Web Usage]
+      summary: 获取当前免费 Beta 周期的真实 Chat 用量摘要
+      description: 只读取 PostgreSQL 已提交的 Usage 事实；未开通时返回稳定错误，不使用全零数据伪装。
+      operationId: getWebUsageSummary
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 当前 Chat 用量摘要
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebUsageSummary'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CapabilityNotEntitled'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/web/devices:
     get:
       tags: [Web Device]
@@ -401,6 +427,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
+    CapabilityNotEntitled:
+      description: 当前服务方案未授权 Chat
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: 用量事实源暂时不可用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
     WebSessionSnapshot:
       type: object
@@ -532,6 +570,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WebDevice'
+    WebUsageSummary:
+      type: object
+      additionalProperties: false
+      required: [version, periodStart, periodEnd, chat]
+      properties:
+        version:
+          type: integer
+          const: 1
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        chat:
+          type: object
+          additionalProperties: false
+          required: [used, remaining, unit]
+          properties:
+            used:
+              type: integer
+              format: int64
+              minimum: 0
+            remaining:
+              type: integer
+              format: int64
+              minimum: 0
+            unit:
+              type: string
+              const: tokens
     Username:
       type: string
       minLength: 3

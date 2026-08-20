@@ -269,3 +269,58 @@
 - Entitlement 继续决定能力是否可用，计费模式只决定授权用量如何结算。按量用户仍必须具有服务端授权，不能因为没有套餐而绕过 Capability、版本、设备或 Runtime Token 校验。
 - 当前免费 Beta 只产生套餐模式快照；按量模式先冻结协议，不在 P2-W03 开放选择、充值或扣费。正式启用前必须完成 Phase 5 的价格展示、用户确认、支付/结算和账单能力。
 - P2-W03 只为充值、订单和用量保留稳定页面路由及准确未开放状态，不新增虚构余额、订单或 Usage 数据。真实 Usage API 属于 Phase 3，正式支付和交易闭环属于 Phase 5。
+
+## 6. Phase 3 Managed Chat MVP 决定
+
+### `D-P3-01` Chat 调用拓扑与开放范围
+
+状态：`Frozen`
+
+- Phase 3 只开放 `chat-standard`，Desktop Python Runtime 使用 Main 注入的短期 Runtime Token 直接调用 FastAPI 数据面；Spring Boot 不代理 SSE，也不进入流式 Token 热路径。
+- Agent、Memory、RAG、附件、Skill 和工具执行继续位于用户设备；数据面只转发模型可见工具 Schema 并返回结构化 ToolCall，不执行任何工具。
+- `ai-data-plane.yaml` 中 Embedding、Vision、Rerank 和 Web Search 仅保留为 Phase 4 草案。Phase 3 公网 Nginx 只允许 Chat、Capabilities 和 Health 三个精确操作，其他路径保持 `404`。
+- Web 只调用 Spring Boot Web API，不持有 Runtime Token、不消费 Chat SSE，也不调用 FastAPI 数据面。
+
+### `D-P3-02` Managed Chat 独立开关
+
+状态：`Frozen`
+
+- `GET /api/v1/features` 增加可选 `managed_chat_enabled`；`managed_login_enabled=true` 不代表 Chat 可用。
+- 旧客户端忽略新增字段；新客户端遇到字段缺失、类型错误、请求失败或版本不兼容时一律按 `managed_chat_enabled=false` 处理。
+- 首次部署默认关闭。关闭 Chat 只阻止新的 Managed Chat 请求，不清除登录状态、本地会话或 BYOK 配置，也不自动切换或消耗用户 BYOK Key。
+
+### `D-P3-03` 链路标识、请求指纹与重试
+
+状态：`Frozen`
+
+- `trace_id` 标识一次本地用户任务，`request_id` 标识一次逻辑模型调用，`attempt_id` 标识一次 HTTP/Provider 尝试，`usage_event_id` 标识一条追加写 Usage Event。
+- 数据面对完整 Chat 请求体执行 RFC 8785 JSON Canonicalization Scheme，再计算 SHA-256 小写十六进制摘要作为 `requestFingerprint`；只保存摘要，不保存用于计算摘要的正文。
+- 同一 Runtime Session、同一 `request_id` 和同一请求指纹仅在现有状态仍为 `reserved` 时返回原预占并标记重放；若已进入任一终态则返回 `usage_state_conflict`。任一身份、Session、逻辑模型或指纹不一致时返回 `idempotency_conflict`；两种冲突都不得调用 Provider。
+- 仅流前 `token_expired` 允许保留 `request_id`、更换 `attempt_id` 后重试一次。已输出 `delta` 或 `tool_call` 后禁止静默重放；其他 Provider、限流、超时或断流错误在 Phase 3 不自动重试。
+
+### `D-P3-04` Beta 配额预占与终态
+
+状态：`Frozen`
+
+- FastAPI 完成请求、Runtime Token 和撤销校验后，必须在调用 Provider 前通过容器内网内部接口请求 Spring Boot 原子预占；内部接口使用独立服务身份且不得暴露到公网 Nginx。
+- 状态只允许 `不存在 -> reserved -> settled|released|failed`。`settled` 使用可靠实际用量，`released` 仅用于能够证明 Provider 未被调用，`failed` 表示 Provider 已调用但实际用量未知。
+- `settled`、`released`、`failed` 是互斥终态；只有 `attempt_id`、实际用量或原因均与既有终态一致时才幂等成功，任何字段不同或提交其他终态都返回 `usage_state_conflict` 并产生脱敏告警。
+- Beta 阶段 `failed` 保守保留原预占额度；自动补偿、超时回收、正式金额账本和人工修复流程属于 Phase 5。
+
+### `D-P3-05` Chat SSE 顺序与终止语义
+
+状态：`Frozen`
+
+- 流前失败使用 HTTP `ErrorEnvelope`；HTTP 200 建流后所有业务结果只通过 `chat-stream-event.schema.json` 返回。
+- `sequence` 从 1 开始严格递增且不允许跳号；每个事件的 `traceId`、`requestId` 必须与请求 Header 一致；`usage` 最多一次且只能位于终止事件之前。
+- 每条流必须且只能以一个 `completed` 或 `error` 结束，终止后不得再发送事件。客户端断开必须取消上游任务，并根据 Provider 是否被调用及用量是否可靠进入正确用量终态。
+- `completed.finishReason` 只允许 `stop`、`tool_calls`、`cancelled`；未知关键事件、身份不一致、序号异常、重复终止或终止后事件均映射为 `stream_protocol_error` 并失败关闭。
+
+### `D-P3-06` Usage Summary 与数据边界
+
+状态：`Frozen`
+
+- Spring Boot/PostgreSQL 是 Entitlement、配额、Usage Event 和摘要的事实源；预占及 `reserved` 事件同事务写入，终态及对应事件同事务写入，摘要只读取已提交事实。
+- Desktop 继续使用 `/api/v1/usage/summary`；Web 使用 `/api/v1/web/usage/summary` 和既有 HttpOnly Session，只展示当前周期、Chat 已用、剩余及 `tokens` 单位。未开通时返回稳定错误，不展示全零假数据。
+- Prompt、回答、工具参数、工具结果、附件正文、知识片段、完整请求体和完整上游响应不得进入数据库、Usage Event、默认日志或测试快照。
+- `requestFingerprint` 只保存在受控预占事实中，不进入常规日志、指标标签或客户端响应。日志允许记录链路 ID、逻辑能力、配置别名、耗时、Token 数、用量终态和稳定错误码；禁止记录认证凭据、用户正文、真实 Provider 凭据和内部模型配置值。

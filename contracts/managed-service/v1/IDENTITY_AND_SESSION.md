@@ -91,7 +91,7 @@ X-PetDock-Client-Version: 0.2.0
 X-PetDock-Request-Id: <uuid>
 ```
 
-响应字段由 `control-plane.yaml` 的 `FeatureFlagSnapshot` 定义：`version` 固定为 `1`，`managed_login_enabled` 控制官方登录入口，`minimum_client_version` 控制最低受支持版本。服务不可用、字段缺失和版本不兼容时，桌面端本地按 `managed_login_enabled=false` 处理。该端点不返回用户信息或 Token。
+响应字段由 `control-plane.yaml` 的 `FeatureFlagSnapshot` 定义：`version` 固定为 `1`，`managed_login_enabled` 控制官方登录入口，可选 `managed_chat_enabled` 独立控制 Phase 3 Chat，`minimum_client_version` 控制最低受支持版本。服务不可用、字段缺失和版本不兼容时，桌面端对相应开关按 `false` 处理；登录开启不表示 Chat 自动开启。该端点不返回用户信息或 Token。
 
 ## 6. 端点覆盖与环境
 

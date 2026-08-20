@@ -7,8 +7,12 @@
   "sessionId": "039f8b64-dc93-4b7f-a94d-cf88400f2615",
   "capability": "chat",
   "logicalModel": "chat-standard",
+  "requestFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "status": "settled",
+  "reservedInputUnits": 800,
+  "reservedOutputUnits": 1200,
   "inputUnits": 420,
   "outputUnits": 180,
+  "reason": null,
   "occurredAt": "2026-08-13T07:40:00Z"
 }

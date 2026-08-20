@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "traceId": "739fe818-1111-4d9a-98dd-2fe6d85e6228",
+  "requestId": "0ebd27cf-2222-48c3-a2e1-7ff59e20c2d5",
+  "attemptId": "c6111bbd-3333-4f50-962e-7ddb865d8b19",
+  "sessionId": "3d747f50-0e49-43dc-90fa-63df2df3b2b0",
+  "userId": "2c4e8c5a-4444-46f5-bf3d-b65e7e8cc0d1",
+  "deviceId": "a79068c5-5555-4c90-8f8e-92eeac47b0f0",
+  "capability": "chat",
+  "logicalModel": "chat-standard",
+  "requestFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "estimatedInputUnits": 800,
+  "maxOutputUnits": 1200
+}

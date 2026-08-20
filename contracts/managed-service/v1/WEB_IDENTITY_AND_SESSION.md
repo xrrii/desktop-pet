@@ -129,6 +129,13 @@ DELETE /api/v1/web/devices
 - 单设备撤销和全部设备撤销联动失效设备相关的 OAuth Access/Refresh Token、Token Family、Runtime Session 和撤销缓存事实；当前 Web Session 保持有效。
 - 全部撤销作用于服务端在事务中选出的全部活动设备，不受当前页面分页限制；空集合时幂等返回 `204`。
 
+### 7.4 Phase 3 Web 用量摘要
+
+- `GET /api/v1/web/usage/summary` 使用既有官网 Web Session 和 `X-PetDock-Request-Id`，只读 GET 不要求 CSRF Header；响应必须使用 `Cache-Control: no-store`。
+- 响应只包含版本、当前周期起止时间以及 Chat 的已用、剩余和 `tokens` 单位，不返回 Provider、内部模型、价格、成本、请求明细或用户正文。
+- 摘要只读取 PostgreSQL 已提交的 Usage 事实。没有有效 Beta Entitlement 时返回 `capability_not_entitled`，事实源不可用时返回稳定服务错误，不以全零数据伪装成功。
+- Web 仍不得调用 FastAPI 数据面、内部配额接口或桌面 Bearer API，也不得持有 Runtime Token。
+
 ## 8. OAuth 浏览器交互与后续工作项
 
 - 桌面 OAuth Issuer、Authorization Endpoint、Token Endpoint、PKCE 和 loopback 规则保持 `IDENTITY_AND_SESSION.md` 与 `DESKTOP_OAUTH.md` 不变。
@@ -138,7 +145,7 @@ DELETE /api/v1/web/devices
 - OAuth 页面固定为 `/oauth/login`、`/oauth/register` 和 `/oauth/consent`。登录或注册成功后只能访问 `GET /oauth/resume`，由服务端 SavedRequest 恢复已校验的本机 `/oauth2/authorize`；不得接受任意 `returnTo` 或完整外部 URL。
 - Desktop 显式重新登录使用标准 `prompt=login`，账号主机清理当前 Host-only Session 后重新显示登录页；登录成功后 `/oauth/resume` 消费该一次性提示再恢复授权请求。官网 `petdock.site` 的普通退出不替代该账号切换流程，也不撤销 Desktop Token。
 - Consent 只确认固定 `PetDock Desktop` Client 和本次请求的已登记权限，不展示具体设备。当前官方权限整体同意或整体拒绝；首次授权或权限扩大时展示，相同用户、Client 和权限集合的重复授权可以复用持久化 Consent。
-- 密码找回、邮箱验证、MFA、账号删除、按量模式启用、充值、订单、Usage API 和支付回调仍不属于当前实现；P2-W03 设备与只读服务快照以第 7 节为准。
+- 密码找回、邮箱验证、MFA、账号删除、按量模式启用、充值、订单和支付回调仍不属于当前实现；Phase 3 只冻结真实 Usage Summary 契约，服务端与页面实现须在后续工作项完成。
 - Desktop `P2-11` 在 P2-W01~W04 完成后实施，使用系统浏览器打开官网管理入口，不共享 Cookie 或桌面 Token。
 
 ## 9. 兼容与回滚

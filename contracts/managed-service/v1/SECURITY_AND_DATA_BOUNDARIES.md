@@ -40,6 +40,7 @@ Managed Web Search 第一版不接收网页正文读取 URL，也不提供 `/ai/
 
 默认禁止记录：
 
+- `requestFingerprint`；该摘要只允许保存在受控预占事实中，不进入日志、指标标签或客户端响应
 - 密钥、Cookie、Authorization Header 和任何 Token
 - Prompt、回答、附件、知识库片段、图片和搜索词正文
 - 本地真实路径、完整 URL 查询参数和工具正文

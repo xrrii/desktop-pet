@@ -34,9 +34,41 @@ class ManagedServiceExamplesTest {
         JsonNode usage = read("usage-event.json");
         assertEquals("settled", usage.path("status").asText());
         assertEquals(600, usage.path("inputUnits").asInt() + usage.path("outputUnits").asInt());
+        assertEquals(64, usage.path("requestFingerprint").asText().length());
+        assertTrue(usage.path("reason").isNull());
         JsonNode stream = read("chat-stream-event.json");
         assertEquals("delta", stream.path("type").asText());
         assertEquals(1, stream.path("sequence").asInt());
+        List<JsonNode> streamExamples = List.of(
+                read("chat-stream-event.json"),
+                read("chat-stream-tool-call.json"),
+                read("chat-stream-usage.json"),
+                read("chat-stream-completed.json"),
+                read("chat-stream-error.json"));
+        assertEquals(List.of("delta", "tool_call", "usage", "completed", "error"), streamExamples.stream().map(item -> item.path("type").asText()).toList());
+        assertEquals(List.of(1, 2, 3, 4), streamExamples.subList(0, 4).stream().map(item -> item.path("sequence").asInt()).toList());
+        assertEquals(1, streamExamples.subList(0, 4).stream().map(item -> item.path("traceId").asText()).distinct().count());
+        assertEquals(1, streamExamples.subList(0, 4).stream().map(item -> item.path("requestId").asText()).distinct().count());
+        assertEquals(30, read("chat-stream-error.json").path("retryAfterSeconds").asInt());
+        JsonNode featureFlags = read("feature-flags.json");
+        assertTrue(featureFlags.path("managed_login_enabled").asBoolean());
+        assertFalse(featureFlags.path("managed_chat_enabled").asBoolean());
+        JsonNode chatRequest = read("chat-request.json");
+        assertEquals("chat-standard", chatRequest.path("logicalModel").asText());
+        assertTrue(chatRequest.path("stream").asBoolean());
+        assertEquals("read_text_file", chatRequest.path("tools").path(0).path("function").path("name").asText());
+        JsonNode reservation = read("usage-reservation-request.json");
+        assertEquals("chat", reservation.path("capability").asText());
+        assertEquals(64, reservation.path("requestFingerprint").asText().length());
+        JsonNode reservationResult = read("usage-reservation-response.json");
+        assertEquals("reserved", reservationResult.path("status").asText());
+        assertFalse(reservationResult.path("replayed").asBoolean());
+        JsonNode settlement = read("usage-settlement-request.json");
+        assertEquals(600, settlement.path("inputUnits").asInt() + settlement.path("outputUnits").asInt());
+        assertEquals("settled", read("usage-terminal-response.json").path("status").asText());
+        JsonNode webUsage = read("web-usage-summary.json");
+        assertEquals("tokens", webUsage.path("chat").path("unit").asText());
+        assertEquals(100000, webUsage.path("chat").path("used").asInt() + webUsage.path("chat").path("remaining").asInt());
         JsonNode anonymousWebSession = read("web-session-anonymous.json");
         assertEquals(1, anonymousWebSession.path("version").asInt());
         assertFalse(anonymousWebSession.path("authenticated").asBoolean());
@@ -69,7 +101,18 @@ class ManagedServiceExamplesTest {
                 "web-session-authenticated.json",
                 "entitlement-inactive.json",
                 "entitlement-subscription.json",
-                "entitlement-pay-as-you-go.json")) {
+                "entitlement-pay-as-you-go.json",
+                "feature-flags.json",
+                "chat-request.json",
+                "chat-stream-tool-call.json",
+                "chat-stream-usage.json",
+                "chat-stream-completed.json",
+                "chat-stream-error.json",
+                "usage-reservation-request.json",
+                "usage-reservation-response.json",
+                "usage-settlement-request.json",
+                "usage-terminal-response.json",
+                "web-usage-summary.json")) {
             JsonNode value = read(name);
             assertTrue(value.isObject() && value.size() > 0);
             assertEquals(value, mapper.readTree(mapper.writeValueAsBytes(value)));

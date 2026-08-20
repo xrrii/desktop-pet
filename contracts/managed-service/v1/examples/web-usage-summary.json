@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "periodStart": "2026-08-01T00:00:00Z",
+  "periodEnd": "2026-09-01T00:00:00Z",
+  "chat": {
+    "used": 600,
+    "remaining": 99400,
+    "unit": "tokens"
+  }
+}

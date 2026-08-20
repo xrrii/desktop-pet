@@ -1,0 +1,8 @@
+{
+  "eventVersion": 1,
+  "type": "completed",
+  "sequence": 4,
+  "traceId": "dcecb768-9ff5-4ca4-a10b-6a725695ab5b",
+  "requestId": "54ca903e-23da-42bb-a69b-125f3669962b",
+  "finishReason": "tool_calls"
+}

@@ -1,0 +1,27 @@
+{
+  "logicalModel": "chat-standard",
+  "messages": [
+    {
+      "role": "user",
+      "content": "请读取当前目录中的说明文件。"
+    }
+  ],
+  "stream": true,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "read_text_file",
+        "description": "读取用户授权范围内的文本文件。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

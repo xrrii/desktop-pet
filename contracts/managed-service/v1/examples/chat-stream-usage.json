@@ -1,0 +1,9 @@
+{
+  "eventVersion": 1,
+  "type": "usage",
+  "sequence": 3,
+  "traceId": "dcecb768-9ff5-4ca4-a10b-6a725695ab5b",
+  "requestId": "54ca903e-23da-42bb-a69b-125f3669962b",
+  "inputUnits": 420,
+  "outputUnits": 180
+}

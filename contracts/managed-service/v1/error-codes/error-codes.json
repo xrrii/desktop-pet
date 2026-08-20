@@ -23,9 +23,14 @@
     { "code": "provider_invalid_response", "httpStatus": 502, "retryable": false, "message": "模型服务返回了无效响应。" },
     { "code": "request_cancelled", "httpStatus": 409, "retryable": false, "message": "请求已取消。" },
     { "code": "request_too_large", "httpStatus": 413, "retryable": false, "message": "请求内容超过限制。" },
+    { "code": "idempotency_conflict", "httpStatus": 409, "retryable": false, "message": "请求标识与原请求不一致。" },
+    { "code": "usage_reservation_not_found", "httpStatus": 404, "retryable": false, "message": "未找到对应的用量预占。" },
+    { "code": "usage_state_conflict", "httpStatus": 409, "retryable": false, "message": "用量请求已进入其他终态。" },
+    { "code": "usage_service_unavailable", "httpStatus": 503, "retryable": true, "message": "用量服务暂时不可用。" },
     { "code": "csrf_invalid", "httpStatus": 403, "retryable": false, "message": "安全校验已失效，请刷新页面后重试。" },
     { "code": "unsupported_client_version", "httpStatus": 426, "retryable": false, "message": "当前 PetDock 版本不再受支持。" },
     { "code": "authentication_expired_during_stream", "httpStatus": null, "retryable": false, "message": "回复期间登录凭据过期，请重新发送。" },
+    { "code": "stream_protocol_error", "httpStatus": null, "retryable": false, "message": "官方服务返回了无效的流式响应。" },
     { "code": "internal_error", "httpStatus": 500, "retryable": false, "message": "官方服务发生内部错误。" }
   ]
 }

@@ -291,6 +291,9 @@ components:
       properties:
         version: { type: integer, const: 1 }
         managed_login_enabled: { type: boolean }
+        managed_chat_enabled:
+          type: boolean
+          description: Phase 3 Managed Chat 独立开关；字段缺失、类型错误或请求失败时客户端必须按 false 处理。
         minimum_client_version: { type: string, pattern: '^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$' }
     RuntimeSessionRequest:
       type: object

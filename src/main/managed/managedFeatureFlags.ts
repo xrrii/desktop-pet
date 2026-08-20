@@ -4,6 +4,7 @@ import type { ManagedEndpointPolicy } from './managedOAuthTypes'
 
 export interface ManagedFeatureSnapshot {
   readonly managedLoginEnabled: boolean
+  readonly managedChatEnabled: boolean
   readonly minimumClientVersion: string | null
   readonly errorCode: ManagedAuthErrorCode | null
 }
@@ -14,6 +15,7 @@ export interface ManagedFeatureSnapshot {
 export class ManagedFeatureFlags {
   private snapshot: ManagedFeatureSnapshot = {
     managedLoginEnabled: false,
+    managedChatEnabled: false,
     minimumClientVersion: null,
     errorCode: null
   }
@@ -45,6 +47,7 @@ export class ManagedFeatureFlags {
       if (!response.ok) {
         return this.update({
           managedLoginEnabled: false,
+          managedChatEnabled: false,
           minimumClientVersion: null,
           errorCode: response.status === 426 ? 'unsupported_client' : 'feature_unavailable'
         })
@@ -53,6 +56,7 @@ export class ManagedFeatureFlags {
       if (!isFeaturePayload(payload)) {
         return this.update({
           managedLoginEnabled: false,
+          managedChatEnabled: false,
           minimumClientVersion: null,
           errorCode: 'feature_unavailable'
         })
@@ -60,18 +64,21 @@ export class ManagedFeatureFlags {
       if (!isVersionAtLeast(this.clientVersion, payload.minimum_client_version)) {
         return this.update({
           managedLoginEnabled: false,
+          managedChatEnabled: false,
           minimumClientVersion: payload.minimum_client_version,
           errorCode: 'unsupported_client'
         })
       }
       return this.update({
         managedLoginEnabled: payload.managed_login_enabled,
+        managedChatEnabled: payload.managed_chat_enabled === true,
         minimumClientVersion: payload.minimum_client_version,
         errorCode: payload.managed_login_enabled ? null : 'managed_login_disabled'
       })
     } catch {
       return this.update({
         managedLoginEnabled: false,
+        managedChatEnabled: false,
         minimumClientVersion: null,
         errorCode: 'feature_unavailable'
       })
@@ -89,6 +96,7 @@ export class ManagedFeatureFlags {
 function isFeaturePayload(value: unknown): value is {
   version: 1
   managed_login_enabled: boolean
+  managed_chat_enabled?: unknown
   minimum_client_version: string
 } {
   if (!value || typeof value !== 'object') {

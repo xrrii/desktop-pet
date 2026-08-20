@@ -4,6 +4,10 @@ info:
   version: 1.0.0
   description: 本地 Runtime 使用短期 Runtime Token 调用的官方 AI 能力接口。
 x-petdock-contract-version: 1
+x-petdock-phase3-public-operations:
+  - POST /ai/v1/chat/completions
+  - GET /ai/v1/capabilities
+  - GET /ai/v1/health
 servers:
   - url: https://ai.petdock.site
     description: PetDock FastAPI AI 数据面规划入口，启用前必须完成域名和证书配置
@@ -14,7 +18,31 @@ paths:
     post:
       operationId: createChatCompletion
       summary: 创建流式 Chat 调用
+      description: Phase 3 唯一模型调用入口；逻辑模型固定为 chat-standard，Agent 与工具执行继续位于本地 Runtime。
       tags: [Chat]
+      x-petdock-availability: phase-3
+      x-petdock-request-body-max-bytes: 1048576
+      x-petdock-tool-definition-max-bytes: 65536
+      x-petdock-request-fingerprint: 对完整请求体执行 RFC 8785 JSON Canonicalization Scheme 后计算 SHA-256，小写十六进制编码。
+      x-petdock-pre-stream-error-codes:
+        - invalid_request
+        - token_expired
+        - device_revoked
+        - capability_disabled
+        - capability_not_entitled
+        - idempotency_conflict
+        - quota_exhausted
+        - rate_limited
+        - request_too_large
+        - provider_unavailable
+        - internal_error
+      x-petdock-stream-error-codes:
+        - authentication_expired_during_stream
+        - provider_timeout
+        - provider_invalid_response
+        - provider_unavailable
+        - request_cancelled
+        - internal_error
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/RequestId'
@@ -40,6 +68,11 @@ paths:
               schema: { type: string }
               x-event-schema:
                 $ref: '../schemas/chat-stream-event.schema.json'
+              x-stream-rules:
+                sequence: 从 1 开始严格递增，不允许重复或跳号。
+                identity: 每个事件的 traceId 和 requestId 必须与请求 Header 一致。
+                terminal: 每条流必须且只能以 completed 或 error 结束，终止后不得再发送事件。
+                replay: 已发送 delta 或 tool_call 后禁止静默重放。
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
@@ -53,6 +86,7 @@ paths:
       operationId: createEmbeddings
       summary: 创建批量 Embedding
       tags: [Embedding]
+      x-petdock-availability: phase-4
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/RequestId'
@@ -83,6 +117,7 @@ paths:
       operationId: analyzeImage
       summary: 分析用户明确加入会话的图片
       tags: [Vision]
+      x-petdock-availability: phase-4
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/RequestId'
@@ -113,6 +148,7 @@ paths:
       operationId: rerankCandidates
       summary: 对本地混合召回候选进行受限重排
       tags: [Rerank]
+      x-petdock-availability: phase-4
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/RequestId'
@@ -143,6 +179,7 @@ paths:
       operationId: searchWeb
       summary: 返回搜索候选，不抓取候选网页正文
       tags: [WebSearch]
+      x-petdock-availability: phase-4
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/RequestId'
@@ -172,6 +209,7 @@ paths:
       operationId: getDataPlaneCapabilities
       summary: 获取数据面实时能力状态
       tags: [System]
+      x-petdock-availability: phase-3
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/RequestId'
@@ -204,6 +242,7 @@ paths:
       operationId: getDataPlaneHealth
       summary: 返回不含敏感信息的就绪状态
       tags: [System]
+      x-petdock-availability: phase-3
       security: []
       responses:
         '200':
@@ -258,23 +297,106 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
-    Message:
+    TextMessage:
       type: object
       additionalProperties: false
       required: [role, content]
       properties:
-        role: { type: string, enum: [system, user, assistant, tool] }
+        role: { type: string, enum: [system, user, assistant] }
+        content: { type: string, minLength: 1, maxLength: 200000 }
+    AssistantToolCallMessage:
+      type: object
+      additionalProperties: false
+      required: [role, content, toolCalls]
+      properties:
+        role: { type: string, const: assistant }
+        content: { type: [string, 'null'], maxLength: 200000 }
+        toolCalls:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: { $ref: '#/components/schemas/ToolCall' }
+    ToolResultMessage:
+      type: object
+      additionalProperties: false
+      required: [role, toolCallId, content]
+      properties:
+        role: { type: string, const: tool }
+        toolCallId: { type: string, minLength: 1, maxLength: 100 }
         content: { type: string, maxLength: 200000 }
-        toolCallId: { type: [string, 'null'], maxLength: 100 }
+    ChatMessage:
+      oneOf:
+        - $ref: '#/components/schemas/TextMessage'
+        - $ref: '#/components/schemas/AssistantToolCallMessage'
+        - $ref: '#/components/schemas/ToolResultMessage'
+    ToolCall:
+      type: object
+      additionalProperties: false
+      required: [id, name, arguments]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        name: { type: string, pattern: '^[A-Za-z0-9_-]{1,100}$' }
+        arguments: { type: object, maxProperties: 64 }
+    ToolDefinition:
+      type: object
+      additionalProperties: false
+      required: [type, function]
+      properties:
+        type: { type: string, const: function }
+        function:
+          type: object
+          additionalProperties: false
+          required: [name, parameters]
+          properties:
+            name: { type: string, pattern: '^[A-Za-z0-9_-]{1,100}$' }
+            description: { type: string, maxLength: 2000 }
+            parameters:
+              $ref: '#/components/schemas/ToolParametersSchema'
+    ToolParametersSchema:
+      type: object
+      additionalProperties: false
+      required: [type, properties, additionalProperties]
+      properties:
+        type: { type: string, const: object }
+        properties:
+          type: object
+          maxProperties: 64
+          additionalProperties:
+            $ref: '#/components/schemas/ToolParameterProperty'
+        required:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 100 }
+        additionalProperties: { type: boolean, const: false }
+    ToolParameterProperty:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: { type: string, enum: [string, integer, number, boolean] }
+        description: { type: string, maxLength: 1000 }
+        enum:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items: { type: [string, number, boolean] }
+        minimum: { type: number }
+        maximum: { type: number }
+        minLength: { type: integer, minimum: 0 }
+        maxLength: { type: integer, minimum: 0 }
+        pattern: { type: string, maxLength: 500 }
+        default: {}
     ChatRequest:
       type: object
       additionalProperties: false
       required: [logicalModel, messages, stream]
       properties:
-        logicalModel: { type: string, minLength: 1, maxLength: 64 }
-        messages: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/Message' } }
+        logicalModel: { type: string, const: chat-standard }
+        messages: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/ChatMessage' } }
         stream: { type: boolean, const: true }
-        tools: { type: array, maxItems: 50, items: { type: object } }
+        tools: { type: array, maxItems: 32, items: { $ref: '#/components/schemas/ToolDefinition' } }
     EmbeddingRequest:
       type: object
       additionalProperties: false

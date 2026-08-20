@@ -2,6 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.petdock.invalid/managed-service/v1/chat-stream-event.schema.json",
   "title": "ManagedChatStreamEvent",
+  "x-petdock-stream-rules": {
+    "sequence": "同一流从 1 开始严格递增，不允许重复或跳号",
+    "identity": "所有事件的 traceId 和 requestId 必须与请求 Header 一致",
+    "terminal": "每条流必须且只能有一个 completed 或 error 终止事件，终止后不得继续发送",
+    "usage": "usage 最多出现一次且只能位于终止事件之前",
+    "replay": "发送 delta 或 tool_call 后禁止静默重放"
+  },
   "oneOf": [
     { "$ref": "#/$defs/delta" },
     { "$ref": "#/$defs/toolCall" },
@@ -34,7 +41,7 @@
             "sequence": { "type": "integer", "minimum": 1 },
             "traceId": { "type": "string", "format": "uuid" },
             "requestId": { "type": "string", "format": "uuid" },
-            "text": { "type": "string", "minLength": 1 }
+            "text": { "type": "string", "minLength": 1, "maxLength": 200000 }
           }
         }
       ]
@@ -54,7 +61,7 @@
             "requestId": { "type": "string", "format": "uuid" },
             "toolCallId": { "type": "string", "minLength": 1, "maxLength": 100 },
             "name": { "type": "string", "minLength": 1, "maxLength": 100 },
-            "arguments": { "type": "object" }
+            "arguments": { "type": "object", "maxProperties": 64 }
           }
         }
       ]
@@ -102,7 +109,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventVersion", "type", "sequence", "traceId", "requestId", "code", "message", "retryable"],
+          "required": ["eventVersion", "type", "sequence", "traceId", "requestId", "code", "message", "retryable", "retryAfterSeconds"],
           "properties": {
             "eventVersion": { "const": 1 },
             "type": { "const": "error" },
@@ -111,7 +118,8 @@
             "requestId": { "type": "string", "format": "uuid" },
             "code": { "type": "string", "minLength": 1, "maxLength": 100 },
             "message": { "type": "string", "minLength": 1, "maxLength": 300 },
-            "retryable": { "type": "boolean" }
+            "retryable": { "type": "boolean" },
+            "retryAfterSeconds": { "type": ["integer", "null"], "minimum": 0 }
           }
         }
       ]

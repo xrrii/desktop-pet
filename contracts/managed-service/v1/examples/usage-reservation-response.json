@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "reservationId": "ca40ce69-6666-4ef2-9480-0a454928f069",
+  "requestId": "0ebd27cf-2222-48c3-a2e1-7ff59e20c2d5",
+  "status": "reserved",
+  "replayed": false,
+  "reservedInputUnits": 800,
+  "reservedOutputUnits": 1200
+}
