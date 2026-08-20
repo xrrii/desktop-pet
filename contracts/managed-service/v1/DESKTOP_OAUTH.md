@@ -54,11 +54,12 @@ state=<high-entropy-random>
 - Issuer 固定为 `https://account.petdock.site`，桌面 Public Client ID 固定为 `petdock-desktop`。
 - 桌面 Refresh Token 的绝对有效期为 30 天，每次使用都必须轮换。
 - 已轮换 Refresh Token 再次出现时，撤销当前设备对应的整个 Token Family。
-- `petdock.site` 已完成购买；DNS 解析和证书签发完成前，不开放公网登录流量。
+- `petdock.site` 的购买、ICP 备案、正式 DNS 和 TLS 条件已于 2026-08-19 具备；入口网关和来源 IP 白名单线上门禁通过前，不开放普通用户登录流量。
 
 ## 6. 系统浏览器交互
 
 - 正式 OAuth 交互页面只从 `https://account.petdock.site` 同源加载，入口固定为 `/oauth/login`、`/oauth/register`、`/oauth/consent` 和稳定错误页。
+- Desktop 用户显式点击登录时附带标准 `prompt=login`；账号主机必须清理当前账号主机 Session 后进入登录页，确保用户可以切换账号。应用启动时的本地 Refresh Token 恢复不使用该参数。
 - 未登录的 Authorization Request 由服务端 HttpSession RequestCache 保存。登录或注册成功后，前端只能访问 `GET /oauth/resume`；该端点只恢复服务端保存且已校验为本机 `/oauth2/authorize` 的请求，并返回 `302`，不得接收任意 `returnTo`、完整 Authorization URL 或外部跳转地址。
 - 账号主机只允许反向代理 `GET /api/v1/web/session`、`POST /api/v1/web/auth/login` 和 `POST /api/v1/web/auth/register` 三个账号接口，用于建立独立账号主机 Session；不得把整个官网 Web API 暴露为无约束别名。
 - OAuth 页面不得在 Storage、日志、分析系统、错误正文或页面快照中保存授权码、Token、密码、Cookie、`state`、PKCE 参数或完整 redirect URI。
@@ -74,5 +75,5 @@ state=<high-entropy-random>
 ## 8. 开发与发布门禁
 
 - 本地或 shared-dev 完成门禁必须使用两个独立测试主机名和受信 HTTPS 证书，分别模拟 `api` 与 `account` 的 Host-only Cookie；同一 `127.0.0.1` 主机的不同端口不能证明 Cookie 隔离。
-- ICP 备案未完成时可以进行本地、shared-dev、Testcontainers 和分离测试主机 HTTPS 联调；正式域名公网登录仍须等待备案、DNS、TLS 和入口网关配置全部就绪。
+- 日常开发继续使用本地、shared-dev、Testcontainers 和分离测试主机 HTTPS；正式域名只用于发布候选门禁，必须先完成入口网关、生产数据隔离、系统浏览器和打包版 Desktop 的来源 IP 白名单验收。
 - P2-W02 只有在真实 Spring Authorization Server、分离 Host Session、系统浏览器和 Desktop loopback/PKCE 跨端联调通过后才能标记为完成；Mock 测试不能替代该门禁。

@@ -65,6 +65,7 @@ describe('ManagedOidcClient', () => {
         'http://127.0.0.1:49152/oauth/callback'
       )
       expect(prepared.authorizationUrl.searchParams.get('code_challenge_method')).toBe('S256')
+      expect(prepared.authorizationUrl.searchParams.get('prompt')).toBe('login')
       expect(prepared.authorizationUrl.searchParams.get('state')).toBe(prepared.state)
       expect(prepared.authorizationUrl.searchParams.get('scope')).toBe('openid profile email desktop.session')
 

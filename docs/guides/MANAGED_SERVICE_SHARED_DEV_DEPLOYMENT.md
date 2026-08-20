@@ -19,7 +19,7 @@
 | 数据库迁移 | Flyway | 随 `petdock-cloud` 固定 |
 | 身份框架 | Spring Authorization Server | 随 `petdock-cloud` 固定 |
 | 容器编排 | Docker Compose Plugin | 当前稳定版 |
-| 入口网关 | Nginx | 业务服务和备案条件就绪后部署 |
+| 入口网关 | Nginx | shared-dev 不开放公网；正式部署遵循 Cloud 生产与线上联调指南 |
 
 当前不部署 Kafka、RabbitMQ、Elasticsearch、MinIO 或 PgBouncer。
 

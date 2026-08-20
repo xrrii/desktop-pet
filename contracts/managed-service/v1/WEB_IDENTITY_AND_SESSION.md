@@ -136,6 +136,7 @@ DELETE /api/v1/web/devices
 - `account.petdock.site` 复用同一用户目录、账号应用服务、Spring Session 机制和 Redis，但建立独立 Host-only `__Host-petdock_web_session`；它不共享 `api.petdock.site` 的同名 Cookie，不设置父域 `Domain`，退出任一 Session 不隐式清除另一个 Session 或桌面 Token。
 - 账号主机只开放 `GET /api/v1/web/session`、`POST /api/v1/web/auth/login` 和 `POST /api/v1/web/auth/register` 三个最小接口别名。现有 `web-control-plane.yaml` 仍描述官网 API 服务，不因这些受限入口增加新的 Consent API。
 - OAuth 页面固定为 `/oauth/login`、`/oauth/register` 和 `/oauth/consent`。登录或注册成功后只能访问 `GET /oauth/resume`，由服务端 SavedRequest 恢复已校验的本机 `/oauth2/authorize`；不得接受任意 `returnTo` 或完整外部 URL。
+- Desktop 显式重新登录使用标准 `prompt=login`，账号主机清理当前 Host-only Session 后重新显示登录页；官网 `petdock.site` 的普通退出不替代该账号切换流程，也不撤销 Desktop Token。
 - Consent 只确认固定 `PetDock Desktop` Client 和本次请求的已登记权限，不展示具体设备。当前官方权限整体同意或整体拒绝；首次授权或权限扩大时展示，相同用户、Client 和权限集合的重复授权可以复用持久化 Consent。
 - 密码找回、邮箱验证、MFA、账号删除、按量模式启用、充值、订单、Usage API 和支付回调仍不属于当前实现；P2-W03 设备与只读服务快照以第 7 节为准。
 - Desktop `P2-11` 在 P2-W01~W04 完成后实施，使用系统浏览器打开官网管理入口，不共享 Cookie 或桌面 Token。

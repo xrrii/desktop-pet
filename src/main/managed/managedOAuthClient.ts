@@ -43,6 +43,8 @@ export class ManagedOidcClient implements ManagedOAuthClient {
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: SCOPE,
+      // 显式点击登录表示用户可能要切换账号，要求账号主机重新认证。
+      prompt: 'login',
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
       state

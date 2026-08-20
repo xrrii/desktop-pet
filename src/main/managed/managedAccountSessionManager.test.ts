@@ -62,6 +62,73 @@ describe('ManagedAccountSessionManager', () => {
     )
   })
 
+  it('注册阶段 device_revoked 时清除旧映射并使用新 UUID 重试一次', async () => {
+    const dependencies = createDependencies()
+    dependencies.controlPlane.getCurrentDevice.mockRejectedValue(
+      new ManagedControlPlaneError(404, 'device_not_found', false)
+    )
+    dependencies.identity.getOrCreate
+      .mockResolvedValueOnce('a01715d2-42e3-4abe-a348-708dda38ab0d')
+      .mockResolvedValueOnce('b12726e3-53f4-4bff-b459-819eeb49bc1e')
+    dependencies.controlPlane.registerDevice
+      .mockRejectedValueOnce(new ManagedControlPlaneError(401, 'device_revoked', false))
+      .mockResolvedValueOnce({ ...devicePayload(), id: 'b12726e3-53f4-4bff-b459-819eeb49bc1e' })
+    const manager = createManager(dependencies)
+
+    const result = await manager.synchronize('synthetic-access-token')
+
+    expect(result.device.id).toBe('b12726e3-53f4-4bff-b459-819eeb49bc1e')
+    expect(dependencies.identity.clear).toHaveBeenCalledWith('opaque-subject')
+    expect(dependencies.controlPlane.registerDevice).toHaveBeenNthCalledWith(
+      1,
+      'synthetic-access-token',
+      expect.objectContaining({ deviceId: 'a01715d2-42e3-4abe-a348-708dda38ab0d' })
+    )
+    expect(dependencies.controlPlane.registerDevice).toHaveBeenNthCalledWith(
+      2,
+      'synthetic-access-token',
+      expect.objectContaining({ deviceId: 'b12726e3-53f4-4bff-b459-819eeb49bc1e' })
+    )
+    expect(dependencies.identity.clear).toHaveBeenCalledOnce()
+  })
+
+  it('换新 UUID 后仍返回 device_revoked 时停止重试并传播错误', async () => {
+    const dependencies = createDependencies()
+    dependencies.controlPlane.getCurrentDevice.mockRejectedValue(
+      new ManagedControlPlaneError(404, 'device_not_found', false)
+    )
+    dependencies.identity.getOrCreate
+      .mockResolvedValueOnce('a01715d2-42e3-4abe-a348-708dda38ab0d')
+      .mockResolvedValueOnce('b12726e3-53f4-4bff-b459-819eeb49bc1e')
+    dependencies.controlPlane.registerDevice.mockRejectedValue(
+      new ManagedControlPlaneError(401, 'device_revoked', false)
+    )
+    const manager = createManager(dependencies)
+
+    await expect(manager.synchronize('synthetic-access-token')).rejects.toMatchObject({
+      code: 'device_revoked'
+    })
+    expect(dependencies.controlPlane.registerDevice).toHaveBeenCalledTimes(2)
+    expect(dependencies.identity.clear).toHaveBeenCalledOnce()
+  })
+
+  it('注册阶段 device_conflict 不清除映射也不重试', async () => {
+    const dependencies = createDependencies()
+    dependencies.controlPlane.getCurrentDevice.mockRejectedValue(
+      new ManagedControlPlaneError(404, 'device_not_found', false)
+    )
+    dependencies.controlPlane.registerDevice.mockRejectedValue(
+      new ManagedControlPlaneError(409, 'device_conflict', false)
+    )
+    const manager = createManager(dependencies)
+
+    await expect(manager.synchronize('synthetic-access-token')).rejects.toMatchObject({
+      code: 'device_conflict'
+    })
+    expect(dependencies.controlPlane.registerDevice).toHaveBeenCalledOnce()
+    expect(dependencies.identity.clear).not.toHaveBeenCalled()
+  })
+
   it('device_conflict 不触发自动转移或二次注册', async () => {
     const dependencies = createDependencies()
     dependencies.controlPlane.getCurrentDevice.mockRejectedValue(

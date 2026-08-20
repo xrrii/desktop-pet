@@ -11,10 +11,11 @@
 1. 阅读本文档，确认当前阶段、下一工作项和阻塞项。
 2. 阅读 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md`，以其中冻结的架构、安全和阶段要求为准。
 3. 进入 Phase 2 时阅读 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`，确认开发环境、身份、设备和 Token 细节。
-4. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
-5. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
-6. 执行 `git status --short`，区分已有用户改动和本次改动。
-7. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
+4. 正式部署或线上联调时阅读 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md`。
+5. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
+6. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
+7. 执行 `git status --short`，区分已有用户改动和本次改动。
+8. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
 
 文档优先级：
 
@@ -51,19 +52,19 @@ Phase 2 详细开发方案
 
 ```text
 总体状态：In Progress
-当前阶段：Phase 2 P2-W03 Contract Frozen，Cloud/Web 业务实现尚未开始
+当前阶段：Phase 2 P2-W03 Done，准备进入 P2-W04
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调）
-独立官网前端：`petdock-web` P2-W01、P2-W02 Done；P2-W03 Contract Frozen，P2-W04 尚未开始（独立仓库）
-Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
+独立官网前端：`petdock-web` P2-W01、P2-W02、P2-W03 Done；P2-W04 尚未开始（独立仓库）
+Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Not Started（不在当前仓库）
-云端基础设施：服务器与域名已就绪，ICP 备案审核中，正式公网流量未开放
+云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，生产隔离部署与受限线上门禁尚未完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：备案审核阻塞正式公网登录联调，不阻塞本地 Mock、共享开发环境和受控云端基础工程
-下一建议工作项：完成 P2-W03 业务 UI 规范后，按已冻结契约并行实现 Cloud/Web；Usage 和支付/按量结算能力未实现前不得臆造前端闭环
+当前阻塞：P2-W04 本地开发无阻塞；普通用户公网流量等待生产隔离部署和来源 IP 白名单线上门禁
+下一建议工作项：完成 P2-W04 调用边界与安全收口，并按权威指南执行正式域名、系统浏览器和打包版 Desktop 验收
 ```
 
-当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud` 已完成用户目录、设备、授权、Runtime Session、撤销、审计、签名密钥轮换、P2-W01 官网 Session/账号 API 和 P2-W02 标准 Consent，并冻结 P2-W03 服务方案/设备管理契约；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 映射。`petdock-web` 已完成 P2-W01、P2-W02 页面及真实 HTTPS 跨端联调；P2-W03 业务实现、Usage、支付/按量结算闭环和桌面真实公网登录继续延后。备案继续只阻塞正式公网联调。
+当前已完成方案冻结、BYOK 基线、权威契约迁移和 Phase 1 本地来源抽象。`petdock-cloud`、`petdock-web` 已完成 P2-W01 至 P2-W03；Desktop 已完成 P2-06 至 P2-10，并补齐标准 `access_denied` 和设备撤销后更换本地 UUID 的恢复逻辑。Usage、支付/按量结算闭环和 FastAPI AI 数据面继续延后。备案、正式 DNS 和 TLS 条件已具备，下一门禁是生产隔离部署和来源 IP 白名单下的真实域名/打包版验收。
 
 ## 4. 产品与仓库边界
 
@@ -119,7 +120,7 @@ FastAPI AI 数据面：Not Started（不在当前仓库）
 | `P0-03` OpenAPI、错误码与兼容规则 | `Done` | 云端权威源、桌面快照、Python/TypeScript/Spring 同样例测试、可追溯契约制品和 32 文件 SHA-256 比对均完成 | Phase 1 消费 v1 契约 |
 | `P0-04` BYOK 基线和端到端结果 | `Done` | 完整验证通过，见 `MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md` | Phase 1 后使用同一门槛回归 |
 | `P0-05` 数据、日志与保留策略 | `Done` | 中国大陆驻留、禁止跨境、正文不持久化及日志/用量保留期已冻结 | 实现时补自动化审计测试 |
-| `P0-06` 身份、域名和证书 | `Done` | 自建 OIDC、30 天轮换 Refresh Token、退出语义和已购买的 `petdock.site` 正式入口已冻结 | 公网灰度前完成 DNS 解析和证书签发 |
+| `P0-06` 身份、域名和证书 | `Done` | 自建 OIDC、30 天轮换 Refresh Token、退出语义及 `petdock.site` 备案、DNS、TLS 条件已就绪 | 按生产指南完成入口网关与受限线上门禁 |
 | `P0-07` 产品、仓库与部署职责 | `Done` | Desktop、Web、Cloud 已明确为独立仓库；Cloud 仓库名为 `petdock-cloud` | 建立远程仓库时登记 URL 和负责人 |
 | `P0-08` 链路标识和幂等 | `Done` | Header、SSE、Request Context 和 Usage Event Schema 及测试已完成 | 各端实现时消费同一契约 |
 | `P0-09` Token 刷新与任务恢复 | `Done` | 本地 OpenAPI、刷新事件、结果 Schema 和重试边界已完成 | Phase 2/3 按契约实现 |
@@ -133,7 +134,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | 阶段 | 状态 | 开始条件 | 首个桌面工作项 |
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
-| Phase 2 官网、身份、设备和会话 | `In Progress` | 服务器与域名已就绪；备案只阻塞正式公网联调 | `P2-02` 用户、设备、授权记录与持久化 |
+| Phase 2 官网、身份、设备和会话 | `In Progress` | 服务器、备案、DNS、TLS 已就绪；生产隔离部署与线上门禁待完成 | `P2-02` 用户、设备、授权记录与持久化 |
 | Phase 3 Managed Chat MVP | `Not Started` | Phase 1、2 完成 | `P3-10` `ManagedChatProvider` |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
@@ -143,7 +144,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 和 P2-W02，并通过真实 HTTPS 双 Session、标准 Consent、随机 loopback/PKCE、设备同步与撤销验收。P2-W03 已冻结未开通、订阅套餐和按量计费三态服务快照及 Web 设备管理接口；下一步完成业务 UI 规范后进入 Cloud/Web 实现，`P2-11` 仍排在 W01~W04 之后。备案继续只阻塞正式公网域名与打包版联调。
+Phase 2 云端用户、设备、授权、Runtime Session、撤销和安全审计基础已完成；桌面 P2-06 至 P2-10 已完成。`petdock-web` 与 Cloud 已完成 P2-W01 至 P2-W03，并通过真实 HTTPS、数据库/Redis 和设备撤销传播验收。下一步完成 P2-W04 调用边界与安全收口；正式部署按 Cloud 权威指南先完成生产隔离和来源 IP 白名单门禁，`P2-11` 仍排在 W01~W04 之后。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -169,7 +170,7 @@ npm.cmd run test:e2e:assistant:c5
 
 ## 10. 当前待确认事项
 
-服务器与 `petdock.site` 域名已经就绪，ICP 备案仍在审核中。备案完成前不开放普通用户公网登录流量，但允许在服务器内部部署共享开发数据库、中间件和服务，并通过 SSH 隧道或自建私网受控接入；数据库和中间件端口不得直接暴露公网。
+服务器、`petdock.site` ICP 备案、正式 DNS 和 TLS 条件已经就绪。普通用户公网登录流量仍须等待生产 PostgreSQL/Redis/JWT 密钥隔离、Nginx 精确路由和来源 IP 白名单线上门禁通过；日常开发继续使用本地 Mock 或 `shared-dev`，数据库和中间件端口不得直接暴露公网。
 
 Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose、Nginx 和 SSH 隧道开发接入。UserInfo/账号快照、Refresh Token 主动撤销、Feature Flag 下发、开发环境端点覆盖、设备显示名、服务端时间、P2-10 生命周期边界和官网 Web API/Web Session 契约已由 `petdock-cloud` 及 Desktop 消费快照冻结；官网契约位于独立 `web-control-plane.yaml`，不改变桌面 Bearer API。实际 Provider/模型安全配置和 Beta 免费额度仍属于后续上线配置前置条件。
 
@@ -372,3 +373,10 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - 服务快照区分 `inactive`、`subscription` 和 `pay_as_you_go`；用户显式选择订阅或按量且不自动切换，当前免费 Beta 只开放订阅模式。
 - 按量模式不关联套餐或套餐有效期，`plan=null`、`expiresAt=null`、`remaining=null` 只表示按实际用量结算；价格、开通、支付、结算和账单继续留给 Phase 5。
 - 三语言契约测试、41 文件制品校验、Desktop 快照比对和 Web 测试/生产构建通过；本次未修改 Desktop 业务代码，P2-W03 Cloud/Web 业务实现尚未开始。
+
+### 2026-08-19（备案完成与正式域名联调准备）
+
+- ICP 备案、正式 DNS 和 TLS 条件已具备，历史阶段当时的“等待备案”记录保持不变。
+- Cloud 新增 `docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md` 作为三仓正式部署、来源 IP 白名单线上联调、回滚和后续迭代的权威步骤。
+- 日常开发继续使用本地 Mock/Testcontainers 和 `shared-dev`；当前 `staging` 仍固定正式端点，不能作为独立公网预发布环境。
+- 普通用户流量仍未开放，待生产 PostgreSQL/Redis/JWT 密钥隔离、Nginx 精确路由及打包版 Desktop 门禁通过后再决定。

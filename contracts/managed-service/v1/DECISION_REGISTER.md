@@ -34,7 +34,7 @@
 
 状态：`Frozen`
 
-- 正式主域名为 `petdock.site`，已完成购买；DNS 解析和证书签发是公网灰度前置条件。
+- 正式主域名为 `petdock.site`；域名购买、ICP 备案、DNS 解析和覆盖正式主机的证书条件已于 2026-08-19 具备，普通用户流量仍须在入口网关和受限线上门禁通过后开放。
 - 官网入口使用 `https://petdock.site`。
 - OAuth Issuer 和账号入口使用 `https://account.petdock.site`。
 - Spring Boot 控制面使用 `https://api.petdock.site`。
@@ -110,7 +110,7 @@
 状态：`Frozen`
 
 - 当前预算只使用一台位于中国大陆的云服务器。
-- 官网前端、入口网关、Spring Boot 控制面、FastAPI AI 数据面、数据库、撤销存储和基础监控部署在同一主机，但保持独立进程或容器、独立配置和清晰端口边界。
+- 官网前端、入口网关、Spring Boot 控制面、FastAPI AI 数据面、数据库、撤销存储和基础监控部署在同一主机，但全部运行在独立 Docker 容器中，使用独立配置、健康检查和清晰端口边界；宿主机只运行 Docker Engine、Compose Plugin 和 SSH 管理服务。
 - 第一版不建设应用集群、数据库集群、跨可用区副本、冷备服务器、跨区域容灾或自动故障转移。
 - 明确接受单点故障：主机维护或故障时，官网和 Managed 能力可以同时不可用；本地 BYOK 必须保持可用。
 - Beta 不承诺高可用 SLA。服务必须具备健康检查、资源上限、磁盘容量告警、进程自动拉起和可控维护窗口。
@@ -197,7 +197,7 @@
 - Spring Boot 通过 Flyway 管理 Schema；PostgreSQL 是用户、设备、授权、Entitlement、Runtime Session、撤销和审计的事实来源，Redis 只保存 Session、限流和可重建撤销缓存。
 - `local-mock` 默认使用本机或测试容器，`shared-dev`、`staging`、`production` 使用独立数据库、Redis 命名空间、凭据、卷和备份目标，禁止跨环境复用数据。
 - 正式环境数据库 URL、用户名、密码、Redis URL、签名密钥和主机外加密备份目标只通过受控环境变量或密钥管理系统注入；仓库只提供无敏感值的 `.env.example`。
-- 备份目标必须位于中国大陆境内的主机外存储；备案完成前只进行内部/隧道验收，不开放普通用户公网登录流量。
+- 备份目标必须位于中国大陆境内的主机外存储；日常开发继续只使用本地或 `shared-dev`，正式域名先通过来源 IP 白名单完成线上验收，验收通过前不开放普通用户公网登录流量。
 
 ### `D-P2-09` 当前设备与 OAuth 授权绑定
 

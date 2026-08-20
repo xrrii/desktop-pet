@@ -3,8 +3,10 @@ import type {
   ManagedControlPlaneClient,
   ManagedControlPlaneDevice
 } from './managedControlPlaneClient'
+import { ManagedControlPlaneError } from './managedControlPlaneClient'
 import { ManagedDeviceIdentityManager, normalizeManagedDeviceDisplayName } from './managedDeviceIdentityManager'
 import type { ManagedOAuthClient, ManagedUserInfo } from './managedOAuthTypes'
+import { logInfo } from '../logger'
 
 /** Main 内账号会话同步结果，包含完整设备 ID 但不会直接传给 Renderer。 */
 export interface ManagedAccountSessionSnapshot {
@@ -36,12 +38,7 @@ export class ManagedAccountSessionManager {
       if (!isDeviceNotFound(error)) {
         throw error
       }
-      const deviceId = await this.deviceIdentityManager.getOrCreate(userInfo.sub)
-      device = await this.controlPlaneClient.registerDevice(accessToken, {
-        deviceId,
-        displayName: normalizeManagedDeviceDisplayName(this.deviceIdentityManager.getDefaultDisplayName()),
-        platform: 'windows'
-      })
+      device = await this.registerDeviceWithRecovery(accessToken, userInfo.sub)
       await this.deviceIdentityManager.remember(userInfo.sub, device.id)
     }
     if (device.status !== 'active' || !device.current) {
@@ -65,6 +62,28 @@ export class ManagedAccountSessionManager {
   /** 撤销 Main 当前已知设备，Renderer 不参与设备 ID 选择。 */
   revokeCurrentDevice(accessToken: string, deviceId: string): Promise<void> {
     return this.controlPlaneClient.revokeDevice(accessToken, deviceId)
+  }
+
+  /** 注册当前设备；旧 UUID 已撤销时只清理映射并换新 UUID 重试一次。 */
+  private async registerDeviceWithRecovery(accessToken: string, subject: string): Promise<ManagedControlPlaneDevice> {
+    const displayName = normalizeManagedDeviceDisplayName(this.deviceIdentityManager.getDefaultDisplayName())
+    const register = (deviceId: string): Promise<ManagedControlPlaneDevice> => this.controlPlaneClient.registerDevice(accessToken, {
+      deviceId,
+      displayName,
+      platform: 'windows'
+    })
+
+    const deviceId = await this.deviceIdentityManager.getOrCreate(subject)
+    try {
+      return await register(deviceId)
+    } catch (error) {
+      if (!(error instanceof ManagedControlPlaneError) || error.code !== 'device_revoked') {
+        throw error
+      }
+      await this.deviceIdentityManager.clear(subject)
+      logInfo('设备授权已撤销，正在生成新的本地设备标识并重试注册')
+      return register(await this.deviceIdentityManager.getOrCreate(subject))
+    }
   }
 }
 
