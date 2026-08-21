@@ -32,7 +32,7 @@ Phase 3 直接复用以下既有实现，不重新设计：
 - v1 已定义 `/ai/v1/chat/completions`、请求链路标识、Chat SSE 事件、Usage Event、错误码和 `/api/v1/usage/summary` 草案。
 - Web 已有稳定 `/account/usage` 路由，在真实 Usage Summary 接入前不展示假数字。
 
-当前缺口是：FastAPI 数据面尚未建立；数据面到控制面的内部配额协议尚未冻结；Managed Chat 独立 Feature Flag 尚未进入契约；桌面 Runtime 尚无 Managed Chat Provider；用量表、预占状态机和真实摘要尚未实现。
+当前实施状态：`P3-00`、Wave B 和 Wave C 已完成，权威契约、FastAPI 数据面、内部配额状态机、真实 Usage Summary、SSE、取消/超时、用量终态和脱敏指标均已落地。剩余主链路是 Wave D Desktop Runtime 消费、Wave E 产品入口，以及门禁 F 的受限真实 Provider 选型与线上 Beta 验收。
 
 ## 3. 范围边界
 
@@ -143,7 +143,7 @@ FastAPI
 
 `P3-00` 完成标准：Cloud 契约测试、Spring 固定样例测试、Desktop 契约测试和逐文件 SHA-256 比对全部通过，三仓生成类型一致。
 
-完成结果：Managed Service v1 权威源提交为 `18c68c3c97479716a535fd9bcb1a293d1e26dedd`，Cloud 与 Desktop 53 个受控文件逐一一致；Python、TypeScript、Spring/Jackson、Desktop 契约测试和 Web OpenAPI 类型生成均已通过。Wave B 已完成：FastAPI Runtime Token/JWKS/撤销失败关闭、Chat Entitlement、配额/Usage 事实、Desktop/Web 摘要和内部服务安全边界均已实现；共享开发 PostgreSQL 17 的 Flyway V3 到 V4 迁移、应用连接以及 Redis 健康与 Session 复用已通过 SSH 隧道实测，Testcontainers PostgreSQL 17/Redis 8 隔离集成测试也已实际运行，Cloud JDK 21 Maven 130 项全部通过。完整生产门禁继续按门禁 F 执行；Chat/SSE/Provider 与 Desktop/Web 客户端接入仍按 Wave C/D/E 实施。
+完成结果：Managed Service v1 权威源提交为 `18c68c3c97479716a535fd9bcb1a293d1e26dedd`，Cloud 与 Desktop 53 个受控文件逐一一致；Python、TypeScript、Spring/Jackson、Desktop 契约测试和 Web OpenAPI 类型生成均已通过。Wave B 已完成 Runtime Token、Chat Entitlement、配额/Usage 事实、Desktop/Web 摘要和内部服务安全边界；Wave C 已完成 Chat SSE、`chat-standard`、非生产确定性假 Provider、预占后调用、取消/三类超时/断流、唯一终止、幂等用量闭合、低基数指标和敏感内容回归。生产 Compose 已纳入受限 AI 容器和三个精确 Nginx 路由，但 Chat 与 Provider 默认关闭。完整生产门禁继续按门禁 F 执行；Desktop/Web 客户端接入按 Wave D/E 实施。
 
 ## 6. 配额与 Usage 状态机
 
@@ -191,16 +191,18 @@ reserved -> failed
 
 ### 7.1 工程边界
 
-在 `petdock-cloud/services/ai-gateway` 建立独立 FastAPI 服务，建议模块：
+`petdock-cloud/services/ai-gateway` 已建立独立 FastAPI 服务，当前模块边界为：
 
 ```text
 app/
-  api/             Chat、Capabilities、Health
+  main.py          Chat、Capabilities、Health 与统一 HTTP 边界
   auth/            JWT/JWKS、Claims、撤销检查
   control_plane/   内部预占与结算客户端
   providers/       单一 Chat Provider Adapter
   streaming/       SSE 编码、顺序和断连取消
-  errors/          稳定错误映射
+  errors.py        稳定错误映射
+  models.py        严格请求和内部用量模型
+  request_validation.py  原始 JSON 预算、重复键拒绝与 RFC 8785 指纹
   observability/   脱敏日志和指标
 ```
 
@@ -319,13 +321,15 @@ app/
 
 ### 波次 C：Cloud Chat 数据面
 
+状态：`Done`（2026-08-21）。
+
 1. `P3-02`：Chat SSE 接口。
 2. `P3-03`：`chat-standard` 和单一 Provider Adapter。
 3. `P3-04`：取消、首 Token、空闲、总超时和断流。
 4. `P3-05`：链路 ID、幂等 Usage 与稳定错误码。
 5. `P3-06`：日志最小化、指标和敏感内容回归测试。
 
-波次 B 与 C 可使用假 Provider 联调，但真实 Provider 调用必须等待预占事实源完成。
+Wave C 使用仓库内确定性假 Provider 完成非生产联调；生产环境强制禁止假 Provider，真实 Provider 和模型仍需受控选型。Provider 调用前的预占事实源已经完成并有自动测试覆盖。
 
 ### 波次 D：Desktop Runtime
 

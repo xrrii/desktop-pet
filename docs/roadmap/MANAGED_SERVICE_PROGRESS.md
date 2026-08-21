@@ -56,19 +56,19 @@ Phase 3 Managed Chat MVP 详细开发方案
 
 ```text
 总体状态：Phase 3 In Progress
-当前阶段：Phase 3 Managed Chat MVP（P3-00 Done）
+当前阶段：Phase 3 Managed Chat MVP（Wave C Done）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
-FastAPI AI 数据面：Not Started（不在当前仓库）
+FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Provider Adapter、取消/超时、用量闭合和脱敏指标已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：Windows 安装包尚未发布不影响本轮；Cloud 共享开发环境和 Docker 隔离依赖门禁均已通过
-下一建议工作项：Wave C FastAPI Chat 数据面；Desktop `P3-10` 等待 Chat/SSE 与假 Provider 可联调
+下一建议工作项：Wave D Desktop Runtime，从 `P3-10 ManagedChatProvider` 开始接入已冻结 Chat/SSE
 ```
 
-当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00` 契约闭合和 Wave B。Desktop 本轮无业务代码变更，Usage Summary 页面与 Runtime 客户端仍按 Wave E/D 顺序实施。
+当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00` 契约闭合、Wave B 和 Wave C。Desktop 本轮只对齐方案与进度文档，Usage Summary 页面与 Runtime 客户端仍按 Wave E/D 顺序实施。
 
 ## 4. 产品与仓库边界
 
@@ -139,7 +139,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
 | Phase 2 官网、身份、设备和会话 | `Done` | P2-11、P2-W01 至 W05 与正式 HTTPS 验收均已完成 | Phase 3 方案冻结 |
-| Phase 3 Managed Chat MVP | `In Progress` | `P3-00` 与 Wave B 已完成 | Wave C FastAPI Chat 数据面；Desktop `P3-10` 等待联调条件 |
+| Phase 3 Managed Chat MVP | `In Progress` | `P3-00`、Wave B 与 Wave C 已完成 | Wave D Desktop Runtime，从 `P3-10` 开始 |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
 | Phase 6 服务端 Agent | `Deferred` | Phase 5 后重新评审 | 不得提前复制本地 Agent |
@@ -148,7 +148,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-`P3-00` 与 Wave B 已完成：Cloud v1 权威源与 Desktop 快照保持 53 个受控文件一致；FastAPI 已具备 Runtime Token/JWKS/Redis 撤销失败关闭，控制面已具备独立 Chat 开关、Beta Entitlement/额度事实、Usage 状态机、Desktop/Web 摘要和内网服务认证。Desktop 本轮只完成依赖对齐，不提前实现 Managed Chat。
+`P3-00`、Wave B 与 Wave C 已完成：Cloud v1 权威源与 Desktop 快照保持 53 个受控文件一致；控制面具备独立 Chat 开关、Beta Entitlement/额度事实、Usage 状态机、Desktop/Web 摘要和内网服务认证；FastAPI 具备 Runtime Token/JWKS/Redis 撤销失败关闭、严格 Chat/SSE、预占后调用、取消/三类超时、用量终态和脱敏指标。下一步由 Desktop Wave D 消费这些冻结边界，不提前进入 Web 产品入口。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -214,6 +214,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-19 | Desktop/Cloud/Web P2-W03 契约工作区 | 服务方案三态、Web 设备管理、跨语言样例、快照与生成类型 | 通过 | Cloud 契约 Python 17 项、全量 pytest 18 项、TypeScript 1 项、Spring 1 项及 41 文件制品校验通过；Desktop 17 项契约测试和 SHA-256 比对通过；Web 类型生成、22 项测试和生产构建通过 |
 | 2026-08-20 | Desktop/Cloud/Web P2-W04 实现与收尾工作区 | 调用边界、精确路由、生产端点和安全链 | 通过（Docker 集成项条件通过） | Desktop Vitest 159、契约 17、Runtime 87、检索评估、类型检查、生产构建和依赖审计 0 漏洞；Web Vitest 35、Playwright E2E 10 通过/1 跳过、生产构建、Nginx 精确路由和依赖审计 0 漏洞；Cloud pytest 18、JDK 21 Maven 120 中 115 通过/5 跳过且无失败；Testcontainers PostgreSQL/Redis 因本机无可用 Docker 未运行；41 个契约文件一致 |
 | 2026-08-20 | Desktop/Cloud/Web P2-W05 首页与线上收尾 | 官方首页实现、浏览器视觉验收、生产发布与正式 HTTPS 复验 | 通过 | Web Vitest 37、Playwright E2E 12 通过/1 既有真实环境用例跳过、生产构建、Canvas 像素、截图和 390px/320px 无横向溢出通过；官网生产制品已上线，首页、账号/OAuth、Desktop 登录、Consent、Refresh、UserInfo、设备同步与撤销未发现异常；Windows 安装包仍待发布，官网入口保持禁用状态 |
+| 2026-08-21 | Phase 3 Wave C 三仓工作区 | Cloud Chat 数据面、AI 容器与公网精确路由、三仓回归 | 通过 | AI Gateway pytest 38 项、Ruff、mypy；Cloud 契约 pytest 22 项、JDK 21 Maven 130 项全部通过，Testcontainers PostgreSQL 17/Redis 8 实际运行，53 文件快照一致；Desktop 类型检查、Vitest 165 项、契约 21 项、Runtime 87 项、检索、构建和审计 0 漏洞；Web Vitest 37 项、Playwright 12 通过/1 跳过、构建、Nginx 检查和审计 0 漏洞。Compose 校验、AI 镜像构建及只读/非 root/Capability/健康/404 容器门禁通过 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -243,6 +244,13 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 不要在本进度文档中记录 API Key、Token、用户正文、附件内容、生产地址凭据或其他敏感数据。
 
 ## 13. 变更记录
+
+### 2026-08-21（Phase 3 Wave C Cloud Chat 数据面）
+
+- Cloud 完成 `P3-02` 至 `P3-06`：严格 Chat 请求、RFC 8785 指纹、`chat-standard`、非生产确定性假 Provider、版本化 SSE、取消/三类超时/断流、唯一终止和稳定错误映射。
+- Provider 调用前必须完成用量预占；可靠用量进入 `settled`，可证明未调用时进入 `released`，调用结果或用量未知时进入 `failed`。内部控制面调用不自动重试。
+- 生产 Compose 和 Nginx 已加入受限 AI 容器及 Chat、Capabilities、Health 三个精确路由；生产 Chat 和 Provider 默认关闭，仓库内假 Provider 在生产环境拒绝启动。
+- Desktop 本轮无业务代码变更；下一工作项进入 Wave D `P3-10 ManagedChatProvider`，Web Usage 页面仍按 Wave E 实施。
 
 ### 2026-08-21（Phase 3 Wave B Cloud 控制面收尾）
 
