@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-20
+最后更新时间：2026-08-21
 
 ## 1. 新会话快速开始
 
@@ -64,11 +64,11 @@ Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01�
 FastAPI AI 数据面：Not Started（不在当前仓库）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：无；Windows 安装包尚未发布，官网入口继续准确显示待发布状态，不阻塞 Cloud P3-01
-下一建议工作项：Cloud P3-01 FastAPI Runtime Token、JWKS、撤销和失败关闭；Desktop 等待进入 P3-10
+当前阻塞：Windows 安装包尚未发布不影响本轮；Cloud 共享开发环境和 Docker 隔离依赖门禁均已通过
+下一建议工作项：Wave C FastAPI Chat 数据面；Desktop `P3-10` 等待 Chat/SSE 与假 Provider 可联调
 ```
 
-当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项和 Phase 3 `P3-00` 契约闭合。Managed Chat 业务实现尚未开始；下一步由 Cloud 完成 `P3-01`，Desktop 在 Cloud 安全与数据面基础可联调后进入 `P3-10`。Usage 正式账本、支付/按量结算闭环和 Chat 以外的 Managed 能力继续延后到对应阶段。
+当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00` 契约闭合和 Wave B。Desktop 本轮无业务代码变更，Usage Summary 页面与 Runtime 客户端仍按 Wave E/D 顺序实施。
 
 ## 4. 产品与仓库边界
 
@@ -139,7 +139,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
 | Phase 2 官网、身份、设备和会话 | `Done` | P2-11、P2-W01 至 W05 与正式 HTTPS 验收均已完成 | Phase 3 方案冻结 |
-| Phase 3 Managed Chat MVP | `In Progress` | `P3-00` 已完成 | Cloud `P3-01`；Desktop `P3-10` 等待联调条件 |
+| Phase 3 Managed Chat MVP | `In Progress` | `P3-00` 与 Wave B 已完成 | Wave C FastAPI Chat 数据面；Desktop `P3-10` 等待联调条件 |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
 | Phase 6 服务端 Agent | `Deferred` | Phase 5 后重新评审 | 不得提前复制本地 Agent |
@@ -148,7 +148,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-`P3-00` 已完成：Cloud v1 权威源已闭合 Managed Chat 开关、内部配额协议、SSE 终止语义、Web Usage Summary、请求指纹和幂等冲突规则，Desktop 快照与 53 个受控文件一致。下一步先实施 Cloud `P3-01` Runtime Token/JWKS/撤销校验；Desktop `P3-10`、Web Usage 页面和真实 Provider 调用仍按方案依赖顺序等待。
+`P3-00` 与 Wave B 已完成：Cloud v1 权威源与 Desktop 快照保持 53 个受控文件一致；FastAPI 已具备 Runtime Token/JWKS/Redis 撤销失败关闭，控制面已具备独立 Chat 开关、Beta Entitlement/额度事实、Usage 状态机、Desktop/Web 摘要和内网服务认证。Desktop 本轮只完成依赖对齐，不提前实现 Managed Chat。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -243,6 +243,12 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 不要在本进度文档中记录 API Key、Token、用户正文、附件内容、生产地址凭据或其他敏感数据。
 
 ## 13. 变更记录
+
+### 2026-08-21（Phase 3 Wave B Cloud 控制面收尾）
+
+- Cloud 完成 `P3-01` FastAPI Runtime Token/JWKS/撤销失败关闭、`P3-07` Chat Entitlement、`P3-08` Usage 状态机和 `P3-09` Desktop/Web 摘要服务端实现。
+- Desktop 本轮没有新增客户端代码或契约字段，继续保持 `managed_chat_enabled` 缺失/错误时关闭的兼容策略；真实 Chat Provider、Runtime Adapter 和 Usage 页面按 Wave C/D/E 实施。
+- Cloud JDK 21 Maven 130 项全部通过，Testcontainers PostgreSQL 17/Redis 8 隔离集成测试已实际运行；Python 契约 22 项、AI Gateway P3-01 专项 10 项和 53 文件快照比对通过。共享开发 PostgreSQL 17 已通过 SSH 隧道完成 Flyway V3 到 V4 迁移、校验和应用连接，Redis 健康及 Session 创建、复用通过。
 
 ### 2026-08-13
 

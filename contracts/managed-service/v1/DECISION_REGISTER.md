@@ -10,7 +10,7 @@
 | `D-P0-02` | 桌面登录使用系统浏览器 Authorization Code + PKCE S256 + `127.0.0.1` 随机端口回调 | `Frozen` |
 | `D-P0-03` | 官网 Web Session、桌面 Refresh Token、官方 Runtime Token 和本地 Runtime Token 分属不同信任域 | `Frozen` |
 | `D-P0-04` | Runtime Token 使用 RS256、15 分钟 TTL、3 分钟提前刷新、60 秒最大时钟偏差 | `Frozen` |
-| `D-P0-05` | 撤销存储最多缓存 30 秒；不可用时 Managed 失败关闭 | `Frozen` |
+| `D-P0-05` | 数据面本地撤销查询最多缓存 30 秒；Redis 投影存活到事实过期；不可用时 Managed 失败关闭 | `Frozen` |
 | `D-P0-06` | Managed 不自动回退到 BYOK，第一版只允许用户手动切换 | `Frozen` |
 | `D-P0-07` | Managed Web Search 只返回候选，网页正文由 Electron Main 安全抓取 | `Frozen` |
 | `D-P0-08` | 云端初期只提供 AI 能力数据面，不复制本地 Agent | `Frozen` |
@@ -154,7 +154,7 @@
 
 - 身份服务提供 RFC 7009 `POST /oauth2/revoke`，请求字段为 `token` 和可选 `token_type_hint`，Public Client 额外提交 `client_id`；成功统一返回 HTTP 200 且不返回 Token 内容。
 - 官网单设备撤销、全部设备退出和设备删除最终调用同一撤销服务；撤销设备时同时撤销该设备的 Refresh Token Family、Access Token 关联会话和 Runtime Session。
-- 重复撤销必须幂等，不向客户端泄露 Token 是否曾经存在。Redis 只做不超过 30 秒的可重建缓存，PostgreSQL 记录最终事实。
+- 重复撤销必须幂等，不向客户端泄露 Token 是否曾经存在。Redis 是可重建投影，键存活到对应 PostgreSQL 撤销事实过期；数据面本地正向或负向查询缓存不超过 30 秒，PostgreSQL 记录最终事实。
 
 ### `D-P2-04` `managed_login_enabled` 下发
 

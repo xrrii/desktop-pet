@@ -143,7 +143,7 @@ FastAPI
 
 `P3-00` 完成标准：Cloud 契约测试、Spring 固定样例测试、Desktop 契约测试和逐文件 SHA-256 比对全部通过，三仓生成类型一致。
 
-完成结果：Managed Service v1 权威源提交为 `18c68c3c97479716a535fd9bcb1a293d1e26dedd`，Cloud 与 Desktop 53 个受控文件逐一一致；Python、TypeScript、Spring/Jackson、Desktop 契约测试和 Web OpenAPI 类型生成均已通过。`P3-01` 至 `P3-16` 尚未实现。
+完成结果：Managed Service v1 权威源提交为 `18c68c3c97479716a535fd9bcb1a293d1e26dedd`，Cloud 与 Desktop 53 个受控文件逐一一致；Python、TypeScript、Spring/Jackson、Desktop 契约测试和 Web OpenAPI 类型生成均已通过。Wave B 已完成：FastAPI Runtime Token/JWKS/撤销失败关闭、Chat Entitlement、配额/Usage 事实、Desktop/Web 摘要和内部服务安全边界均已实现；共享开发 PostgreSQL 17 的 Flyway V3 到 V4 迁移、应用连接以及 Redis 健康与 Session 复用已通过 SSH 隧道实测，Testcontainers PostgreSQL 17/Redis 8 隔离集成测试也已实际运行，Cloud JDK 21 Maven 130 项全部通过。完整生产门禁继续按门禁 F 执行；Chat/SSE/Provider 与 Desktop/Web 客户端接入仍按 Wave C/D/E 实施。
 
 ## 6. 配额与 Usage 状态机
 
