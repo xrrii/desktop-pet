@@ -80,7 +80,7 @@ def resolve_backend(source: ChatSource, has_chat_api_key: bool) -> Literal["mock
             raise ValueError("Chat 来源为 BYOK，但没有可用 API Key。")
         return "langchain"
     if source == "managed":
-        raise ValueError("Phase 1 尚未启用 Managed Chat 网络适配器。")
+        return "langchain"
     raise ValueError("当前 Chat 能力已关闭，Runtime 不应启动模型后端。")
 
 

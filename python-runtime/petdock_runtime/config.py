@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Literal
+from uuid import UUID, uuid4
 
 from .providers.selector import (
     ChatSource,
@@ -45,6 +46,9 @@ class RuntimeConfig:
     vision_model: str | None = None
     vision_source: Literal["inherited", "custom"] = "inherited"
     chat_source: ChatSource | None = None
+    managed_ai_base_url: str = "https://ai.petdock.site"
+    managed_client_version: str = "0.2.0"
+    managed_device_id: str = ""
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -57,6 +61,17 @@ class RuntimeConfig:
         api_key = os.environ.get("PETDOCK_LLM_API_KEY", "").strip() or None
         model = os.environ.get("PETDOCK_LLM_MODEL", "gpt-4o-mini").strip()
         base_url = os.environ.get("PETDOCK_LLM_BASE_URL", "").strip() or None
+        managed_ai_base_url = os.environ.get("PETDOCK_AI_BASE_URL", "https://ai.petdock.site").strip().rstrip("/")
+        managed_client_version = os.environ.get("PETDOCK_CLIENT_VERSION", "0.2.0").strip()
+        managed_device_id = os.environ.get("PETDOCK_MANAGED_DEVICE_ID", "").strip() or str(uuid4())
+        if not managed_ai_base_url.startswith(("http://", "https://")):
+            raise ValueError("PETDOCK_AI_BASE_URL 必须是 HTTP(S) 地址。")
+        if not managed_client_version or not managed_device_version(managed_client_version):
+            raise ValueError("PETDOCK_CLIENT_VERSION 格式无效。")
+        try:
+            UUID(managed_device_id)
+        except ValueError as error:
+            raise ValueError("PETDOCK_MANAGED_DEVICE_ID 必须是 UUID。") from error
         memory_db_path = os.environ.get("PETDOCK_MEMORY_DB_PATH", "").strip() or os.path.join(
             os.getcwd(), "assistant.db"
         )
@@ -159,4 +174,14 @@ class RuntimeConfig:
             vision_model=vision_model,
             vision_source="custom" if custom_vision else "inherited",
             chat_source=capabilities.chat,
+            managed_ai_base_url=managed_ai_base_url,
+            managed_client_version=managed_client_version,
+            managed_device_id=managed_device_id,
         )
+
+
+def managed_device_version(value: str) -> bool:
+    """校验数据面要求的客户端版本格式，不记录真实环境信息。"""
+    import re
+
+    return re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", value) is not None

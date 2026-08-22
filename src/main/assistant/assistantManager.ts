@@ -916,6 +916,7 @@ export class AssistantManager {
           PETDOCK_VISION_MODEL: ''
         }
     return {
+      PETDOCK_CLIENT_VERSION: app.getVersion(),
       ...modelEnvironment,
       ...embeddingEnvironment,
       ...visionEnvironment,

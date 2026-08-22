@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-21
+最后更新时间：2026-08-22
 
 ## 1. 新会话快速开始
 
@@ -56,19 +56,20 @@ Phase 3 Managed Chat MVP 详细开发方案
 
 ```text
 总体状态：Phase 3 In Progress
-当前阶段：Phase 3 Managed Chat MVP（Wave C Done）
+当前阶段：Phase 3 Managed Chat MVP（Wave D In Progress）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Provider Adapter、取消/超时、用量闭合和脱敏指标已完成）
+桌面 Runtime Managed 消费：Wave D In Progress（P3-10 至 P3-13 首轮适配器和回归测试已开始）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：Windows 安装包尚未发布不影响本轮；Cloud 共享开发环境和 Docker 隔离依赖门禁均已通过
-下一建议工作项：Wave D Desktop Runtime，从 `P3-10 ManagedChatProvider` 开始接入已冻结 Chat/SSE
+下一建议工作项：完成 Wave D Desktop Runtime 回归和真实受限联调，再进入 Wave E 产品入口
 ```
 
-当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00` 契约闭合、Wave B 和 Wave C。Desktop 本轮只对齐方案与进度文档，Usage Summary 页面与 Runtime 客户端仍按 Wave E/D 顺序实施。
+当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00` 契约闭合、Wave B 和 Wave C。Wave D 正在把 Cloud Chat SSE 接入现有 Desktop Agent/工具循环；Usage Summary 页面和产品入口仍按 Wave E 实施。
 
 ## 4. 产品与仓库边界
 
@@ -251,6 +252,14 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - Provider 调用前必须完成用量预占；可靠用量进入 `settled`，可证明未调用时进入 `released`，调用结果或用量未知时进入 `failed`。内部控制面调用不自动重试。
 - 生产 Compose 和 Nginx 已加入受限 AI 容器及 Chat、Capabilities、Health 三个精确路由；生产 Chat 和 Provider 默认关闭，仓库内假 Provider 在生产环境拒绝启动。
 - Desktop 本轮无业务代码变更；下一工作项进入 Wave D `P3-10 ManagedChatProvider`，Web Usage 页面仍按 Wave E 实施。
+
+### 2026-08-22（Phase 3 Wave D Desktop Runtime 首轮实现）
+
+- Desktop Python Runtime 新增 Managed Chat SSE 适配器：复用现有 Agent、Memory、RAG、附件、Skill 和本地工具循环，仅将模型调用转发到 Cloud `chat-standard` 数据面。
+- 已接入 `delta`、`tool_call`、`usage`、`completed`/`error` 严格顺序校验；请求链路使用 `traceId`、`requestId`、`attemptId`，不记录 Token、Prompt、回答或工具正文。
+- 流前 `token_expired` 只触发一次 Main-only `managed_auth_refresh_required`，保持原 `requestId`、更换 `attemptId` 后重试；已输出内容后不重放。取消通过关闭 HTTP SSE 流传播到 Cloud。
+- 已补充稳定错误映射、Managed 历史消息/工具 Schema 转换和 Runtime 资源关闭；BYOK 与 Mock 分支保持原行为，不自动回退或消耗 BYOK Key。
+- 本轮验证：Python Runtime 全量 93 项通过；新增 Managed Provider 专项 5 项通过，并覆盖 Managed 连接配置失败关闭。Wave D 仍需完成 Desktop 全套门禁、跨端真实受限联调和取消/撤销场景验收后才能标记 `Done`。
 
 ### 2026-08-21（Phase 3 Wave B Cloud 控制面收尾）
 

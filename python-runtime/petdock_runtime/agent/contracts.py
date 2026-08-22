@@ -58,6 +58,15 @@ class SkillLifecycleEvent:
     payload: dict[str, object]
 
 
+@dataclass(frozen=True)
+class ManagedAuthRefreshRequired:
+    """通知 Electron Main 在流前刷新一次官方 Runtime Token。"""
+
+    task_id: str
+    trace_id: str
+    request_id: str
+
+
 BackendOutput = (
     str
     | ToolCallRequest
@@ -66,6 +75,7 @@ BackendOutput = (
     | WebSourcesContext
     | ArtifactCreatedEvent
     | SkillLifecycleEvent
+    | ManagedAuthRefreshRequired
 )
 
 

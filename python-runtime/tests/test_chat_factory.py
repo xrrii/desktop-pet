@@ -61,15 +61,14 @@ def test_byok_factory_centralizes_agent_and_memory_model_creation(monkeypatch) -
 
 
 def test_mock_and_managed_sources_never_create_background_network_model() -> None:
-    """Mock 和 Phase 1 Managed 后台分析固定使用本地规则，避免隐式用量。"""
+    """Mock 和 Managed 后台分析固定使用本地规则，避免隐式用量。"""
     mock = ChatModelFactory("mock", api_key=None, base_url=None, model="unused")
     managed = ChatModelFactory("managed", api_key="must-not-use", base_url=None, model="unused")
 
     assert mock.backend_name == "mock"
     assert mock.create_text_model("memory") is None
     assert managed.create_text_model("memory") is None
-    with pytest.raises(ValueError, match="尚未启用 Managed Chat"):
-        _ = managed.backend_name
+    assert managed.backend_name == "langchain"
 
 
 def test_runtime_capability_selector_parses_effective_sources() -> None:
@@ -122,9 +121,8 @@ def test_runtime_capability_selector_keeps_legacy_auto_behavior() -> None:
 
 
 def test_runtime_capability_selector_rejects_managed_and_mismatched_embedding() -> None:
-    """Phase 1 对 Managed 和来源错配必须失败关闭，不能回退到 BYOK。"""
-    with pytest.raises(ValueError, match="Managed Chat"):
-        resolve_backend("managed", True)
+    """Wave D 对 Managed 使用独立网络适配器，来源错配仍必须失败关闭。"""
+    assert resolve_backend("managed", False) == "langchain"
     with pytest.raises(ValueError, match="不是 online"):
         validate_embedding_source("byok", "hash")
     with pytest.raises(ValueError, match="仍为 online"):
@@ -172,8 +170,8 @@ def test_runtime_config_uses_main_snapshot_and_disables_vision(monkeypatch) -> N
     assert config.vision_model is None
 
 
-def test_runtime_config_rejects_phase1_managed_chat(monkeypatch) -> None:
-    """Runtime 收到 Managed effectiveSource 时必须失败关闭，而不是使用 BYOK。"""
+def test_runtime_config_accepts_wave_d_managed_chat(monkeypatch) -> None:
+    """Runtime 收到 Managed effectiveSource 时保留独立 Cloud 消费来源。"""
     monkeypatch.setenv("PETDOCK_RUNTIME_TOKEN", "t" * 64)
     monkeypatch.setenv("PETDOCK_LLM_API_KEY", "host-process-key")
     monkeypatch.setenv(
@@ -189,5 +187,26 @@ def test_runtime_config_rejects_phase1_managed_chat(monkeypatch) -> None:
           }
         }""",
     )
-    with pytest.raises(ValueError, match="Managed Chat"):
+    config = RuntimeConfig.from_environment()
+    assert config.resolved_backend == "langchain"
+    assert config.chat_source == "managed"
+
+
+def test_runtime_config_rejects_invalid_managed_connection_settings(monkeypatch) -> None:
+    """Managed 数据面地址、版本和设备标识不合规时必须启动失败。"""
+    monkeypatch.setenv("PETDOCK_RUNTIME_TOKEN", "t" * 64)
+    monkeypatch.setenv("PETDOCK_RUNTIME_CAPABILITIES_JSON", '{"version":1,"capabilities":{"chat":{"effectiveSource":"mock"},"embedding":{"effectiveSource":"local"},"vision":{"effectiveSource":"disabled"},"rerank":{"effectiveSource":"disabled"},"web_search":{"effectiveSource":"disabled"}}}')
+
+    monkeypatch.setenv("PETDOCK_AI_BASE_URL", "ftp://invalid.example")
+    with pytest.raises(ValueError, match=r"HTTP\(S\)"):
+        RuntimeConfig.from_environment()
+
+    monkeypatch.setenv("PETDOCK_AI_BASE_URL", "https://ai.example")
+    monkeypatch.setenv("PETDOCK_CLIENT_VERSION", "dev")
+    with pytest.raises(ValueError, match="格式无效"):
+        RuntimeConfig.from_environment()
+
+    monkeypatch.setenv("PETDOCK_CLIENT_VERSION", "0.2.0")
+    monkeypatch.setenv("PETDOCK_MANAGED_DEVICE_ID", "invalid")
+    with pytest.raises(ValueError, match="UUID"):
         RuntimeConfig.from_environment()

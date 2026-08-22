@@ -1,7 +1,7 @@
 # PetDock Managed Service Phase 3 Chat MVP 开发方案
 
-- 最后更新：2026-08-20
-- 状态：`In Progress`（`P3-00` 已完成，业务实现尚未开始）
+- 最后更新：2026-08-22
+- 状态：`In Progress`（`P3-10` 至 `P3-13` Desktop Runtime 首轮实现中）
 - 适用仓库：`petdock-cloud`、`desktop-pet`、`petdock-web`
 - 权威契约：`petdock-cloud/contracts/managed-service/v1`
 - 前置条件：Phase 0、Phase 1、Phase 2 均为 `Done`
@@ -27,12 +27,12 @@ Phase 3 直接复用以下既有实现，不重新设计：
 - Desktop 已具备 OAuth PKCE、loopback、Refresh Token `safeStorage`、UserInfo、设备同步、撤销和账号切换。
 - Electron Main 已具备 Runtime Token Broker、三分钟提前刷新、本地 Session Bridge、任务内认证刷新协调、离线退避和并发刷新保护。
 - Main 已是能力来源设置的唯一持久化所有者，现有枚举已经包含 `chat=managed`。
-- Python Runtime 已保留 `ChatModelFactory`、本地 Agent、工具循环和 SSE 协议，Managed 来源目前明确失败关闭。
+- Python Runtime 已保留 `ChatModelFactory`、本地 Agent、工具循环和 SSE 协议；Wave D 接入独立 Managed Chat SSE 适配器，仍不把官方凭据交给 Renderer 或 BYOK Factory。
 - Cloud 已签发 RS256 Runtime Token，并具备 JWKS、Runtime Session、Entitlement、设备撤销和 Redis 撤销投影。
 - v1 已定义 `/ai/v1/chat/completions`、请求链路标识、Chat SSE 事件、Usage Event、错误码和 `/api/v1/usage/summary` 草案。
 - Web 已有稳定 `/account/usage` 路由，在真实 Usage Summary 接入前不展示假数字。
 
-当前实施状态：`P3-00`、Wave B 和 Wave C 已完成，权威契约、FastAPI 数据面、内部配额状态机、真实 Usage Summary、SSE、取消/超时、用量终态和脱敏指标均已落地。剩余主链路是 Wave D Desktop Runtime 消费、Wave E 产品入口，以及门禁 F 的受限真实 Provider 选型与线上 Beta 验收。
+当前实施状态：`P3-00`、Wave B 和 Wave C 已完成；Wave D 已开始接入 Desktop Runtime 的 Cloud SSE、工具调用、任务内认证刷新、取消和稳定错误映射。剩余主链路是 Wave D 回归收尾、Wave E 产品入口，以及门禁 F 的受限真实 Provider 选型与线上 Beta 验收。
 
 ## 3. 范围边界
 

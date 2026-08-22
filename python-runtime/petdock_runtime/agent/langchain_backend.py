@@ -37,6 +37,7 @@ from .contracts import (
     SkillLifecycleEvent,
     ToolCallRequest,
     WebSourcesContext,
+    ManagedAuthRefreshRequired,
 )
 from .memory_tools import execute_memory_tool
 from .tool_catalog import MEMORY_TOOL_NAMES
@@ -187,7 +188,13 @@ class LangChainBackend(AssistantBackend):
         for _round in range(6):
             chunks: list[str] = []
             tool_fragments: dict[int, dict[str, str]] = {}
+            set_context = getattr(self._model, "set_request_context", None)
+            if callable(set_context):
+                set_context(request.taskId)
             async for chunk in self._model.astream(messages):
+                if isinstance(chunk, ManagedAuthRefreshRequired):
+                    yield chunk
+                    continue
                 text = _content_to_text(chunk.content)
                 if text:
                     chunks.append(text)
@@ -303,6 +310,9 @@ class LangChainBackend(AssistantBackend):
 
     def finish_task(self, task_id: str) -> None:
         """释放取消或完成任务后的临时网页正文和外部工具状态。"""
+        finish_model = getattr(self._model, "finish_task", None)
+        if callable(finish_model):
+            finish_model(task_id)
         self._pending_tool_ids.pop(task_id, None)
         self._pending_tool_names.pop(task_id, None)
         self._queued_external_calls.pop(task_id, None)

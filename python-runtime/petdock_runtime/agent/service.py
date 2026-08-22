@@ -13,7 +13,9 @@ from .contracts import (
     SkillLifecycleEvent,
     ToolCallRequest,
     WebSourcesContext,
+    ManagedAuthRefreshRequired,
 )
+from ..providers.chat import ManagedProviderError
 from ..memory.extractor import MemoryExtractor
 from ..protocol import AssistantRequest, ToolResultRequest
 
@@ -141,6 +143,20 @@ class AssistantService:
                     if isinstance(output, SkillLifecycleEvent):
                         await emit(output.type, output.payload)
                         continue
+                    if isinstance(output, ManagedAuthRefreshRequired):
+                        await session.queue.put(
+                            {
+                                "eventVersion": 1,
+                                "type": "managed_auth_refresh_required",
+                                "sequence": 1,
+                                "taskId": output.task_id,
+                                "traceId": output.trace_id,
+                                "requestId": output.request_id,
+                                "reason": "token_expired",
+                                "outputStarted": False,
+                            }
+                        )
+                        continue
 
                     if not isinstance(output, ToolCallRequest):
                         raise TypeError("Assistant backend returned an unsupported output.")
@@ -173,6 +189,17 @@ class AssistantService:
                     break
         except asyncio.CancelledError:
             await emit("done", {"finishReason": "cancelled"})
+        except ManagedProviderError as error:
+            await emit(
+                "error",
+                {
+                    "code": error.code,
+                    "message": _managed_error_message(error.code),
+                    "retryable": error.retryable,
+                    "retryAfterSeconds": None,
+                },
+            )
+            await emit("done", {"finishReason": "error"})
         except Exception as error:
             await emit(
                 "error",
@@ -193,3 +220,19 @@ class AssistantService:
             if session.pending_tool_result and not session.pending_tool_result.done():
                 session.pending_tool_result.cancel()
             await session.queue.put(None)
+
+
+def _managed_error_message(code: str) -> str:
+    """将 Managed 公共错误码映射为不泄露底层详情的本地提示。"""
+    return {
+        "authentication_required": "官方登录已失效，请重新登录。",
+        "device_revoked": "当前设备授权已撤销。",
+        "capability_not_entitled": "当前服务方案未授权官方能力。",
+        "capability_disabled": "官方能力当前未开放。",
+        "quota_exhausted": "官方额度已用尽。",
+        "rate_limited": "官方服务请求过于频繁，请稍后再试。",
+        "provider_timeout": "官方服务响应超时，请稍后再试。",
+        "provider_unavailable": "官方能力暂时不可用。",
+        "stream_protocol_error": "官方流式响应无效。",
+        "request_cancelled": "请求已取消。",
+    }.get(code, "官方能力请求失败。")

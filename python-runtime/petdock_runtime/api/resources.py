@@ -48,12 +48,14 @@ class RuntimeResources:
     assistant: AssistantService
     managed_session: ManagedSessionStore
     managed_auth_refresh: ManagedAuthRefreshCoordinator
+    chat_models: ChatModelFactory
 
     async def close(self) -> None:
         """按依赖顺序关闭后台任务、索引和数据库连接。"""
         LOGGER.info("开始关闭 Runtime 服务资源")
         self.managed_session.clear()
         await self.managed_auth_refresh.close()
+        await self.chat_models.close()
         await self.knowledge.close()
         self.vision.close()
         self.skills.close()
@@ -99,11 +101,18 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
     skill_store = SkillStore(config.skills_db_path)
     skills = SkillRegistry(config.skills_root, skill_store)
     skill_installer = SkillInstaller(config.skills_root, skills)
+    managed_session = ManagedSessionStore()
+    managed_auth_refresh = ManagedAuthRefreshCoordinator()
     chat_models = ChatModelFactory(
         config.chat_source or ("byok" if config.resolved_backend == "langchain" else "mock"),
         api_key=config.api_key,
         base_url=config.base_url,
         model=config.model,
+        managed_ai_base_url=config.managed_ai_base_url,
+        managed_client_version=config.managed_client_version,
+        managed_device_id=config.managed_device_id,
+        managed_session=managed_session,
+        managed_auth_refresh=managed_auth_refresh,
     )
 
     async def prepare_attachments(request: AssistantRequest) -> None:
@@ -131,8 +140,6 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         create_memory_extractor(chat_models, memory),
         prepare_attachments,
     )
-    managed_session = ManagedSessionStore()
-    managed_auth_refresh = ManagedAuthRefreshCoordinator()
     LOGGER.info(
         "Runtime 服务资源已创建 backend=%s embedding=%s",
         config.resolved_backend,
@@ -152,6 +159,7 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         assistant=assistant,
         managed_session=managed_session,
         managed_auth_refresh=managed_auth_refresh,
+        chat_models=chat_models,
     )
 
 
