@@ -56,7 +56,7 @@ Phase 3 Managed Chat MVP 详细开发方案
 
 ```text
 总体状态：Phase 3 In Progress
-当前阶段：Phase 3 Managed Chat MVP（Wave E Done）
+当前阶段：Phase 3 Managed Chat MVP（Wave F 自动门禁完成，线上验收待执行）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
@@ -65,11 +65,11 @@ FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Pro
 桌面 Runtime Managed 消费：Wave D Done；Wave E Done（P3-14 至 P3-16 来源选择、官方 Chat 状态、额度摘要、手动切回 BYOK 与脱敏入口已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：Windows 安装包尚未发布；真实 Provider 受限线上门禁和安装包验收仍属于门禁 F
-下一建议工作项：按门禁 F 执行 Docker、撤销传播、配额并发和受限线上 Beta 验收
+当前阻塞：真实 Provider Adapter/模型尚未完成受控选型；Wave F 自动门禁已完成，待受限线上关闭态与 Phase 3 白名单验收
+下一建议工作项：按 Cloud 线上验收清单执行生产关闭态、OAuth/撤销回归；不得开启未实现的真实 Provider
 ```
 
-当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave E。Wave E 已完成 Desktop 官方 Chat 产品入口与真实额度摘要、Web `/account/usage` 真实摘要接入；本轮未开启生产真实 Provider。
+当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave E，以及 Wave F 自动门禁。Wave E 已完成 Desktop 官方 Chat 产品入口与真实额度摘要、Web `/account/usage` 真实摘要接入；Wave F 保持生产 Chat 与 Provider 关闭，线上验收不冒充真实 Provider 可用。
 
 ## 4. 产品与仓库边界
 
@@ -260,6 +260,13 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - 流前 `token_expired` 只触发一次 Main-only `managed_auth_refresh_required`，保持原 `requestId`、更换 `attemptId` 后重试；已输出内容后不重放。取消通过关闭 HTTP SSE 流传播到 Cloud。
 - 已补充稳定错误映射、Managed 历史消息/工具 Schema 转换和 Runtime 资源关闭；BYOK 与 Mock 分支保持原行为，不自动回退或消耗 BYOK Key。
 - 本轮验证：Python Runtime 全量 93 项通过；新增 Managed Provider 专项 5 项通过，并覆盖 Managed 连接配置失败关闭。Wave D 仍需完成 Desktop 全套门禁、跨端真实受限联调和取消/撤销场景验收后才能标记 `Done`。
+
+### 2026-08-22（Phase 3 Wave F 自动门禁收尾）
+
+- 三仓 Wave E 已分别提交：Desktop `f3b8136`、Cloud `0435829`、Web `2eb1dc1`；本轮未 push。
+- Wave F 自动门禁通过：Desktop 安装包 NSIS/Portable、生产制品端点扫描和依赖审计；Cloud pytest 22 项、AI Gateway pytest/Ruff/mypy、JDK 21 Maven 130 项（Testcontainers PostgreSQL/Redis 实际运行，跳过 0）、Compose 脱敏环境校验和 AI 镜像构建；Web Vitest 38 项、Nginx 检查、Playwright 12 项通过/1 项跳过、生产构建和依赖审计。
+- 生产安全边界复核通过：AI Gateway 非 root、只读运行时、`cap_drop: ALL`、无宿主机端口；生产 `PETDOCK_MANAGED_CHAT_ENABLED=false`、`PETDOCK_CHAT_PROVIDER_MODE=disabled`，仓库没有真实 Provider Adapter 或生产凭据。
+- 线上 Phase 3 最终验收仍需用户在服务器执行关闭态健康、OAuth/Consent、Refresh、UserInfo、设备撤销、未知 AI 路径 404 和回滚冒烟；不得把 disabled 状态记录为 Managed Chat 成功。
 
 ### 2026-08-22（Phase 3 Wave E Desktop/Web 产品入口）
 

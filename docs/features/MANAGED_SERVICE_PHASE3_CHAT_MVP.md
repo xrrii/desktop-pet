@@ -32,7 +32,7 @@ Phase 3 直接复用以下既有实现，不重新设计：
 - v1 已定义 `/ai/v1/chat/completions`、请求链路标识、Chat SSE 事件、Usage Event、错误码和 `/api/v1/usage/summary` 草案。
 - Web 已有稳定 `/account/usage` 路由，在真实 Usage Summary 接入前不展示假数字。
 
-当前实施状态：`P3-00`、Wave B 至 Wave E 已完成；Wave E 已接入 Desktop 来源选择、官方 Chat 状态、真实额度摘要、手动切回 BYOK、脱敏入口和 Web `/account/usage`。剩余主链路是门禁 F 的受限真实 Provider 选型、撤销/配额并发验收和线上 Beta 门禁。
+当前实施状态：`P3-00`、Wave B 至 Wave E 已完成，Wave F 自动门禁已通过；Wave E 已接入 Desktop 来源选择、官方 Chat 状态、真实额度摘要、手动切回 BYOK、脱敏入口和 Web `/account/usage`。线上最终验收仍受真实 Provider Adapter/模型受控选型约束，生产默认保持关闭。
 
 ## 3. 范围边界
 
