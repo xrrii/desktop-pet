@@ -324,3 +324,12 @@
 - Desktop 继续使用 `/api/v1/usage/summary`；Web 使用 `/api/v1/web/usage/summary` 和既有 HttpOnly Session，只展示当前周期、Chat 已用、剩余及 `tokens` 单位。未开通时返回稳定错误，不展示全零假数据。
 - Prompt、回答、工具参数、工具结果、附件正文、知识片段、完整请求体和完整上游响应不得进入数据库、Usage Event、默认日志或测试快照。
 - `requestFingerprint` 只保存在受控预占事实中，不进入常规日志、指标标签或客户端响应。日志允许记录链路 ID、逻辑能力、配置别名、耗时、Token 数、用量终态和稳定错误码；禁止记录认证凭据、用户正文、真实 Provider 凭据和内部模型配置值。
+
+### `D-P3-07` Phase 3 Chat Provider 受控选型
+
+状态：`Partially Frozen`
+
+- Provider 适配协议使用 OpenAI-compatible；生产模式固定使用 `openai_compatible`，不得使用仓库内假 Provider。
+- 模型名固定为 `deepseek-v4-flash-vision-exp`；上游必须同时支持 SSE、Tool Calling 和可靠 Usage 返回，缺少 Usage 或工具参数无法闭合时按无效响应失败。
+- 服务商及实际接口必须满足中国大陆数据驻留要求；当前非敏感配置使用 `https://api.deepseek.com` 作为不含查询参数或片段的 HTTPS API 根地址，但该公开域名本身不构成区域合规证明，生产启用前仍须取得服务商说明并通过白名单联调。
+- API Key 只允许通过服务器 Docker Secret 文件注入 AI Gateway，不得进入 `.env`、镜像层、日志、契约、测试快照或客户端。
