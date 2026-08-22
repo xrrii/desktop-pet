@@ -41,6 +41,21 @@ export type ManagedRuntimeSessionErrorCode =
   | 'managed_authentication_required'
   | null
 
+/** Main 内部和 Renderer 可见的官方 Chat 额度摘要，禁止包含 Provider 信息。 */
+export interface ManagedUsageSummary {
+  billingMode: 'subscription' | 'pay_as_you_go'
+  periodStart: string
+  periodEnd: string
+  capabilities: {
+    chat: {
+      quotaMode: 'quota' | 'metered'
+      used: number
+      remaining: number | null
+      unit: 'tokens' | 'requests'
+    }
+  }
+}
+
 /** Renderer 可见的稳定登录错误分类。 */
 export type ManagedAuthErrorCode =
   | 'managed_login_disabled'
@@ -101,6 +116,7 @@ export interface ManagedDeviceStatus {
 export interface ManagedAuthStatus {
   state: ManagedAuthState
   managedLoginEnabled: boolean
+  managedChatEnabled: boolean
   minimumClientVersion: string | null
   errorCode: ManagedAuthErrorCode | null
   sessionSyncState: ManagedSessionSyncState

@@ -14,11 +14,18 @@ import type {
   AssistantWebSettingsSnapshot
 } from '../../shared/assistant'
 import { logError, logInfo } from '../logger'
+import type { ManagedRuntimeSessionErrorCode } from '../../shared/managed'
 
 /** 现有 Provider 管理器向能力来源计算提供的脱敏状态。 */
 export interface CapabilityConfigurationState {
   chat: AssistantModelSettingsSnapshot
   chatBackend: 'auto' | 'mock' | 'langchain'
+  managedChat: {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  }
   embedding: {
     provider: 'hash' | 'local' | 'online'
     configured: boolean
@@ -155,7 +162,7 @@ function resolveSnapshot(
           ? available('byok', 'byok')
           : available('byok', 'mock', 'not_configured', 'byok_not_configured')
     : selected.capabilities.chat === 'managed'
-      ? available('managed', 'mock', 'unsupported_client', 'managed_not_supported')
+      ? resolveManagedChat(state.managedChat)
       : available('disabled', 'mock', 'disabled', 'user_disabled')
 
   const embedding = selected.capabilities.embedding === 'byok'
@@ -194,6 +201,29 @@ function resolveSnapshot(
       web_search: webSearch
     }
   }
+}
+
+/** 根据服务端开关、账号会话和 Runtime Lease 计算官方 Chat，不进行隐式 BYOK 回退。 */
+function resolveManagedChat(state: CapabilityConfigurationState['managedChat']) {
+  if (!state.enabled) {
+    return available('managed', 'managed', 'provider_unavailable', 'managed_chat_disabled')
+  }
+  if (state.errorCode === 'managed_capability_not_entitled') {
+    return available('managed', 'managed', 'not_entitled', 'managed_capability_not_entitled')
+  }
+  if (state.errorCode === 'managed_unsupported_client_version') {
+    return available('managed', 'managed', 'unsupported_client', 'managed_unsupported_client_version')
+  }
+  if (!state.authenticated) {
+    return available('managed', 'managed', 'not_authenticated', 'managed_authentication_required')
+  }
+  if (!state.runtimeReady) {
+    return available('managed', 'managed', 'provider_unavailable', 'managed_runtime_not_ready')
+  }
+  if (state.errorCode) {
+    return available('managed', 'managed', 'provider_unavailable', 'managed_provider_unavailable')
+  }
+  return available('managed', 'managed')
 }
 
 function available<Selected extends string, Effective extends string>(

@@ -56,20 +56,20 @@ Phase 3 Managed Chat MVP 详细开发方案
 
 ```text
 总体状态：Phase 3 In Progress
-当前阶段：Phase 3 Managed Chat MVP（Wave D In Progress）
+当前阶段：Phase 3 Managed Chat MVP（Wave E Done）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Provider Adapter、取消/超时、用量闭合和脱敏指标已完成）
-桌面 Runtime Managed 消费：Wave D In Progress（P3-10 至 P3-13 首轮适配器和回归测试已开始）
+桌面 Runtime Managed 消费：Wave D Done；Wave E Done（P3-14 至 P3-16 来源选择、官方 Chat 状态、额度摘要、手动切回 BYOK 与脱敏入口已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：Windows 安装包尚未发布不影响本轮；Cloud 共享开发环境和 Docker 隔离依赖门禁均已通过
-下一建议工作项：完成 Wave D Desktop Runtime 回归和真实受限联调，再进入 Wave E 产品入口
+当前阻塞：Windows 安装包尚未发布；真实 Provider 受限线上门禁和安装包验收仍属于门禁 F
+下一建议工作项：按门禁 F 执行 Docker、撤销传播、配额并发和受限线上 Beta 验收
 ```
 
-当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00` 契约闭合、Wave B 和 Wave C。Wave D 正在把 Cloud Chat SSE 接入现有 Desktop Agent/工具循环；Usage Summary 页面和产品入口仍按 Wave E 实施。
+当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave E。Wave E 已完成 Desktop 官方 Chat 产品入口与真实额度摘要、Web `/account/usage` 真实摘要接入；本轮未开启生产真实 Provider。
 
 ## 4. 产品与仓库边界
 
@@ -260,6 +260,13 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 - 流前 `token_expired` 只触发一次 Main-only `managed_auth_refresh_required`，保持原 `requestId`、更换 `attemptId` 后重试；已输出内容后不重放。取消通过关闭 HTTP SSE 流传播到 Cloud。
 - 已补充稳定错误映射、Managed 历史消息/工具 Schema 转换和 Runtime 资源关闭；BYOK 与 Mock 分支保持原行为，不自动回退或消耗 BYOK Key。
 - 本轮验证：Python Runtime 全量 93 项通过；新增 Managed Provider 专项 5 项通过，并覆盖 Managed 连接配置失败关闭。Wave D 仍需完成 Desktop 全套门禁、跨端真实受限联调和取消/撤销场景验收后才能标记 `Done`。
+
+### 2026-08-22（Phase 3 Wave E Desktop/Web 产品入口）
+
+- Desktop 能力来源解析新增官方 Chat 状态交集：服务端开关、登录会话、Runtime Lease 和稳定错误分类共同决定 `available`、`not_authenticated`、`not_entitled`、`provider_unavailable` 与 `unsupported_client`；官方不可用时保留用户选择，不自动回退到 BYOK。
+- Desktop 设置页新增 Chat 来源选择、官方 Chat 状态、真实额度摘要和“切回我的模型配置”操作；额度只通过 Main Bearer 控制面读取周期、已用、剩余和单位，Renderer 不接触 Token、Runtime Session、Provider 或内部模型信息。
+- Cloud 本轮复用既有 `/api/v1/usage/summary`，未新增数据库迁移、Redis Key、公共字段或真实 Provider 配置；Web `/account/usage` 改为读取既有 Web Session Usage Summary，并准确处理未登录、未授权和服务失败。
+- Wave E 收尾验证：Desktop TypeScript、Vitest 167 项、契约 21 项、Runtime 93 项、Retrieval、生产构建和生产依赖审计（0 vulnerabilities）通过；Web Vitest 38 项、TypeScript、生产构建和 Playwright 12 项通过、1 项按环境跳过；Cloud pytest 22 项、契约快照 53 个文件一致、Maven 130 项通过（Testcontainers PostgreSQL/Redis 实际运行，跳过 0）。受限线上真实 Provider 验收仍属于门禁 F。
 
 ### 2026-08-21（Phase 3 Wave B Cloud 控制面收尾）
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ManagedEndpointPolicy } from './managedOAuthTypes'
 import { ManagedServerClock } from './managedServerClock'
+import type { ManagedUsageSummary } from '../../shared/managed'
 
 /** 控制面业务错误的稳定分类，禁止携带响应正文。 */
 export type ManagedControlPlaneErrorCode =
@@ -123,6 +124,15 @@ export class ManagedControlPlaneClient {
     })
   }
 
+  /** 查询当前账号的 Chat 用量摘要；只返回契约中的额度和周期字段。 */
+  async getUsageSummary(accessToken: string): Promise<ManagedUsageSummary> {
+    const payload = await this.request<unknown>('/api/v1/usage/summary', {
+      method: 'GET',
+      accessToken
+    })
+    return requireUsageSummary(payload)
+  }
+
   /** 发送一个不记录凭据的控制面请求。 */
   private async request<T>(
     resourcePath: string,
@@ -177,6 +187,47 @@ export class ManagedControlPlaneClient {
       envelope.requestId ?? requestId,
       envelope.retryAfterSeconds
     )
+  }
+}
+
+/** 严格校验用量摘要，拒绝未知结构和负数，避免 Renderer 展示伪造或不完整数据。 */
+function requireUsageSummary(value: unknown): ManagedUsageSummary {
+  if (!value || typeof value !== 'object') throw new ManagedControlPlaneError(200, 'internal_error', false)
+  const root = value as Record<string, unknown>
+  const capabilities = root.capabilities
+  const chat = capabilities && typeof capabilities === 'object'
+    ? (capabilities as Record<string, unknown>).chat
+    : null
+  if (
+    (root.billingMode !== 'subscription' && root.billingMode !== 'pay_as_you_go') ||
+    typeof root.periodStart !== 'string' || typeof root.periodEnd !== 'string' ||
+    !chat || typeof chat !== 'object'
+  ) {
+    throw new ManagedControlPlaneError(200, 'internal_error', false)
+  }
+  const item = chat as Record<string, unknown>
+  const used = item.used
+  const remaining = item.remaining
+  if (
+    (item.quotaMode !== 'quota' && item.quotaMode !== 'metered') ||
+    !Number.isSafeInteger(used) || Number(used) < 0 ||
+    !(remaining === null || (Number.isSafeInteger(remaining) && Number(remaining) >= 0)) ||
+    (item.unit !== 'tokens' && item.unit !== 'requests')
+  ) {
+    throw new ManagedControlPlaneError(200, 'internal_error', false)
+  }
+  return {
+    billingMode: root.billingMode,
+    periodStart: root.periodStart,
+    periodEnd: root.periodEnd,
+    capabilities: {
+      chat: {
+        quotaMode: item.quotaMode,
+        used: Number(used),
+        remaining: remaining === null ? null : Number(remaining),
+        unit: item.unit
+      }
+    }
   }
 }
 

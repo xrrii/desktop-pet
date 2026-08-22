@@ -156,6 +156,32 @@ button:disabled {
   font-size: 11px;
 }
 
+.managed-usage-summary {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #e0e4ea;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.managed-usage-summary > small {
+  color: #727c88;
+  font-size: 11px;
+}
+
+.managed-usage-values {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: #59636f;
+  font-size: 12px;
+}
+
+.managed-usage-values strong {
+  color: #303640;
+}
+
 .settings-section-heading {
   display: flex;
   align-items: baseline;

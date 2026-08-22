@@ -12,6 +12,7 @@ import type {
   AssistantAskInput,
   AssistantAskResult,
   AssistantCapabilitySettingsSnapshot,
+  AssistantChatSelectedSource,
   AssistantConversationMessage,
   AssistantDocumentCapabilities,
   AssistantEvent,
@@ -38,7 +39,7 @@ import type {
 } from '../shared/assistant'
 import type { ScreenshotOverlayPayload, ScreenshotSelectionInput } from '../shared/screenshot'
 import type { AssistantThemeId } from '../shared/theme'
-import type { ManagedAuthStatus, ManagedPortalTarget } from '../shared/managed'
+import type { ManagedAuthStatus, ManagedPortalTarget, ManagedUsageSummary } from '../shared/managed'
 import type {
   AvailablePet,
   CreatePetInput,
@@ -106,6 +107,8 @@ const api = {
   getManagedAuthStatus: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:get-status'),
   /** 登录前匿名刷新服务端 Feature Flag，永远不发送 Access Token。 */
   refreshManagedFeatures: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:refresh-features'),
+  /** 获取当前账号的真实 Chat 额度摘要，不返回 Token 或 Provider 信息。 */
+  getManagedUsageSummary: (): Promise<ManagedUsageSummary> => ipcRenderer.invoke('managed:get-usage-summary'),
   /** 打开 Main 白名单内的官网业务页，不允许 Renderer 传入任意 URL。 */
   openManagedPortal: (target: ManagedPortalTarget): Promise<boolean> =>
     ipcRenderer.invoke('managed:open-portal', target),
@@ -139,6 +142,9 @@ const api = {
     ipcRenderer.invoke('assistant:get-model-settings'),
   getAssistantCapabilitySettings: (): Promise<AssistantCapabilitySettingsSnapshot> =>
     ipcRenderer.invoke('assistant:get-capability-settings'),
+  setAssistantChatSource: (
+    source: AssistantChatSelectedSource
+  ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-chat-source', source),
   setAssistantModelSettings: (
     input: AssistantModelSettingsInput
   ): Promise<AssistantModelSettingsSnapshot> => ipcRenderer.invoke('assistant:set-model-settings', input),

@@ -43,6 +43,28 @@
               <strong>主模型</strong>
               <small id="model-configured-status">使用环境配置</small>
             </div>
+            <label class="web-field" for="chat-source-select">
+              <span>Chat 来源</span>
+              <select id="chat-source-select" aria-label="选择 Chat 来源">
+                <option value="byok">使用我的模型配置</option>
+                <option value="managed">使用官方 Chat</option>
+                <option value="disabled">关闭 Chat</option>
+              </select>
+            </label>
+            <small id="chat-source-status" class="web-test-status" role="status"></small>
+            <section id="managed-usage-summary" class="managed-usage-summary" aria-label="官方 Chat 额度" hidden>
+              <div class="settings-section-heading">
+                <strong>官方 Chat 额度</strong>
+                <button id="managed-usage-refresh" class="icon-button" type="button" title="刷新额度" aria-label="刷新官方 Chat 额度">↻</button>
+              </div>
+              <small id="managed-usage-period"></small>
+              <div class="managed-usage-values">
+                <span>已使用 <strong id="managed-usage-used">-</strong></span>
+                <span>剩余 <strong id="managed-usage-remaining">-</strong></span>
+              </div>
+              <small id="managed-usage-status" role="status"></small>
+            </section>
+            <button id="chat-switch-byok" class="secondary-button" type="button" hidden>切回我的模型配置</button>
             <label class="web-field" for="model-base-url">
               <span>Base URL（可选）</span>
               <input id="model-base-url" type="url" maxlength="500" placeholder="例如 https://api.openai.com/v1" autocomplete="off" />

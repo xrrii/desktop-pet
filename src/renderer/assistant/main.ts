@@ -1,5 +1,6 @@
 import './styles.css'
 import type {
+  AssistantCapabilitySettingsSnapshot,
   AssistantAttachmentMessageRef,
   AssistantAttachmentSummary,
   AssistantArtifactSummary,
@@ -28,7 +29,7 @@ import type {
 } from '../../shared/assistant'
 import type { AvailablePet, PetSpritesheetSelection } from '../../shared/pet'
 import type { AssistantThemeId } from '../../shared/theme'
-import type { ManagedAuthStatus, ManagedPortalTarget } from '../../shared/managed'
+import type { ManagedAuthStatus, ManagedPortalTarget, ManagedUsageSummary } from '../../shared/managed'
 import {
   getCommandPaletteState,
   type AssistantCommandOption
@@ -152,6 +153,15 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const webSave = requireElement<HTMLButtonElement>('#web-save')
   const webTestStatus = requireElement<HTMLElement>('#web-test-status')
   const modelSettingsForm = requireElement<HTMLFormElement>('#model-settings-form')
+  const chatSourceSelect = requireElement<HTMLSelectElement>('#chat-source-select')
+  const chatSourceStatus = requireElement<HTMLElement>('#chat-source-status')
+  const chatSwitchByok = requireElement<HTMLButtonElement>('#chat-switch-byok')
+  const managedUsageSummary = requireElement<HTMLElement>('#managed-usage-summary')
+  const managedUsageRefresh = requireElement<HTMLButtonElement>('#managed-usage-refresh')
+  const managedUsagePeriod = requireElement<HTMLElement>('#managed-usage-period')
+  const managedUsageUsed = requireElement<HTMLElement>('#managed-usage-used')
+  const managedUsageRemaining = requireElement<HTMLElement>('#managed-usage-remaining')
+  const managedUsageStatus = requireElement<HTMLElement>('#managed-usage-status')
   const modelBaseUrl = requireElement<HTMLInputElement>('#model-base-url')
   const modelName = requireElement<HTMLInputElement>('#model-name')
   const modelApiKey = requireElement<HTMLInputElement>('#model-api-key')
@@ -247,10 +257,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let visionSnapshot: AssistantVisionSnapshot | null = null
   let visionBusy = false
   let modelSettings: AssistantModelSettingsSnapshot | null = null
+  let capabilitySettings: AssistantCapabilitySettingsSnapshot | null = null
   let modelBusy = false
   let managedAuthStatus: ManagedAuthStatus | null = null
   let managedAuthBusy = false
   let managedPortalBusy = false
+  let managedUsageBusy = false
+  let managedUsage: ManagedUsageSummary | null = null
   let managedPortalReturnPending = false
   let managedPortalReturnArmed = false
   let managedPortalReturnInteractionObserved = false
@@ -496,6 +509,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     event.preventDefault()
     void saveModelSettings()
   })
+  chatSourceSelect.addEventListener('change', () => void changeChatSource(chatSourceSelect.value))
+  chatSwitchByok.addEventListener('click', () => void changeChatSource('byok'))
+  managedUsageRefresh.addEventListener('click', () => void loadManagedUsageSummary())
   modelClearKey.addEventListener('click', () => void clearModelKey())
   managedLogin.addEventListener('click', () => void startManagedLogin())
   managedLogout.addEventListener('click', () => void logoutManaged())
@@ -736,6 +752,128 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     managedLogout.disabled = managedAuthBusy || (!authenticated && !retainedSession)
     managedRevokeDevice.disabled = managedAuthBusy || !authenticated || !device || device.status !== 'active'
     managedOpenPortal.disabled = managedPortalBusy
+    renderChatSourceStatus()
+    if (settingsMode) {
+      void refreshCapabilityView()
+    }
+    if (capabilitySettings?.capabilities.chat.selectedSource === 'managed' && authenticated) {
+      void loadManagedUsageSummary()
+    }
+  }
+
+  /** 在账号或 Runtime 状态变化后重新读取 Main 计算的能力快照。 */
+  async function refreshCapabilityView(): Promise<void> {
+    try {
+      capabilitySettings = await window.desktopPet.getAssistantCapabilitySettings()
+      renderChatSourceStatus()
+      if (capabilitySettings.capabilities.chat.selectedSource === 'managed') {
+        void loadManagedUsageSummary()
+      }
+    } catch {
+      // 状态刷新失败不覆盖当前可用的脱敏快照。
+    }
+  }
+
+  /** 渲染 Chat 来源和官方能力稳定状态，不展示 Provider 或内部模型信息。 */
+  function renderChatSourceStatus(): void {
+    const chat = capabilitySettings?.capabilities.chat
+    if (!chat) return
+    chatSourceSelect.value = chat.selectedSource
+    const managedOption = chatSourceSelect.querySelector<HTMLOptionElement>('option[value="managed"]')
+    if (managedOption) managedOption.disabled = !managedAuthStatus?.managedChatEnabled && chat.selectedSource !== 'managed'
+    const labels: Record<string, string> = {
+      available: '官方 Chat 已就绪',
+      not_authenticated: '需要登录 PetDock Cloud 后使用官方 Chat',
+      not_entitled: '当前账号未授权官方 Chat',
+      provider_unavailable: '官方 Chat 暂不可用，请稍后重试',
+      unsupported_client: '当前客户端版本不受支持',
+      disabled: 'Chat 已关闭',
+      not_configured: '我的模型配置尚未完成'
+    }
+    chatSourceStatus.textContent = labels[chat.status] || 'Chat 来源状态未知'
+    const managedSelected = chat.selectedSource === 'managed'
+    if (managedSelected) {
+      modelConfiguredStatus.textContent = '官方 Chat 不需要本地模型配置'
+    } else if (modelSettings) {
+      modelConfiguredStatus.textContent = modelSettings.configuredKey
+        ? `密钥已安全保存（${modelSettings.source === 'saved' ? '应用配置' : '环境变量'}）`
+        : '尚未配置 API Key，Runtime 将使用模拟后端'
+    }
+    const byokFieldsHidden = managedSelected
+    modelBaseUrl.closest('.web-field')?.toggleAttribute('hidden', byokFieldsHidden)
+    modelName.closest('.web-field')?.toggleAttribute('hidden', byokFieldsHidden)
+    modelApiKey.closest('.web-field')?.toggleAttribute('hidden', byokFieldsHidden)
+    modelClearKey.hidden = byokFieldsHidden
+    modelSave.hidden = byokFieldsHidden
+    chatSwitchByok.hidden = !managedSelected
+    managedUsageSummary.hidden = !managedSelected
+    if (!managedSelected) {
+      managedUsage = null
+      managedUsagePeriod.textContent = ''
+      managedUsageUsed.textContent = '-'
+      managedUsageRemaining.textContent = '-'
+      managedUsageStatus.textContent = ''
+    } else if (!managedAuthStatus || managedAuthStatus.state !== 'authenticated') {
+      managedUsageStatus.textContent = '登录后可查看额度。'
+    }
+  }
+
+  /** 读取真实额度摘要；未登录、未授权和服务失败均保持空状态，不显示假数据。 */
+  async function loadManagedUsageSummary(): Promise<void> {
+    if (managedUsageBusy || capabilitySettings?.capabilities.chat.selectedSource !== 'managed') return
+    if (!managedAuthStatus || managedAuthStatus.state !== 'authenticated') return
+    managedUsageBusy = true
+    managedUsageStatus.textContent = '正在读取额度…'
+    try {
+      managedUsage = await window.desktopPet.getManagedUsageSummary()
+      const chat = managedUsage.capabilities.chat
+      managedUsagePeriod.textContent = `${formatUsageDate(managedUsage.periodStart)} 至 ${formatUsageDate(managedUsage.periodEnd)}`
+      managedUsageUsed.textContent = `${chat.used.toLocaleString('zh-CN')} ${formatUsageUnit(chat.unit)}`
+      managedUsageRemaining.textContent = chat.remaining === null
+        ? '按实际用量'
+        : `${chat.remaining.toLocaleString('zh-CN')} ${formatUsageUnit(chat.unit)}`
+      managedUsageStatus.textContent = ''
+    } catch (error) {
+      managedUsage = null
+      managedUsagePeriod.textContent = ''
+      managedUsageUsed.textContent = '-'
+      managedUsageRemaining.textContent = '-'
+      managedUsageStatus.textContent = '暂时无法读取额度，请稍后重试。'
+      showError(error)
+    } finally {
+      managedUsageBusy = false
+    }
+  }
+
+  /** 用户明确切换 Chat 来源；不可用的官方 Chat 选择仍会被保留。 */
+  async function changeChatSource(source: string): Promise<void> {
+    if (source !== 'byok' && source !== 'managed' && source !== 'disabled' || modelBusy) return
+    modelBusy = true
+    renderModelBusyState()
+    try {
+      capabilitySettings = await window.desktopPet.setAssistantChatSource(source)
+      renderChatSourceStatus()
+      clearError()
+      if (source === 'managed') void loadManagedUsageSummary()
+    } catch (error) {
+      showError(error)
+      if (capabilitySettings) renderChatSourceStatus()
+    } finally {
+      modelBusy = false
+      renderModelBusyState()
+    }
+  }
+
+  /** 格式化额度周期；无效时间只显示稳定占位文案。 */
+  function formatUsageDate(value: string): string {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '周期时间不可用'
+    return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+  }
+
+  /** 只展示契约允许的计量单位。 */
+  function formatUsageUnit(unit: 'tokens' | 'requests'): string {
+    return unit === 'tokens' ? 'Token' : '次'
   }
 
   /** Renderer 记住一次“从官网返回后需要刷新”的意图，只在 Managed 设置页内消费。 */
@@ -955,6 +1093,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       ])
       modelSettings = nextModelSettings
       renderManagedAuthStatus(nextManagedStatus)
+      capabilitySettings = await window.desktopPet.getAssistantCapabilitySettings()
       settingsMode = true
       conversation.hidden = true
       settingsView.hidden = false
@@ -1407,6 +1546,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       ? `密钥已安全保存（${snapshot.source === 'saved' ? '应用配置' : '环境变量'}）`
       : '尚未配置 API Key，Runtime 将使用模拟后端'
     renderModelBusyState()
+    renderChatSourceStatus()
+    if (capabilitySettings?.capabilities.chat.selectedSource === 'managed') {
+      void loadManagedUsageSummary()
+    }
   }
 
   /** 只更新主模型表单的忙碌态，避免保存前重绘并清空用户输入。 */
@@ -1416,6 +1559,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     modelBaseUrl.disabled = modelBusy
     modelName.disabled = modelBusy
     modelApiKey.disabled = modelBusy
+    chatSourceSelect.disabled = modelBusy
+    managedUsageRefresh.disabled = modelBusy || managedUsageBusy
+    chatSwitchByok.disabled = modelBusy
   }
 
   /** 保存主模型设置；Runtime 重启期间短暂显示启动状态。 */

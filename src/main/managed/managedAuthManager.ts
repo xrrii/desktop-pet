@@ -3,7 +3,8 @@ import { logError, logInfo } from '../logger'
 import type {
   ManagedAuthErrorCode,
   ManagedAuthState,
-  ManagedAuthStatus
+  ManagedAuthStatus,
+  ManagedUsageSummary
 } from '../../shared/managed'
 import { ManagedFeatureFlags } from './managedFeatureFlags'
 import { resolveManagedEndpointPolicy } from './managedEndpointPolicy'
@@ -28,6 +29,7 @@ import {
 const DEFAULT_STATUS: ManagedAuthStatus = {
   state: 'disabled',
   managedLoginEnabled: false,
+  managedChatEnabled: false,
   minimumClientVersion: null,
   errorCode: null,
   sessionSyncState: 'idle',
@@ -57,6 +59,7 @@ export class ManagedAuthManager {
   private activeTerminalCleanup: Promise<void> | null = null
 
   private readonly featureFlags: ManagedFeatureFlags
+  private readonly controlPlaneClient: ManagedControlPlaneClient
   private readonly oauthClient: ManagedOAuthClient
   private readonly tokenStore: ManagedTokenStore
   private readonly accountSessionManager: ManagedAccountSessionManager | null
@@ -70,6 +73,7 @@ export class ManagedAuthManager {
     private readonly clientVersion = '0.2.0',
     dependencies: {
       featureFlags?: ManagedFeatureFlags
+      controlPlaneClient?: ManagedControlPlaneClient
       oauthClient?: ManagedOAuthClient
       tokenStore?: ManagedTokenStore
       accountSessionManager?: ManagedAccountSessionManager
@@ -81,6 +85,7 @@ export class ManagedAuthManager {
   ) {
     this.serverClock = dependencies.serverClock || new ManagedServerClock()
     this.featureFlags = dependencies.featureFlags || new ManagedFeatureFlags(policy, clientVersion)
+    this.controlPlaneClient = dependencies.controlPlaneClient || new ManagedControlPlaneClient(policy, clientVersion, undefined, this.serverClock)
     const oauthClient = dependencies.oauthClient || new ManagedOidcClient(policy.issuer)
     this.oauthClient = oauthClient
     this.tokenStore = dependencies.tokenStore || new ElectronManagedTokenStore()
@@ -92,7 +97,7 @@ export class ManagedAuthManager {
       oauthClient.fetchUserInfo && oauthClient.revokeRefreshToken && this.deviceIdentityManager
         ? new ManagedAccountSessionManager(
             oauthClient,
-            new ManagedControlPlaneClient(policy, clientVersion, undefined, this.serverClock),
+            this.controlPlaneClient,
             this.deviceIdentityManager
           )
         : null
@@ -120,6 +125,37 @@ export class ManagedAuthManager {
       ...this.status,
       account: this.status.account ? { ...this.status.account } : null,
       device: this.status.device ? { ...this.status.device } : null
+    }
+  }
+
+  /** 返回官方 Chat 能力所需的脱敏会话状态，禁止向调用方暴露凭据。 */
+  getManagedChatState(): {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedAuthStatus['runtimeSessionErrorCode']
+  } {
+    return {
+      enabled: this.status.managedChatEnabled,
+      authenticated: this.status.state === 'authenticated' && this.status.sessionSyncState === 'ready',
+      runtimeReady: this.status.runtimeSessionState === 'ready',
+      errorCode: this.status.runtimeSessionErrorCode
+    }
+  }
+
+  /** 读取当前账号的真实 Chat 用量摘要，响应只保留公共额度字段。 */
+  async getUsageSummary(): Promise<ManagedUsageSummary> {
+    let accessToken = await this.ensureAccessTokenForRuntime(false)
+    if (!accessToken) {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    try {
+      return await this.controlPlaneClient.getUsageSummary(accessToken)
+    } catch (error) {
+      if (!isAccessTokenRetryable(error)) throw error
+      accessToken = await this.ensureAccessTokenForRuntime(true)
+      if (!accessToken) throw new ManagedControlPlaneError(401, 'authentication_required', false)
+      return this.controlPlaneClient.getUsageSummary(accessToken)
     }
   }
 
@@ -766,6 +802,7 @@ export class ManagedAuthManager {
     this.setStatus({
       state: nextState,
       managedLoginEnabled: features.managedLoginEnabled,
+      managedChatEnabled: features.managedChatEnabled,
       minimumClientVersion: features.minimumClientVersion,
       errorCode: preserveSessionState
         ? this.status.errorCode

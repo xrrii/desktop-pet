@@ -103,12 +103,19 @@ const managedRuntimeTokenBroker = new ManagedRuntimeTokenBroker(
   { now: () => managedServerClock.now() }
 )
 const managedRuntimeAuthRefreshHandler = new ManagedRuntimeAuthRefreshHandler(managedRuntimeTokenBroker)
+let managedAuthManager: ManagedAuthManager
 const assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
   (event) => petWindow?.webContents.send('assistant:event', event),
   {
     onReady: (client) => managedRuntimeTokenBroker.attachRuntime(client),
-    onStopped: (client) => managedRuntimeTokenBroker.detachRuntime(client)
+    onStopped: (client) => managedRuntimeTokenBroker.detachRuntime(client),
+    getManagedChatState: () => managedAuthManager?.getManagedChatState() || {
+      enabled: false,
+      authenticated: false,
+      runtimeReady: false,
+      errorCode: null
+    }
   },
   (event, client) => managedRuntimeAuthRefreshHandler.handle(event, client)
 )
@@ -119,7 +126,7 @@ const screenshotManager = new ScreenshotManager(
   (result) => petWindow?.webContents.send('assistant:attachments-staged', result),
   (message) => petWindow?.webContents.send('assistant:attachment-stage-error', message)
 )
-const managedAuthManager = new ManagedAuthManager(managedEndpointPolicy, app.getVersion(), {
+managedAuthManager = new ManagedAuthManager(managedEndpointPolicy, app.getVersion(), {
   runtimeTokenBroker: managedRuntimeTokenBroker,
   serverClock: managedServerClock,
   onStatusChange: (status) => petWindow?.webContents.send('managed:status-changed', status)
@@ -452,6 +459,11 @@ function registerIpc(): void {
     return managedAuthManager.refreshFeatures()
   })
 
+  ipcMain.handle('managed:get-usage-summary', (event) => {
+    requirePetSender(event)
+    return managedAuthManager.getUsageSummary()
+  })
+
   ipcMain.handle('managed:open-portal', async (event, target: unknown) => {
     requirePetSender(event)
     const portalTarget = requireManagedPortalTarget(target)
@@ -498,6 +510,14 @@ function registerIpc(): void {
   ipcMain.handle('assistant:get-capability-settings', (event) => {
     requirePetSender(event)
     return assistantManager.getCapabilitySettings()
+  })
+
+  ipcMain.handle('assistant:set-chat-source', async (event, source: unknown) => {
+    requirePetSender(event)
+    if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
+      throw new TypeError('Chat 来源无效。')
+    }
+    return assistantManager.setChatSource(source)
   })
 
   ipcMain.handle('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {

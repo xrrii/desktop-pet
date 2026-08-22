@@ -92,7 +92,7 @@ describe('CapabilitySettingsManager', () => {
     })
   })
 
-  it('Phase 1 Managed 选择只返回不支持状态，不自动使用现有 BYOK', () => {
+  it('Managed 不可用时保留选择且不自动使用现有 BYOK', () => {
     state = configuredState()
     const manager = new CapabilitySettingsManager(() => state)
     manager.snapshot()
@@ -104,12 +104,28 @@ describe('CapabilitySettingsManager', () => {
     const snapshot = manager.snapshot()
     expect(snapshot.capabilities.chat).toMatchObject({
       selectedSource: 'managed',
-      effectiveSource: 'mock',
-      status: 'unsupported_client'
+      effectiveSource: 'managed',
+      status: 'provider_unavailable',
+      reason: 'managed_chat_disabled'
     })
     expect(snapshot.capabilities.embedding.effectiveSource).toBe('local')
     expect(snapshot.capabilities.vision.effectiveSource).toBe('disabled')
     expect(snapshot.capabilities.web_search.effectiveSource).toBe('disabled')
+  })
+
+  it('Managed 登录、Runtime 和开关都就绪时才进入官方 Chat', () => {
+    state = configuredState()
+    state.managedChat = { enabled: true, authenticated: true, runtimeReady: true, errorCode: null }
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.snapshot()
+    manager.setSelectedSource('chat', 'managed')
+
+    expect(manager.snapshot().capabilities.chat).toEqual({
+      selectedSource: 'managed',
+      effectiveSource: 'managed',
+      status: 'available',
+      reason: null
+    })
   })
 
   it('Provider 切换失败时可以恢复完整的来源选择', () => {
@@ -136,6 +152,7 @@ function offlineState(): CapabilityConfigurationState {
   return {
     chat: { baseUrl: '', model: 'gpt-4o-mini', configuredKey: false, source: 'environment' },
     chatBackend: 'auto',
+    managedChat: { enabled: false, authenticated: false, runtimeReady: false, errorCode: null },
     embedding: { provider: 'hash', configured: true },
     vision: {
       mode: 'inherit',
@@ -162,6 +179,7 @@ function configuredState(): CapabilityConfigurationState {
       source: 'saved'
     },
     chatBackend: 'auto',
+    managedChat: { enabled: false, authenticated: false, runtimeReady: false, errorCode: null },
     embedding: { provider: 'online', configured: true },
     vision: {
       mode: 'custom',

@@ -42,6 +42,7 @@ import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess, type AssistantRuntimeLifecycle } from './runtimeProcess'
 import type { AssistantRuntimeClient } from './runtimeClient'
 import type { ManagedAuthRefreshRequiredEvent } from '../managed/managedRuntimeAuthRefreshHandler'
+import type { ManagedRuntimeSessionErrorCode } from '../../shared/managed'
 import { EmbeddingModelManager } from './embeddingModelManager'
 import { AssistantToolHost, webToolErrorMessage } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
@@ -83,6 +84,7 @@ export class AssistantManager {
   private readonly capabilitySettings = new CapabilitySettingsManager(() => ({
     chat: this.modelSettings.snapshot(),
     chatBackend: this.modelSettings.backendPreference(),
+    managedChat: this.getManagedChatState(),
     embedding: this.embeddingModels.capabilityState(),
     vision: this.visionSettings.snapshot(),
     webSearch: this.webSettings.snapshot()
@@ -96,11 +98,24 @@ export class AssistantManager {
     event: ManagedAuthRefreshRequiredEvent,
     client: AssistantRuntimeClient
   ) => Promise<void>
+  private readonly getManagedChatState: () => {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  }
 
   constructor(
     onStatus: (status: AssistantRuntimeStatus) => void,
     private readonly onEvent: (event: AssistantEvent) => void,
-    runtimeLifecycle: AssistantRuntimeLifecycle = {},
+    runtimeLifecycle: AssistantRuntimeLifecycle & {
+      getManagedChatState?: () => {
+        enabled: boolean
+        authenticated: boolean
+        runtimeReady: boolean
+        errorCode: ManagedRuntimeSessionErrorCode | string | null
+      }
+    } = {},
     onManagedAuthRefreshRequired: (
       event: ManagedAuthRefreshRequiredEvent,
       client: AssistantRuntimeClient
@@ -113,6 +128,12 @@ export class AssistantManager {
       })
     }
   ) {
+    this.getManagedChatState = runtimeLifecycle.getManagedChatState || (() => ({
+      enabled: false,
+      authenticated: false,
+      runtimeReady: false,
+      errorCode: null
+    }))
     this.onManagedAuthRefreshRequired = onManagedAuthRefreshRequired
     this.runtime = new AssistantRuntimeProcess(
       onStatus,
@@ -147,6 +168,15 @@ export class AssistantManager {
     return this.capabilitySettings.snapshot()
   }
 
+  /** 设置 Chat 来源并重启 Runtime；Managed 不可用时保留选择，不自动改回 BYOK。 */
+  async setChatSource(source: 'byok' | 'managed' | 'disabled'): Promise<AssistantCapabilitySettingsSnapshot> {
+    this.capabilitySettings.setSelectedSource('chat', source)
+    await this.cancelAll()
+    await this.runtime.restart()
+    logInfo('助手 Chat 来源已切换', { source })
+    return this.capabilitySettings.snapshot()
+  }
+
   async testWebSearch(): Promise<number> {
     try {
       return await this.webSearch.testConnection()
@@ -178,7 +208,6 @@ export class AssistantManager {
   /** 保存主模型配置；只有实际变化时才重启 Runtime。 */
   async configureModelSettings(input: AssistantModelSettingsInput): Promise<AssistantModelSettingsSnapshot> {
     const changed = await this.modelSettings.configure(input)
-    this.capabilitySettings.setSelectedSource('chat', 'byok')
     logInfo('assistant model settings configured', { changed, model: input.model.trim().slice(0, 80) })
     if (changed) {
       await this.cancelAll()

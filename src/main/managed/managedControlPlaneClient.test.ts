@@ -144,6 +144,21 @@ describe('ManagedControlPlaneClient', () => {
       .toBe('http://127.0.0.1:18080/api/v1/runtime-sessions/039f8b64-dc93-4b7f-a94d-cf88400f2615')
     expect(fetcher.mock.calls[0][1]?.method).toBe('DELETE')
   })
+
+  it('读取用量摘要时只保留公共额度字段', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      billingMode: 'subscription',
+      periodStart: '2026-08-01T00:00:00Z',
+      periodEnd: '2026-09-01T00:00:00Z',
+      capabilities: { chat: { quotaMode: 'quota', used: 12, remaining: 88, unit: 'tokens' } }
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher)
+
+    await expect(client.getUsageSummary('synthetic-access-token')).resolves.toMatchObject({
+      capabilities: { chat: { used: 12, remaining: 88, unit: 'tokens' } }
+    })
+    expect(String(fetcher.mock.calls[0][0])).toContain('/api/v1/usage/summary')
+  })
 })
 
 /** 返回不含敏感字段的合成设备响应。 */
