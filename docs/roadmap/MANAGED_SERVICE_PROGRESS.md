@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-22
+最后更新时间：2026-08-23
 
 ## 1. 新会话快速开始
 
@@ -55,8 +55,8 @@ Phase 3 Managed Chat MVP 详细开发方案
 ## 3. 当前总览
 
 ```text
-总体状态：Phase 3 In Progress
-当前阶段：Phase 3 Managed Chat MVP（Wave F 自动门禁完成，线上验收待执行）
+总体状态：Phase 3 Done
+当前阶段：Phase 3 Managed Chat MVP（Wave F 自动门禁与受限线上 Provider 冒烟已完成）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
@@ -65,11 +65,11 @@ FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Pro
 桌面 Runtime Managed 消费：Wave D Done；Wave E Done（P3-14 至 P3-16 来源选择、官方 Chat 状态、额度摘要、手动切回 BYOK 与脱敏入口已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：真实 Provider Adapter/模型尚未完成受控选型；Wave F 自动门禁已完成，待受限线上关闭态与 Phase 3 白名单验收
-下一建议工作项：按 Cloud 线上验收清单执行生产关闭态、OAuth/撤销回归；不得开启未实现的真实 Provider
+当前阻塞：无代码交付阻塞；Provider 数据驻留合规证明、白名单范围和生产回滚演练属于发布运营风险
+下一建议工作项：进入 Phase 4 方案评审；Phase 3 继续保持白名单和独立开关，不自动扩大普通用户流量
 ```
 
-当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave E，以及 Wave F 自动门禁。Wave E 已完成 Desktop 官方 Chat 产品入口与真实额度摘要、Web `/account/usage` 真实摘要接入；Wave F 保持生产 Chat 与 Provider 关闭，线上验收不冒充真实 Provider 可用。
+当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave F。Wave F 已完成自动门禁和受限正式 HTTPS 真实 Provider 文本 Chat 冒烟；Desktop 官方 Chat 产品入口、Runtime SSE、真实额度摘要、Web `/account/usage` 和 BYOK 隔离均已闭合。生产 Chat 仍由白名单和独立开关控制。
 
 ## 4. 产品与仓库边界
 
@@ -140,7 +140,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | --- | --- | --- | --- |
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
 | Phase 2 官网、身份、设备和会话 | `Done` | P2-11、P2-W01 至 W05 与正式 HTTPS 验收均已完成 | Phase 3 方案冻结 |
-| Phase 3 Managed Chat MVP | `In Progress` | `P3-00`、Wave B 与 Wave C 已完成 | Wave D Desktop Runtime，从 `P3-10` 开始 |
+| Phase 3 Managed Chat MVP | `Done` | `P3-00`、Wave B 至 Wave F、自动门禁和受限线上 Provider 冒烟均已完成 | Phase 4 其他 Managed 能力 |
 | Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
 | Phase 6 服务端 Agent | `Deferred` | Phase 5 后重新评审 | 不得提前复制本地 Agent |

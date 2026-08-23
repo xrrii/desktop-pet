@@ -1,7 +1,7 @@
 # PetDock Managed Service Phase 3 Chat MVP 开发方案
 
-- 最后更新：2026-08-22
-- 状态：`In Progress`（`P3-10` 至 `P3-13` Desktop Runtime 首轮实现中）
+- 最后更新：2026-08-23
+- 状态：`Done`（P3-00、Wave B 至 Wave F 已完成）
 - 适用仓库：`petdock-cloud`、`desktop-pet`、`petdock-web`
 - 权威契约：`petdock-cloud/contracts/managed-service/v1`
 - 前置条件：Phase 0、Phase 1、Phase 2 均为 `Done`
@@ -32,7 +32,7 @@ Phase 3 直接复用以下既有实现，不重新设计：
 - v1 已定义 `/ai/v1/chat/completions`、请求链路标识、Chat SSE 事件、Usage Event、错误码和 `/api/v1/usage/summary` 草案。
 - Web 已有稳定 `/account/usage` 路由，在真实 Usage Summary 接入前不展示假数字。
 
-当前实施状态：`P3-00`、Wave B 至 Wave E 已完成，Wave F 自动门禁已通过；Wave E 已接入 Desktop 来源选择、官方 Chat 状态、真实额度摘要、手动切回 BYOK、脱敏入口和 Web `/account/usage`。线上最终验收仍受真实 Provider Adapter/模型受控选型约束，生产默认保持关闭。
+当前实施状态：`P3-00`、Wave B 至 Wave F 已完成。Desktop 已接入官方 Chat 来源选择、Runtime SSE、认证刷新、取消、ToolCall、本地 Agent 工具循环、真实额度摘要、手动切回 BYOK 和脱敏入口；Cloud 已完成单 Provider、配额闭合与生产容器边界；Web 已接入真实 Usage Summary。受限正式 HTTPS 环境已完成真实 Provider 文本 Chat 冒烟，生产流量仍保持白名单和独立开关控制。
 
 ## 3. 范围边界
 
@@ -433,7 +433,7 @@ ai-gateway 增加独立 pytest、类型检查、生产镜像构建和依赖审�
 
 ## 15. 完成定义
 
-Phase 3 只有同时满足以下条件才可标记为 `Done`：
+Phase 3 只有同时满足以下条件才可标记为 `Done`；本方案的代码、自动门禁和受限线上验收已满足：
 
 - `P3-00` 与 `P3-01` 至 `P3-16` 全部完成。
 - Cloud 权威契约、Desktop 快照和 Web 生成类型一致。
@@ -445,6 +445,13 @@ Phase 3 只有同时满足以下条件才可标记为 `Done`：
 - 使用合成账号完成受限正式 HTTPS 联调和回滚演练。
 - Windows 安装制品通过生产端点、签名、安装/升级和打包态跨端验收。
 - 普通用户流量仍由独立发布决定；完成代码和白名单 Beta 不等于正式收费上线。
+
+### 18. 最终收尾记录（2026-08-23）
+
+- `P3-00`、`P3-01` 至 `P3-16` 以及 Wave B 至 Wave F 交付均已完成；三仓契约快照、自动测试、生产构建和敏感信息门禁已通过。
+- 受限正式 HTTPS 线上已验证 Desktop OAuth/设备会话、Runtime Token、AI Gateway 外联 DNS、真实 Provider SSE 文本 Chat 和失败关闭边界；Provider 握手日志只记录脱敏状态分类，不记录密钥或正文。
+- 线上修复包含专用 `provider-egress` 网络和 SSE Response 生命周期持有；PostgreSQL、Redis、JWT、Provider Secret 未重建或替换。
+- Phase 3 技术交付标记为 `Done`。白名单范围、正式开关、Provider 数据驻留合规证明和生产回滚演练仍由发布负责人独立控制，不因本次收尾自动扩大普通用户流量或进入收费阶段。
 
 ## 16. 回滚
 
