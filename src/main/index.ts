@@ -882,10 +882,16 @@ if (isPrimaryInstance) {
     registerIpc()
     openPetWindow()
     screenshotManager.registerGlobalShortcut()
-    void managedAuthManager.restoreSession().catch(() => {
-      // 认证编排器正常失败都会返回脱敏状态；这里只兜底未预期的启动异常。
-      logError('managed session restore unexpectedly failed')
-    })
+    void (async () => {
+      try {
+        // 先读取服务端 Feature Flags，再恢复已有会话，避免使用初始化时的关闭态默认值。
+        await managedAuthManager.refreshFeatures()
+        await managedAuthManager.restoreSession()
+      } catch {
+        // 认证编排器正常失败都会返回脱敏状态；这里只兜底未预期的启动异常。
+        logError('managed session restore unexpectedly failed')
+      }
+    })()
     void assistantManager.start().catch((error: unknown) => {
       logError('assistant runtime failed to start', error)
     })
