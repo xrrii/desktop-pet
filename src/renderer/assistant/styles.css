@@ -262,7 +262,13 @@ button:disabled {
 .managed-capability-control {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+.managed-capability-row > .managed-capability-control {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .managed-capability-control > strong {
