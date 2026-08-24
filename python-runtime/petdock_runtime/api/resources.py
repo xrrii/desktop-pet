@@ -133,6 +133,13 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
     ) -> None:
         """发送任务开始后生成图片视觉摘要，登记阶段不调用外部视觉端点。"""
         records = attachments.validate_for_request(request.attachmentIds, request.conversationId)
+        LOGGER.info(
+            "附件视觉准备 source=%s status=%s managedProvider=%s files=%s",
+            vision.config.source,
+            vision.status,
+            managed_vision is not None,
+            len(records),
+        )
         for record in records:
             if record.parser_id != "image-metadata-v1":
                 continue
@@ -158,9 +165,12 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         prepare_attachments,
     )
     LOGGER.info(
-        "Runtime 服务资源已创建 backend=%s embedding=%s",
+        "Runtime 服务资源已创建 backend=%s embedding=%s visionSource=%s visionConfigured=%s managedVision=%s",
         config.resolved_backend,
         embedding.descriptor.id,
+        config.vision_source,
+        config.vision_api_key is not None or config.vision_source == "managed",
+        managed_vision is not None,
     )
     return RuntimeResources(
         memory=memory,

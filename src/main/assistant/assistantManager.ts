@@ -983,6 +983,12 @@ export class AssistantManager {
       }
     }
     const capabilities = this.capabilitySettings.snapshot()
+    logInfo('assistant runtime capability snapshot', {
+      chat: capabilities.capabilities.chat.effectiveSource,
+      vision: capabilities.capabilities.vision.effectiveSource,
+      embedding: capabilities.capabilities.embedding.effectiveSource,
+      webSearch: capabilities.capabilities.web_search.effectiveSource
+    })
     const chatByok = capabilities.capabilities.chat.effectiveSource === 'byok'
     const visionByok = capabilities.capabilities.vision.effectiveSource === 'byok'
     const embeddingByok = capabilities.capabilities.embedding.effectiveSource === 'byok'
