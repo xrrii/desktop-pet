@@ -67,7 +67,7 @@ FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Pro
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：各能力真实 Provider、境内数据驻留证明、生产预算、额度和白名单仍需按能力确认
-下一建议工作项：按方案进入 Wave B 共用底座/ Web Search 实现；所有 Phase 4 开关和公网路由继续保持关闭
+下一建议工作项：按 [Wave B 共用底座方案](../features/MANAGED_SERVICE_PHASE4_WAVE_B_FOUNDATION.md) 实施；所有 Phase 4 开关和公网路由继续保持关闭
 ```
 
 当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave F。Wave F 已完成自动门禁和受限正式 HTTPS 真实 Provider 文本 Chat 冒烟；Desktop 官方 Chat 产品入口、Runtime SSE、真实额度摘要、Web `/account/usage` 和 BYOK 隔离均已闭合。生产 Chat 仍由白名单和独立开关控制。
@@ -255,6 +255,11 @@ Phase 2/3 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Se
 - P4-00 已完成：Cloud 权威契约扩展并同步 Desktop 快照，v1 共 53 个受控文件一致；四项生产开关继续关闭，真实 Provider 和公网路由尚未实现。
 - 验证通过：Cloud 全量 pytest 24 项、TypeScript 契约 1 项、Spring/Jackson 1 项、Desktop 契约 pytest 23 项；Web API 类型生成、typecheck、Vitest 39 项、生产构建和 Nginx 路由检查通过。
 - 下一工作项为按 `Web Search -> Vision -> Embedding -> Rerank` 顺序逐项实现和验收。
+
+### 2026-08-24（Phase 4 Wave B 共用底座方案）
+
+- 新增 `docs/features/MANAGED_SERVICE_PHASE4_WAVE_B_FOUNDATION.md`，冻结能力注册、Entitlement/额度、Usage 预占结算、Runtime Claims、Gateway 中间件、Provider 注册表、可观测性、部署安全和三仓验收边界。
+- Wave B 不实现真实 Provider、不开放 Phase 4 公网路由、不修改生产开关；完成共用门禁后进入 `P4-W01` Managed Web Search。
 
 ### 2026-08-21（Phase 3 Wave C Cloud Chat 数据面）
 

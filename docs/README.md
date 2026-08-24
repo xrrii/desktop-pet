@@ -53,6 +53,7 @@
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |
 | [MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md](features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md) | Active | Phase 2 身份、设备、会话、共享开发环境和跨仓库实施细节 |
 | [MANAGED_SERVICE_PHASE4_CAPABILITIES.md](features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md) | Active | Phase 4 Managed Embedding、Vision、Web Search、Rerank 的跨仓开发、门禁和回滚基线 |
+| [MANAGED_SERVICE_PHASE4_WAVE_B_FOUNDATION.md](features/MANAGED_SERVICE_PHASE4_WAVE_B_FOUNDATION.md) | Active | P4-00 后的共用控制面、配额、Usage、Runtime Claims、Gateway 和 Provider 底座实施方案 |
 
 ### 4.4 路线与进度
 
