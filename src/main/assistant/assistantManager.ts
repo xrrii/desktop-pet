@@ -97,6 +97,7 @@ export class AssistantManager {
   private readonly activeTasks = new Map<string, ActiveTask>()
   private readonly pendingPermissions = new Map<string, PendingPermission>()
   private readonly draftAttachments = new Map<string, AssistantAttachmentSummary>()
+  private visionSourceChange: Promise<void> = Promise.resolve()
   private readonly onManagedAuthRefreshRequired: (
     event: ManagedAuthRefreshRequiredEvent,
     client: AssistantRuntimeClient
@@ -238,11 +239,24 @@ export class AssistantManager {
 
   /** 设置 Vision 独立来源并重启 Runtime；切换模式不会删除 BYOK 视觉密钥。 */
   async setVisionSource(source: 'byok' | 'managed' | 'disabled'): Promise<AssistantCapabilitySettingsSnapshot> {
-    this.capabilitySettings.setSelectedSource('vision', source)
-    await this.cancelAll()
-    await this.runtime.restart()
-    logInfo('助手 Vision 来源已切换', { source })
-    return this.capabilitySettings.snapshot()
+    const operation = this.visionSourceChange.then(async () => {
+      this.capabilitySettings.setSelectedSource('vision', source)
+      await this.cancelAll()
+      const client = await this.runtime.restart()
+      const runtimeCapabilities = await client.getDocumentCapabilities()
+      const runtimeVisionSource = runtimeCapabilities.vision?.source
+      if (source === 'managed' && runtimeVisionSource !== 'managed') {
+        logError('助手 Vision Runtime 来源校验失败', {
+          requestedSource: source,
+          runtimeVisionSource
+        })
+        throw new Error('Vision Runtime 来源未生效，请重试。')
+      }
+      logInfo('助手 Vision 来源已切换', { source, runtimeVisionSource })
+      return this.capabilitySettings.snapshot()
+    })
+    this.visionSourceChange = operation.then(() => undefined, () => undefined)
+    return operation
   }
 
   async testWebSearch(): Promise<number> {
