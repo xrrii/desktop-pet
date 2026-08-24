@@ -15,6 +15,10 @@ describe('ManagedFeatureFlags', () => {
         version: 1,
         managed_login_enabled: true,
         managed_chat_enabled: true,
+        managed_embedding_enabled: true,
+        managed_vision_enabled: true,
+        managed_web_search_enabled: true,
+        managed_rerank_enabled: true,
         minimum_client_version: '0.2.0'
       }), { status: 200 })
     )
@@ -22,8 +26,32 @@ describe('ManagedFeatureFlags', () => {
     await expect(flags.refresh()).resolves.toMatchObject({
       managedLoginEnabled: true,
       managedChatEnabled: true,
+      managedEmbeddingEnabled: true,
+      managedVisionEnabled: true,
+      managedWebSearchEnabled: true,
+      managedRerankEnabled: true,
       minimumClientVersion: '0.2.0',
       errorCode: null
+    })
+  })
+
+  it('Phase 4 开关缺失或类型错误时分别按关闭处理', async () => {
+    const flags = new ManagedFeatureFlags(policy, '0.2.0', async () =>
+      new Response(JSON.stringify({
+        version: 1,
+        managed_login_enabled: true,
+        managed_embedding_enabled: true,
+        managed_vision_enabled: 'true',
+        managed_web_search_enabled: true,
+        minimum_client_version: '0.2.0'
+      }), { status: 200 })
+    )
+
+    await expect(flags.refresh()).resolves.toMatchObject({
+      managedEmbeddingEnabled: true,
+      managedVisionEnabled: false,
+      managedWebSearchEnabled: true,
+      managedRerankEnabled: false
     })
   })
 

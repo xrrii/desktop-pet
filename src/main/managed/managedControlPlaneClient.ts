@@ -205,7 +205,27 @@ function requireUsageSummary(value: unknown): ManagedUsageSummary {
   ) {
     throw new ManagedControlPlaneError(200, 'internal_error', false)
   }
-  const item = chat as Record<string, unknown>
+  const source = capabilities as Record<string, unknown>
+  const parsedCapabilities: ManagedUsageSummary['capabilities'] = {
+    chat: requireUsageCapability(chat)
+  }
+  for (const name of ['embedding', 'vision', 'web_search', 'rerank'] as const) {
+    if (source[name] !== undefined) parsedCapabilities[name] = requireUsageCapability(source[name])
+  }
+  return {
+    billingMode: root.billingMode,
+    periodStart: root.periodStart,
+    periodEnd: root.periodEnd,
+    capabilities: parsedCapabilities
+  }
+}
+
+/** 严格校验单项能力摘要，不保留服务端原始对象引用。 */
+function requireUsageCapability(value: unknown): ManagedUsageSummary['capabilities']['chat'] {
+  if (!value || typeof value !== 'object') {
+    throw new ManagedControlPlaneError(200, 'internal_error', false)
+  }
+  const item = value as Record<string, unknown>
   const used = item.used
   const remaining = item.remaining
   if (
@@ -217,17 +237,10 @@ function requireUsageSummary(value: unknown): ManagedUsageSummary {
     throw new ManagedControlPlaneError(200, 'internal_error', false)
   }
   return {
-    billingMode: root.billingMode,
-    periodStart: root.periodStart,
-    periodEnd: root.periodEnd,
-    capabilities: {
-      chat: {
-        quotaMode: item.quotaMode,
-        used: Number(used),
-        remaining: remaining === null ? null : Number(remaining),
-        unit: item.unit
-      }
-    }
+    quotaMode: item.quotaMode,
+    used: Number(used),
+    remaining: remaining === null ? null : Number(remaining),
+    unit: item.unit
   }
 }
 

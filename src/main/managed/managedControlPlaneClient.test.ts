@@ -150,12 +150,18 @@ describe('ManagedControlPlaneClient', () => {
       billingMode: 'subscription',
       periodStart: '2026-08-01T00:00:00Z',
       periodEnd: '2026-09-01T00:00:00Z',
-      capabilities: { chat: { quotaMode: 'quota', used: 12, remaining: 88, unit: 'tokens' } }
+      capabilities: {
+        chat: { quotaMode: 'quota', used: 12, remaining: 88, unit: 'tokens' },
+        web_search: { quotaMode: 'quota', used: 2, remaining: 18, unit: 'requests' }
+      }
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher)
 
     await expect(client.getUsageSummary('synthetic-access-token')).resolves.toMatchObject({
-      capabilities: { chat: { used: 12, remaining: 88, unit: 'tokens' } }
+      capabilities: {
+        chat: { used: 12, remaining: 88, unit: 'tokens' },
+        web_search: { used: 2, remaining: 18, unit: 'requests' }
+      }
     })
     expect(String(fetcher.mock.calls[0][0])).toContain('/api/v1/usage/summary')
   })

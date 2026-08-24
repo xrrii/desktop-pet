@@ -30,6 +30,10 @@ const DEFAULT_STATUS: ManagedAuthStatus = {
   state: 'disabled',
   managedLoginEnabled: false,
   managedChatEnabled: false,
+  managedEmbeddingEnabled: false,
+  managedVisionEnabled: false,
+  managedWebSearchEnabled: false,
+  managedRerankEnabled: false,
   minimumClientVersion: null,
   errorCode: null,
   sessionSyncState: 'idle',
@@ -803,6 +807,10 @@ export class ManagedAuthManager {
       state: nextState,
       managedLoginEnabled: features.managedLoginEnabled,
       managedChatEnabled: features.managedChatEnabled,
+      managedEmbeddingEnabled: features.managedEmbeddingEnabled,
+      managedVisionEnabled: features.managedVisionEnabled,
+      managedWebSearchEnabled: features.managedWebSearchEnabled,
+      managedRerankEnabled: features.managedRerankEnabled,
       minimumClientVersion: features.minimumClientVersion,
       errorCode: preserveSessionState
         ? this.status.errorCode

@@ -57,7 +57,7 @@ Phase 3 Managed Chat MVP 详细开发方案
 
 ```text
 总体状态：Phase 4 In Progress
-当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00 契约闭合，业务能力尚未实现）
+当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00、Phase 4 Wave B 共用底座 Done）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
@@ -67,7 +67,7 @@ FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Pro
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
 当前阻塞：各能力真实 Provider、境内数据驻留证明、生产预算、额度和白名单仍需按能力确认
-下一建议工作项：按 [Wave B 共用底座方案](../features/MANAGED_SERVICE_PHASE4_WAVE_B_FOUNDATION.md) 实施；所有 Phase 4 开关和公网路由继续保持关闭
+下一建议工作项：进入 `P4-W01` Managed Web Search；所有 Phase 4 开关和公网路由继续保持关闭
 ```
 
 当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave F。Wave F 已完成自动门禁和受限正式 HTTPS 真实 Provider 文本 Chat 冒烟；Desktop 官方 Chat 产品入口、Runtime SSE、真实额度摘要、Web `/account/usage` 和 BYOK 隔离均已闭合。生产 Chat 仍由白名单和独立开关控制。
@@ -260,6 +260,13 @@ Phase 2/3 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Se
 
 - 新增 `docs/features/MANAGED_SERVICE_PHASE4_WAVE_B_FOUNDATION.md`，冻结能力注册、Entitlement/额度、Usage 预占结算、Runtime Claims、Gateway 中间件、Provider 注册表、可观测性、部署安全和三仓验收边界。
 - Wave B 不实现真实 Provider、不开放 Phase 4 公网路由、不修改生产开关；完成共用门禁后进入 `P4-W01` Managed Web Search。
+
+### 2026-08-24（Phase 4 Wave B 共用底座完成）
+
+- Cloud 完成四项独立 Feature Flag、Runtime Claims 过滤、五能力 Usage 预占/结算/摘要、V5 expand 迁移、AI Gateway 能力注册表、失败关闭快照和低基数指标；未接入真实 Phase 4 Provider。
+- Desktop 已消费四项开关和可选多能力 Usage 摘要，缺失/类型错误独立按关闭处理；未新增 Phase 4 UI 或远程调用入口。Web 继续消费既有生成类型，不调用 AI 数据面。
+- 验证通过：Desktop TypeScript、Vitest 168 项、契约 23 项、隔离 Runtime 93 项、检索六项指标 1.0 和生产构建；Cloud pytest 24 项、AI Gateway 50 项/Ruff/mypy、JDK 21 控制面 135 项（Docker/Testcontainers 实跑）、三语言契约和 53 文件制品/快照；Web Vitest 39 项、类型检查、构建和 Nginx 检查。
+- Phase 4 四项生产开关仍为 `false`，Nginx 未开放新路由；下一工作项为 `P4-W01` Managed Web Search。
 
 ### 2026-08-21（Phase 3 Wave C Cloud Chat 数据面）
 

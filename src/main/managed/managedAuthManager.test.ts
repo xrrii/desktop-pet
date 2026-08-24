@@ -26,7 +26,16 @@ const policy: ManagedEndpointPolicy = {
 class FakeFeatureFlags {
   /** 返回始终开启的合成 Feature Flag。 */
   async refresh(): Promise<ManagedFeatureSnapshot> {
-    return { managedLoginEnabled: true, managedChatEnabled: false, minimumClientVersion: '0.2.0', errorCode: null }
+    return {
+      managedLoginEnabled: true,
+      managedChatEnabled: false,
+      managedEmbeddingEnabled: false,
+      managedVisionEnabled: false,
+      managedWebSearchEnabled: false,
+      managedRerankEnabled: false,
+      minimumClientVersion: '0.2.0',
+      errorCode: null
+    }
   }
 }
 
@@ -146,7 +155,16 @@ describe('ManagedAuthManager', () => {
     const manager = new ManagedAuthManager(policy, '0.2.0', {
       featureFlags: {
         async refresh(): Promise<ManagedFeatureSnapshot> {
-          return { managedLoginEnabled: false, managedChatEnabled: false, minimumClientVersion: '0.2.0', errorCode: 'managed_login_disabled' }
+          return {
+            managedLoginEnabled: false,
+            managedChatEnabled: false,
+            managedEmbeddingEnabled: false,
+            managedVisionEnabled: false,
+            managedWebSearchEnabled: false,
+            managedRerankEnabled: false,
+            minimumClientVersion: '0.2.0',
+            errorCode: 'managed_login_disabled'
+          }
         }
       } as never,
       openExternal: async () => {

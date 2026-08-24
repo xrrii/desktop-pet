@@ -5,6 +5,10 @@ import type { ManagedEndpointPolicy } from './managedOAuthTypes'
 export interface ManagedFeatureSnapshot {
   readonly managedLoginEnabled: boolean
   readonly managedChatEnabled: boolean
+  readonly managedEmbeddingEnabled: boolean
+  readonly managedVisionEnabled: boolean
+  readonly managedWebSearchEnabled: boolean
+  readonly managedRerankEnabled: boolean
   readonly minimumClientVersion: string | null
   readonly errorCode: ManagedAuthErrorCode | null
 }
@@ -16,6 +20,10 @@ export class ManagedFeatureFlags {
   private snapshot: ManagedFeatureSnapshot = {
     managedLoginEnabled: false,
     managedChatEnabled: false,
+    managedEmbeddingEnabled: false,
+    managedVisionEnabled: false,
+    managedWebSearchEnabled: false,
+    managedRerankEnabled: false,
     minimumClientVersion: null,
     errorCode: null
   }
@@ -48,6 +56,10 @@ export class ManagedFeatureFlags {
         return this.update({
           managedLoginEnabled: false,
           managedChatEnabled: false,
+          managedEmbeddingEnabled: false,
+          managedVisionEnabled: false,
+          managedWebSearchEnabled: false,
+          managedRerankEnabled: false,
           minimumClientVersion: null,
           errorCode: response.status === 426 ? 'unsupported_client' : 'feature_unavailable'
         })
@@ -57,6 +69,10 @@ export class ManagedFeatureFlags {
         return this.update({
           managedLoginEnabled: false,
           managedChatEnabled: false,
+          managedEmbeddingEnabled: false,
+          managedVisionEnabled: false,
+          managedWebSearchEnabled: false,
+          managedRerankEnabled: false,
           minimumClientVersion: null,
           errorCode: 'feature_unavailable'
         })
@@ -65,6 +81,10 @@ export class ManagedFeatureFlags {
         return this.update({
           managedLoginEnabled: false,
           managedChatEnabled: false,
+          managedEmbeddingEnabled: false,
+          managedVisionEnabled: false,
+          managedWebSearchEnabled: false,
+          managedRerankEnabled: false,
           minimumClientVersion: payload.minimum_client_version,
           errorCode: 'unsupported_client'
         })
@@ -72,6 +92,10 @@ export class ManagedFeatureFlags {
       return this.update({
         managedLoginEnabled: payload.managed_login_enabled,
         managedChatEnabled: payload.managed_chat_enabled === true,
+        managedEmbeddingEnabled: payload.managed_embedding_enabled === true,
+        managedVisionEnabled: payload.managed_vision_enabled === true,
+        managedWebSearchEnabled: payload.managed_web_search_enabled === true,
+        managedRerankEnabled: payload.managed_rerank_enabled === true,
         minimumClientVersion: payload.minimum_client_version,
         errorCode: payload.managed_login_enabled ? null : 'managed_login_disabled'
       })
@@ -79,6 +103,10 @@ export class ManagedFeatureFlags {
       return this.update({
         managedLoginEnabled: false,
         managedChatEnabled: false,
+        managedEmbeddingEnabled: false,
+        managedVisionEnabled: false,
+        managedWebSearchEnabled: false,
+        managedRerankEnabled: false,
         minimumClientVersion: null,
         errorCode: 'feature_unavailable'
       })
@@ -97,6 +125,10 @@ function isFeaturePayload(value: unknown): value is {
   version: 1
   managed_login_enabled: boolean
   managed_chat_enabled?: unknown
+  managed_embedding_enabled?: unknown
+  managed_vision_enabled?: unknown
+  managed_web_search_enabled?: unknown
+  managed_rerank_enabled?: unknown
   minimum_client_version: string
 } {
   if (!value || typeof value !== 'object') {

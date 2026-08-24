@@ -41,18 +41,25 @@ export type ManagedRuntimeSessionErrorCode =
   | 'managed_authentication_required'
   | null
 
-/** Main 内部和 Renderer 可见的官方 Chat 额度摘要，禁止包含 Provider 信息。 */
+/** 单项官方能力的额度摘要，禁止包含 Provider 信息。 */
+export interface ManagedUsageCapability {
+  quotaMode: 'quota' | 'metered'
+  used: number
+  remaining: number | null
+  unit: 'tokens' | 'requests'
+}
+
+/** Main 内部和 Renderer 可见的官方多能力额度摘要。 */
 export interface ManagedUsageSummary {
   billingMode: 'subscription' | 'pay_as_you_go'
   periodStart: string
   periodEnd: string
   capabilities: {
-    chat: {
-      quotaMode: 'quota' | 'metered'
-      used: number
-      remaining: number | null
-      unit: 'tokens' | 'requests'
-    }
+    chat: ManagedUsageCapability
+    embedding?: ManagedUsageCapability
+    vision?: ManagedUsageCapability
+    web_search?: ManagedUsageCapability
+    rerank?: ManagedUsageCapability
   }
 }
 
@@ -117,6 +124,10 @@ export interface ManagedAuthStatus {
   state: ManagedAuthState
   managedLoginEnabled: boolean
   managedChatEnabled: boolean
+  managedEmbeddingEnabled?: boolean
+  managedVisionEnabled?: boolean
+  managedWebSearchEnabled?: boolean
+  managedRerankEnabled?: boolean
   minimumClientVersion: string | null
   errorCode: ManagedAuthErrorCode | null
   sessionSyncState: ManagedSessionSyncState
