@@ -143,6 +143,19 @@ describe('CapabilitySettingsManager', () => {
     })
   })
 
+  it('Managed Vision 在 Runtime 重启期间仍保持 managed 来源', () => {
+    state = configuredState()
+    state.managedVision = { enabled: true, authenticated: true, runtimeReady: false, errorCode: null }
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.setSelectedSource('vision', 'managed')
+
+    expect(manager.snapshot().capabilities.vision).toMatchObject({
+      selectedSource: 'managed',
+      effectiveSource: 'managed',
+      status: 'provider_unavailable'
+    })
+  })
+
   it('Provider 切换失败时可以恢复完整的来源选择', () => {
     const manager = new CapabilitySettingsManager(() => state)
     const backup = manager.captureConfiguration()

@@ -238,7 +238,9 @@ function resolveManagedCapability(
   }
   if (!state.authenticated) return available('managed', 'disabled', 'not_authenticated', 'managed_authentication_required')
   if (!state.runtimeReady || state.errorCode) {
-    return available('managed', 'disabled', 'provider_unavailable', `managed_${capability}_unavailable`)
+    // Runtime 重启期间仍保持 Managed effectiveSource，避免新进程按 BYOK/inherited 启动；
+    // runtimeReady 和 errorCode 继续通过状态字段告知 UI 当前尚未可用。
+    return available('managed', 'managed', 'provider_unavailable', `managed_${capability}_unavailable`)
   }
   return available('managed', 'managed', 'available', null)
 }
