@@ -128,6 +128,21 @@ describe('CapabilitySettingsManager', () => {
     })
   })
 
+  it('Managed Vision 必须独立启用且不会读取 BYOK 配置状态', () => {
+    state = configuredState()
+    state.managedVision = { enabled: true, authenticated: true, runtimeReady: true, errorCode: null }
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.snapshot()
+    manager.setSelectedSource('vision', 'managed')
+
+    expect(manager.snapshot().capabilities.vision).toEqual({
+      selectedSource: 'managed',
+      effectiveSource: 'managed',
+      status: 'available',
+      reason: null
+    })
+  })
+
   it('Provider 切换失败时可以恢复完整的来源选择', () => {
     const manager = new CapabilitySettingsManager(() => state)
     const backup = manager.captureConfiguration()
@@ -148,10 +163,13 @@ describe('CapabilitySettingsManager', () => {
     expect(managed.capabilities.web_search.selectedSource).toBe('managed')
     expect(managed.capabilities.embedding.selectedSource).toBe('local')
 
+    manager.setSelectedSource('vision', 'managed')
+
     manager.setServiceMode('byok')
     const byok = manager.snapshot()
     expect(byok.capabilities.chat.selectedSource).toBe('byok')
     expect(byok.capabilities.web_search.selectedSource).toBe('byok')
+    expect(byok.capabilities.vision.selectedSource).toBe('byok')
   })
 
   it('配置损坏时按当前脱敏状态重新迁移', async () => {

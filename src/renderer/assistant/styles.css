@@ -259,6 +259,18 @@ button:disabled {
   white-space: nowrap;
 }
 
+.managed-capability-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.managed-capability-control > strong {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .settings-section-heading {
   display: flex;
   align-items: baseline;

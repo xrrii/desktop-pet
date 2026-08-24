@@ -44,7 +44,7 @@ class RuntimeConfig:
     vision_api_key: str | None = None
     vision_base_url: str | None = None
     vision_model: str | None = None
-    vision_source: Literal["inherited", "custom"] = "inherited"
+    vision_source: Literal["inherited", "custom", "managed"] = "inherited"
     chat_source: ChatSource | None = None
     managed_ai_base_url: str = "https://ai.petdock.site"
     managed_client_version: str = "0.2.0"
@@ -141,9 +141,8 @@ class RuntimeConfig:
         if not model:
             raise ValueError("PETDOCK_LLM_MODEL cannot be empty.")
 
-        if capabilities.vision == "managed":
-            raise ValueError("Phase 1 尚未启用 Managed Vision 网络适配器。")
-        if capabilities.vision == "disabled":
+        if capabilities.vision in {"managed", "disabled"}:
+            # Managed Adapter 只使用 Runtime 内存短期 Token，不能继承任何 BYOK 凭据。
             vision_api_key = None
             vision_base_url = None
             vision_model = None
@@ -172,7 +171,10 @@ class RuntimeConfig:
             vision_api_key=vision_api_key,
             vision_base_url=vision_base_url,
             vision_model=vision_model,
-            vision_source="custom" if custom_vision else "inherited",
+            vision_source=(
+                "managed" if capabilities.vision == "managed"
+                else "custom" if custom_vision else "inherited"
+            ),
             chat_source=capabilities.chat,
             managed_ai_base_url=managed_ai_base_url,
             managed_client_version=managed_client_version,

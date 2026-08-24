@@ -73,7 +73,7 @@ class ManagedServiceExamplesTest {
         JsonNode webUsage = read("web-usage-summary.json");
         assertEquals("tokens", webUsage.path("chat").path("unit").asText());
         assertEquals(100000, webUsage.path("chat").path("used").asInt() + webUsage.path("chat").path("remaining").asInt());
-        assertEquals("requests", webUsage.path("vision").path("unit").asText());
+        assertEquals("tokens", webUsage.path("vision").path("unit").asText());
         assertEquals("tokens", webUsage.path("embedding").path("unit").asText());
         JsonNode anonymousWebSession = read("web-session-anonymous.json");
         assertEquals(1, anonymousWebSession.path("version").asInt());

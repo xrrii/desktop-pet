@@ -161,10 +161,13 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const byokSettingsPanel = requireElement<HTMLElement>('#byok-settings-panel')
   const chatSourceStatus = requireElement<HTMLElement>('#chat-source-status')
   const managedWebSearchStatus = requireElement<HTMLElement>('#managed-web-search-status')
+  const managedVisionStatus = requireElement<HTMLElement>('#managed-vision-status')
+  const managedVisionEnabled = requireElement<HTMLInputElement>('#managed-vision-enabled')
   const managedUsageRefresh = requireElement<HTMLButtonElement>('#managed-usage-refresh')
   const managedUsagePeriod = requireElement<HTMLElement>('#managed-usage-period')
   const managedUsageChat = requireElement<HTMLElement>('#managed-usage-chat')
   const managedUsageWebSearch = requireElement<HTMLElement>('#managed-usage-web-search')
+  const managedUsageVision = requireElement<HTMLElement>('#managed-usage-vision')
   const managedUsageStatus = requireElement<HTMLElement>('#managed-usage-status')
   const modelBaseUrl = requireElement<HTMLInputElement>('#model-base-url')
   const modelName = requireElement<HTMLInputElement>('#model-name')
@@ -516,6 +519,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   serviceModeManaged.addEventListener('click', () => void changeServiceMode('managed'))
   serviceModeByok.addEventListener('click', () => void changeServiceMode('byok'))
   managedUsageRefresh.addEventListener('click', () => void loadManagedUsageSummary())
+  managedVisionEnabled.addEventListener('change', () => void changeManagedVision())
   modelClearKey.addEventListener('click', () => void clearModelKey())
   managedLogin.addEventListener('click', () => void startManagedLogin())
   managedLogout.addEventListener('click', () => void logoutManaged())
@@ -782,7 +786,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   function renderServiceMode(): void {
     const chat = capabilitySettings?.capabilities.chat
     const webSearch = capabilitySettings?.capabilities.web_search
-    if (!chat || !webSearch) return
+    const vision = capabilitySettings?.capabilities.vision
+    if (!chat || !webSearch || !vision) return
     const mode = selectedServiceMode()
     const managedSelected = mode === 'managed'
     serviceModeManaged.setAttribute('aria-pressed', String(managedSelected))
@@ -800,6 +805,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     chatSourceStatus.textContent = labels[chat.status] || '状态未知'
     managedWebSearchStatus.textContent = labels[webSearch.status] || '状态未知'
+    managedVisionStatus.textContent = labels[vision.status] || '状态未知'
+    managedVisionEnabled.checked = vision.selectedSource === 'managed'
+    managedVisionEnabled.disabled = modelBusy || !managedSelected
     serviceModeStatus.textContent = managedSelected
       ? '账号、额度和官方能力'
       : '使用本机保存的模型与搜索配置'
@@ -815,6 +823,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       managedUsagePeriod.textContent = ''
       managedUsageChat.textContent = '-'
       managedUsageWebSearch.textContent = '-'
+      managedUsageVision.textContent = '-'
       managedUsageStatus.textContent = ''
     } else if (!managedAuthStatus || managedAuthStatus.state !== 'authenticated') {
       managedUsageStatus.textContent = '登录后可查看额度。'
@@ -835,16 +844,40 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       managedUsageWebSearch.textContent = managedUsage.capabilities.web_search
         ? formatManagedCapabilityUsage(managedUsage.capabilities.web_search)
         : '未授权'
+      managedUsageVision.textContent = managedUsage.capabilities.vision
+        ? formatManagedCapabilityUsage(managedUsage.capabilities.vision)
+        : '未授权'
       managedUsageStatus.textContent = ''
     } catch (error) {
       managedUsage = null
       managedUsagePeriod.textContent = ''
       managedUsageChat.textContent = '-'
       managedUsageWebSearch.textContent = '-'
+      managedUsageVision.textContent = '-'
       managedUsageStatus.textContent = '暂时无法读取额度，请稍后重试。'
       showError(error)
     } finally {
       managedUsageBusy = false
+    }
+  }
+
+  /** 图片理解是独立的显式开关，切换服务模式本身不会上传或启用图片。 */
+  async function changeManagedVision(): Promise<void> {
+    if (modelBusy) return
+    modelBusy = true
+    renderModelBusyState()
+    try {
+      capabilitySettings = await window.desktopPet.setAssistantVisionSource(
+        managedVisionEnabled.checked ? 'managed' : 'disabled'
+      )
+      renderServiceMode()
+      clearError()
+    } catch (error) {
+      managedVisionEnabled.checked = !managedVisionEnabled.checked
+      showError(error)
+    } finally {
+      modelBusy = false
+      renderModelBusyState()
     }
   }
 
@@ -1577,6 +1610,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     serviceModeManaged.disabled = modelBusy
     serviceModeByok.disabled = modelBusy
     managedUsageRefresh.disabled = modelBusy || managedUsageBusy
+    managedVisionEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed'
   }
 
   /** 保存主模型设置；Runtime 重启期间短暂显示启动状态。 */
@@ -3717,6 +3751,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       vision_provider_unavailable: '视觉服务暂时不可用',
       vision_provider_timeout: '视觉服务响应超时',
       vision_rate_limited: '视觉服务请求过于频繁',
+      managed_authentication_required: '官方服务登录已过期，请重新登录',
+      managed_capability_not_entitled: '当前账号未授权图片理解',
+      managed_quota_exhausted: '官方图片理解额度已用尽',
       vision_summary_failed: '图片摘要生成失败'
     }
     return messages[error] || error

@@ -334,9 +334,11 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
         "/api/v1/web/account/password",
         "/api/v1/web/entitlements",
         "/api/v1/web/usage/summary",
-        "/api/v1/web/devices",
-        "/api/v1/web/devices/{deviceId}",
-    }
+            "/api/v1/web/devices",
+            "/api/v1/web/devices/{deviceId}",
+            "/api/v1/web/admin/web-search/users",
+            "/api/v1/web/admin/capabilities/users",
+        }
     security_scheme = document["components"]["securitySchemes"]["webSession"]
     assert security_scheme["type"] == "apiKey"
     assert security_scheme["in"] == "cookie"
@@ -603,9 +605,15 @@ def test_p4_00_capabilities_have_independent_contract_boundaries() -> None:
         "candidateMinSimilarity",
         "finalMinSimilarity",
     } <= set(descriptor["required"])
+    vision_descriptor = ai["components"]["schemas"]["VisionDescriptor"]
+    assert vision_descriptor["properties"]["id"]["const"] == "vision-standard"
+    assert set(vision_descriptor["required"]) == {"id", "revision", "promptVersion", "outputSchemaVersion"}
     vision = ai["components"]["schemas"]["VisionRequest"]
-    assert vision["required"] == ["logicalModel", "image"]
+    assert vision["required"] == ["logicalModel", "descriptorRevision", "mimeType", "image"]
     assert vision["properties"]["image"]["format"] == "binary"
+    vision_response = ai["components"]["schemas"]["VisionResponse"]
+    assert vision_response["required"] == ["descriptorRevision", "summary", "usage"]
+    assert ai["components"]["schemas"]["VisionSummary"]["additionalProperties"] is False
     rerank = ai["components"]["schemas"]["RerankRequest"]
     assert rerank["properties"]["logicalModel"]["const"] == "rerank-standard"
     assert rerank["properties"]["candidates"]["maxItems"] == 50
@@ -637,4 +645,4 @@ def test_p4_00_web_summary_supports_real_capability_breakdown() -> None:
     assert "null" in capability["properties"]["remaining"]["type"]
     example = _read_json(EXAMPLE_ROOT / "web-usage-summary.json")
     assert set(example) >= {"chat", "embedding", "vision", "web_search", "rerank"}
-    assert example["vision"]["unit"] == "requests"
+    assert example["vision"]["unit"] == "tokens"

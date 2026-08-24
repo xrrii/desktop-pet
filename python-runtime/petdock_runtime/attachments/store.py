@@ -323,14 +323,17 @@ class AttachmentStore:
                 raise ValueError("附件已经属于其他会话。")
         return records
 
-    def vision_source(self, attachment_id: str) -> tuple[Path, Path]:
-        """返回视觉分析所需的受控源文件和同目录临时派生图路径。"""
+    def vision_source(self, attachment_id: str, conversation_id: str) -> tuple[Path, Path]:
+        """二次确认附件会话归属后返回受控源文件和同目录临时派生图。"""
         row = self._connection.execute(
-            "SELECT relative_storage_path FROM attachments WHERE id=? AND parser_id='image-metadata-v1'",
+            "SELECT relative_storage_path, conversation_id FROM attachments "
+            "WHERE id=? AND parser_id='image-metadata-v1'",
             (attachment_id,),
         ).fetchone()
         if not row:
             raise ValueError("attachment_not_found")
+        if row["conversation_id"] not in {None, conversation_id}:
+            raise ValueError("附件已经属于其他会话。")
         source = self._resolve(str(row["relative_storage_path"]))
         derived = source.parent / "vision-derived.png"
         if derived.parent.resolve() != source.parent.resolve():

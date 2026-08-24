@@ -14,8 +14,8 @@
   },
   "vision": {
     "used": 0,
-    "remaining": 100,
-    "unit": "requests"
+    "remaining": 100000,
+    "unit": "tokens"
   },
   "web_search": {
     "used": 0,

@@ -34,6 +34,7 @@ import type {
   AssistantWebSettingsSnapshot,
   AssistantWindowLayout,
   AssistantVisionSnapshot,
+  AssistantVisionSelectedSource,
   AssistantVisionSettingsInput,
   AssistantVisionSettingsSnapshot,
   MemoryClearScope,
@@ -153,6 +154,9 @@ const api = {
   setAssistantWebSearchSource: (
     source: AssistantWebSearchSelectedSource
   ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-web-search-source', source),
+  setAssistantVisionSource: (
+    source: AssistantVisionSelectedSource
+  ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-vision-source', source),
   setAssistantModelSettings: (
     input: AssistantModelSettingsInput
   ): Promise<AssistantModelSettingsSnapshot> => ipcRenderer.invoke('assistant:set-model-settings', input),

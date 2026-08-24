@@ -39,7 +39,10 @@ class AssistantService:
         self,
         backend: AssistantBackend,
         extractor: MemoryExtractor | None = None,
-        prepare_attachments: Callable[[AssistantRequest], Awaitable[None]] | None = None,
+        prepare_attachments: Callable[
+            [AssistantRequest, Callable[[ManagedAuthRefreshRequired], Awaitable[None]]],
+            Awaitable[None],
+        ] | None = None,
     ) -> None:
         """绑定模型后端和可选的异步记忆分析器。"""
         self._backend = backend
@@ -113,9 +116,24 @@ class AssistantService:
                 }
             )
 
+        async def emit_managed_auth_refresh(output: ManagedAuthRefreshRequired) -> None:
+            """在图片尚未上传的安全点请求 Main 刷新 Runtime Token。"""
+            await session.queue.put(
+                {
+                    "eventVersion": 1,
+                    "type": "managed_auth_refresh_required",
+                    "sequence": 1,
+                    "taskId": output.task_id,
+                    "traceId": output.trace_id,
+                    "requestId": output.request_id,
+                    "reason": "token_expired",
+                    "outputStarted": False,
+                }
+            )
+
         try:
             if self._prepare_attachments:
-                await self._prepare_attachments(request)
+                await self._prepare_attachments(request, emit_managed_auth_refresh)
             while True:
                 waiting_for_tool = False
                 async for output in self._backend.stream(request, tool_result):

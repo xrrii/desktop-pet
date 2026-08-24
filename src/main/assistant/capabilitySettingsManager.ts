@@ -33,6 +33,12 @@ export interface CapabilityConfigurationState {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   }
+  managedVision?: {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  }
   embedding: {
     provider: 'hash' | 'local' | 'online'
     configured: boolean
@@ -84,11 +90,14 @@ export class CapabilitySettingsManager {
     this.save(selected)
   }
 
-  /** 原子更新 Chat 与 Web Search 来源，供设置页在两种服务模式间切换。 */
+  /** 原子更新 Chat 与 Web Search；离开官方模式时也停止 Managed Vision。 */
   setServiceMode(mode: AssistantServiceMode): void {
     const selected = this.loadOrMigrate(this.getState())
     selected.capabilities.chat = mode
     selected.capabilities.web_search = mode
+    if (mode === 'byok' && selected.capabilities.vision === 'managed') {
+      selected.capabilities.vision = 'byok'
+    }
     this.save(selected)
   }
 
@@ -193,7 +202,7 @@ function resolveSnapshot(
       ? available('byok', 'byok')
       : available('byok', 'disabled', 'not_configured', 'byok_not_configured')
     : selected.capabilities.vision === 'managed'
-      ? available('managed', 'disabled', 'unsupported_client', 'managed_not_supported')
+      ? resolveManagedCapability('vision', state.managedVision)
       : available('disabled', 'disabled', 'disabled', 'user_disabled')
 
   const webSearch = selected.capabilities.web_search === 'byok'
@@ -201,7 +210,7 @@ function resolveSnapshot(
       ? available('byok', 'byok')
       : available('byok', 'disabled', 'not_configured', 'byok_not_configured')
     : selected.capabilities.web_search === 'managed'
-      ? resolveManagedCapability('managed', state.managedWebSearch)
+      ? resolveManagedCapability('web_search', state.managedWebSearch)
       : available('disabled', 'disabled', 'disabled', 'user_disabled')
 
   return {
@@ -220,18 +229,18 @@ function resolveSnapshot(
 
 /** 计算独立 Managed Web Search 的脱敏状态，不自动切换 BYOK。 */
 function resolveManagedCapability(
-  selectedSource: 'managed',
-  state: CapabilityConfigurationState['managedWebSearch']
+  capability: 'vision' | 'web_search',
+  state: CapabilityConfigurationState['managedWebSearch'] | CapabilityConfigurationState['managedVision']
 ) {
-  if (!state?.enabled) return available(selectedSource, 'disabled', 'provider_unavailable', 'managed_web_search_disabled')
+  if (!state?.enabled) return available('managed', 'disabled', 'provider_unavailable', `managed_${capability}_disabled`)
   if (state.errorCode === 'managed_capability_not_entitled') {
-    return available(selectedSource, 'disabled', 'not_entitled', 'managed_web_search_not_entitled')
+    return available('managed', 'disabled', 'not_entitled', `managed_${capability}_not_entitled`)
   }
-  if (!state.authenticated) return available(selectedSource, 'disabled', 'not_authenticated', 'managed_authentication_required')
+  if (!state.authenticated) return available('managed', 'disabled', 'not_authenticated', 'managed_authentication_required')
   if (!state.runtimeReady || state.errorCode) {
-    return available(selectedSource, 'disabled', 'provider_unavailable', 'managed_web_search_unavailable')
+    return available('managed', 'disabled', 'provider_unavailable', `managed_${capability}_unavailable`)
   }
-  return available(selectedSource, 'managed', 'available', null)
+  return available('managed', 'managed', 'available', null)
 }
 
 /** 根据服务端开关、账号会话和 Runtime Lease 计算官方 Chat，不进行隐式 BYOK 回退。 */

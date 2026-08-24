@@ -57,17 +57,17 @@ Phase 3 Managed Chat MVP 详细开发方案
 
 ```text
 总体状态：Phase 4 In Progress
-当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00、Wave B、Wave C Done；准备进入 Wave D Managed Vision）
+当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00、Wave B、Wave C、Wave D Done；准备进入 Wave E Managed Embedding）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
 FastAPI AI 数据面：Phase 3 Wave C Done；Phase 4 Wave C Done（Managed Web Search 火山 Provider、Usage 闭合、正式精确路由和受限真实调用已完成）
-桌面 Runtime Managed 消费：Wave D Done；Wave E Done（P3-14 至 P3-16 来源选择、官方 Chat 状态、额度摘要、手动切回 BYOK 与脱敏入口已完成）
+桌面 Runtime Managed 消费：Phase 3 Wave D、Wave E Done；Phase 4 Wave D Done（Managed Vision Adapter、Descriptor、安全派生图上传、独立官方开关和真实 Token 额度已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：无 Wave C 技术阻塞；数据驻留、训练使用和保留期限证明仍是扩大白名单前的持续发布控制项
-下一建议工作项：进入 Wave D Managed Vision；Embedding 与 Rerank 继续保持关闭且公网路径不存在
+当前阻塞：无 Wave D 技术阻塞；Vision 真实密钥注入和受限账号线上调用由发布负责人按增量部署文档验收
+下一建议工作项：进入 Wave E Managed Embedding；Rerank 继续保持关闭且公网路径不存在
 ```
 
 当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave F。Wave F 已完成自动门禁和受限正式 HTTPS 真实 Provider 文本 Chat 冒烟；Desktop 官方 Chat 产品入口、Runtime SSE、真实额度摘要、Web `/account/usage` 和 BYOK 隔离均已闭合。生产 Chat 仍由白名单和独立开关控制。
@@ -277,6 +277,14 @@ Phase 2/3 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Se
 - 受限正式环境已完成火山搜索 Secret 注入、Provider 开启、`POST /ai/v1/web/search` 精确路由、管理员授权、真实 `requests` 额度展示和 Desktop 真实搜索闭环；未开放 `/web/fetch`。
 - 收尾修复包括：管理员更新单项授权时统一用户全部 Entitlement Version、OpenAI-compatible 工具历史转换、Nginx Web Search 超时配置去重、代理 Fake-IP DNS 与 SSRF 边界兼容，以及设置页“官方服务 / 自有配置”互斥展示。
 - Wave C 技术交付标记为 `Done`。数据驻留、训练使用和保留期限证明、白名单扩容与回滚演练继续作为发布负责人控制项；未完成证明时不得扩大普通用户范围，也不影响 Wave D 在关闭态开发和受限验收。
+
+### 2026-08-24（Phase 4 Wave D Managed Vision 完成）
+
+- Runtime 新增独立 Managed Vision Adapter：先读取 Cloud Descriptor，再上传当前会话附件生成的无 EXIF/GPS 安全派生图；响应 Revision 不一致、缺少可靠 Usage 或协议异常均失败关闭。
+- Vision 缓存签名绑定 Descriptor Revision，缓存仍只保存结构化摘要；取消、缓存命中和所有失败路径都会删除临时派生图，图片上传后不自动重放请求。
+- 官方服务设置页增加独立图片理解开关和真实 Token 额度；切换回 BYOK 会停止 Managed Vision，但不会删除任何 BYOK Secret 或视觉配置。
+- 最终门禁通过：Desktop TypeScript、Vitest 175 项、契约 23 项、Runtime 97 项、Retrieval 评测、生产构建与生产制品检查；Cloud/Desktop 受控契约快照 53 个文件一致。
+- Wave D 技术交付标记为 `Done`；下一工作项为 Wave E Managed Embedding。
 
 ### 2026-08-21（Phase 3 Wave C Cloud Chat 数据面）
 

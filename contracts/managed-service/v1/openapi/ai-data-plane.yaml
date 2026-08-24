@@ -275,6 +275,7 @@ paths:
                         descriptor:
                           oneOf:
                             - { $ref: '#/components/schemas/EmbeddingDescriptor' }
+                            - { $ref: '#/components/schemas/VisionDescriptor' }
                             - { type: 'null' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
   /ai/v1/health:
@@ -479,23 +480,53 @@ components:
             maxItems: 8192
             items: { type: number }
         usage: { $ref: '#/components/schemas/Usage' }
+    VisionDescriptor:
+      type: object
+      additionalProperties: false
+      required: [id, revision, promptVersion, outputSchemaVersion]
+      properties:
+        id: { type: string, const: vision-standard }
+        revision: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._-]+$' }
+        promptVersion: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._-]+$' }
+        outputSchemaVersion: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._-]+$' }
     VisionRequest:
       type: object
       additionalProperties: false
-      required: [logicalModel, image]
+      required: [logicalModel, descriptorRevision, mimeType, image]
       properties:
         logicalModel: { type: string, const: vision-standard }
+        descriptorRevision: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._-]+$' }
         image:
           type: string
           format: binary
           description: 用户明确加入会话的安全派生图片；服务端拒绝路径和远程 URL。
         mimeType: { type: string, enum: [image/png, image/jpeg, image/webp] }
+    VisionSummary:
+      type: object
+      additionalProperties: false
+      required: [title, summary, visibleText, observations, limitations]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        summary: { type: string, minLength: 1, maxLength: 4000 }
+        visibleText:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 500 }
+        observations:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 500 }
+        limitations:
+          type: array
+          maxItems: 50
+          items: { type: string, minLength: 1, maxLength: 500 }
     VisionResponse:
       type: object
       additionalProperties: false
-      required: [summary, usage]
+      required: [descriptorRevision, summary, usage]
       properties:
-        summary: { type: string, maxLength: 20000 }
+        descriptorRevision: { type: string, minLength: 1, maxLength: 64 }
+        summary: { $ref: '#/components/schemas/VisionSummary' }
         usage: { $ref: '#/components/schemas/Usage' }
     RerankCandidate:
       type: object

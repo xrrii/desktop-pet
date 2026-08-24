@@ -78,7 +78,7 @@ test('Managed Service v1 固定样例兼容 TypeScript', async () => {
   assert.equal(webUsage.chat.unit, 'tokens')
   assert.equal(webUsage.chat.used + webUsage.chat.remaining, 100000)
   assert.equal(webUsage.embedding.unit, 'tokens')
-  assert.equal(webUsage.vision.unit, 'requests')
+  assert.equal(webUsage.vision.unit, 'tokens')
   assert.equal(webUsage.web_search.unit, 'requests')
   assert.equal(webUsage.rerank.unit, 'tokens')
 

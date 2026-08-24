@@ -17,12 +17,15 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Awaitable, Callable
 from typing import Literal
 
 import httpx
 from PIL import Image, ImageDraw, ImageFont
 
 from ..documents.parser import derive_safe_image
+from ..agent.contracts import ManagedAuthRefreshRequired
+from .managed_provider import ManagedVisionError, ManagedVisionProvider
 
 LOGGER = logging.getLogger("petdock.vision")
 PROMPT_VERSION = "vision-summary-v1"
@@ -44,18 +47,18 @@ class VisionConfiguration:
     base_url: str | None
     api_key: str | None
     model: str | None
-    source: Literal["inherited", "custom"] = "inherited"
+    source: Literal["inherited", "custom", "managed"] = "inherited"
 
     @property
     def configured(self) -> bool:
         """判断视觉请求所需字段是否完整。"""
-        return bool(self.base_url and self.api_key and self.model)
+        return self.source == "managed" or bool(self.base_url and self.api_key and self.model)
 
     @property
     def signature(self) -> str:
         """生成不包含密钥本体的配置签名。"""
         key_version = hashlib.sha256((self.api_key or "").encode("utf-8")).hexdigest()[:16]
-        value = "\n".join((self.base_url or "", self.model or "", key_version, PROTOCOL_VERSION))
+        value = "\n".join((self.source, self.base_url or "", self.model or "", key_version, PROTOCOL_VERSION))
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -83,9 +86,15 @@ class VisionSummary:
 class VisionAnalyzer:
     """执行主动能力探测、安全图片摘要、取消和隐私缓存。"""
 
-    def __init__(self, config: VisionConfiguration, db_path: str) -> None:
+    def __init__(
+        self,
+        config: VisionConfiguration,
+        db_path: str,
+        managed_provider: ManagedVisionProvider | None = None,
+    ) -> None:
         """初始化隔离分析器和只保存文本摘要的 SQLite 缓存。"""
         self.config = config
+        self._managed_provider = managed_provider
         self.status: VisionStatus = "untested" if config.configured else "unconfigured"
         self.last_error: str | None = None
         self._tasks: dict[str, asyncio.Task[VisionSummary]] = {}
@@ -115,18 +124,23 @@ class VisionAnalyzer:
         self._restore_capability_state()
 
     def close(self) -> None:
-        """取消未完成请求并关闭摘要缓存。"""
+        """取消未完成请求并关闭摘要缓存；保留既有同步测试和调用约定。"""
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()
         self._connection.close()
+
+    async def close_managed_provider(self) -> None:
+        """异步关闭独立 Managed 连接池。"""
+        if self._managed_provider:
+            await self._managed_provider.close()
 
     def snapshot(self) -> dict[str, object]:
         """返回不含 URL 查询参数、凭据和密钥的视觉能力状态。"""
         return {
             "status": self.status,
             "source": self.config.source,
-            "model": self.config.model or "",
+            "model": "vision-standard" if self.config.source == "managed" else self.config.model or "",
             "configured": self.config.configured,
             "lastError": self.last_error,
             "protocolVersion": PROTOCOL_VERSION,
@@ -137,6 +151,20 @@ class VisionAnalyzer:
         if not self.config.configured:
             self.status = "unconfigured"
             self.last_error = "vision_not_configured"
+            return self.snapshot()
+        if self.config.source == "managed":
+            if not self._managed_provider:
+                self.status = "unavailable"
+                self.last_error = "vision_provider_unavailable"
+                return self.snapshot()
+            try:
+                await self._managed_provider.probe()
+                self.status = "supported"
+                self.last_error = None
+            except ManagedVisionError as error:
+                self.status = "unavailable"
+                self.last_error = error.code
+            LOGGER.info("Managed 视觉能力探测完成 status=%s", self.status)
             return self.snapshot()
         code = f"{secrets.randbelow(1_000_000):06d}"
         image = Image.new("RGB", (320, 120), "white")
@@ -163,19 +191,41 @@ class VisionAnalyzer:
         LOGGER.info("视觉能力探测完成 status=%s modelConfigured=%s", self.status, bool(self.config.model))
         return self.snapshot()
 
-    async def analyze(self, task_id: str, source: Path, derived: Path) -> VisionSummary:
+    async def analyze(
+        self,
+        task_id: str,
+        source: Path,
+        derived: Path,
+        notify_refresh: Callable[[ManagedAuthRefreshRequired], Awaitable[None]] | None = None,
+    ) -> VisionSummary:
         """净化图片后生成固定摘要；同一任务可由 cancel 主动取消。"""
-        if self.status != "supported":
+        if self.status != "supported" and self.config.source != "managed":
             raise VisionRequestError(self.status, _status_code(self.status))
-        derive_safe_image(source, derived)
         try:
+            derive_safe_image(source, derived)
             image_bytes = derived.read_bytes()
             image_hash = hashlib.sha256(image_bytes).hexdigest()
-            cache_key = hashlib.sha256(f"{image_hash}:{self.config.signature}:{PROMPT_VERSION}".encode()).hexdigest()
+            managed_revision: str | None = None
+            if self.config.source == "managed":
+                if not self._managed_provider or notify_refresh is None:
+                    raise VisionRequestError("unavailable", "vision_provider_unavailable")
+                try:
+                    managed_revision = await self._managed_provider.prepare(task_id, notify_refresh)
+                except ManagedVisionError as error:
+                    raise VisionRequestError("unavailable", error.code) from error
+            signature = self._cache_signature()
+            cache_key = hashlib.sha256(f"{image_hash}:{signature}:{PROMPT_VERSION}".encode()).hexdigest()
             cached = self._cache_get(cache_key)
             if cached:
                 return cached
-            task = asyncio.create_task(self._analyze_bytes(image_bytes))
+            if self.config.source == "managed":
+                if not self._managed_provider or notify_refresh is None:
+                    raise VisionRequestError("unavailable", "vision_provider_unavailable")
+                task = asyncio.create_task(self._analyze_managed(
+                    task_id, image_bytes, notify_refresh, managed_revision,
+                ))
+            else:
+                task = asyncio.create_task(self._analyze_bytes(image_bytes))
             self._tasks[task_id] = task
             try:
                 summary = await task
@@ -186,6 +236,33 @@ class VisionAnalyzer:
         finally:
             # 缓存命中、取消、响应损坏和数据库异常都不得留下派生图片。
             derived.unlink(missing_ok=True)
+
+    async def _analyze_managed(
+        self,
+        task_id: str,
+        image_bytes: bytes,
+        notify_refresh: Callable[[ManagedAuthRefreshRequired], Awaitable[None]],
+        descriptor_revision: str | None,
+    ) -> VisionSummary:
+        """调用官方独立 Adapter 并复用同一套严格摘要字段校验。"""
+        assert self._managed_provider
+        try:
+            result = await self._managed_provider.analyze(
+                task_id, image_bytes, notify_refresh, descriptor_revision,
+            )
+            self.status = "supported"
+            self.last_error = None
+            return _summary_from_value(result.summary)
+        except ManagedVisionError as error:
+            self.status = "unavailable"
+            self.last_error = error.code
+            raise VisionRequestError("unavailable", error.code) from error
+
+    def _cache_signature(self) -> str:
+        """缓存签名必须绑定 BYOK 配置或 Managed Descriptor Revision。"""
+        if self._managed_provider:
+            return self._managed_provider.signature
+        return self.config.signature
 
     def cancel(self, task_id: str) -> bool:
         """取消指定视觉请求，取消后不写入缓存。"""
@@ -283,7 +360,8 @@ class VisionAnalyzer:
         with self._connection:
             self._connection.execute(
                 "INSERT OR REPLACE INTO vision_summary_cache VALUES (?, ?, ?, ?, ?)",
-                (cache_key, self.config.signature, PROMPT_VERSION, json.dumps(summary.as_dict(), ensure_ascii=False), datetime.now(timezone.utc).isoformat()),
+                (cache_key, self._cache_signature(), PROMPT_VERSION,
+                 json.dumps(summary.as_dict(), ensure_ascii=False), datetime.now(timezone.utc).isoformat()),
             )
  
 
@@ -364,6 +442,22 @@ def _extract_json(value: str) -> str:
     if start < 0 or end <= start:
         raise ValueError("视觉摘要不是 JSON。")
     return value[start : end + 1]
+
+
+def _summary_from_value(value: object) -> VisionSummary:
+    """从 BYOK 或 Managed 响应构造同一份有界视觉摘要。"""
+    if not isinstance(value, dict):
+        raise VisionRequestError("unavailable", "vision_summary_failed")
+    try:
+        return VisionSummary(
+            title=_bounded_string(value.get("title"), 200),
+            summary=_bounded_string(value.get("summary"), 4_000),
+            visible_text=_bounded_list(value.get("visibleText"), 100, 500),
+            observations=_bounded_list(value.get("observations"), 100, 500),
+            limitations=_bounded_list(value.get("limitations"), 50, 500),
+        )
+    except (TypeError, ValueError) as error:
+        raise VisionRequestError("unavailable", "vision_summary_failed") from error
 
 
 def _bounded_string(value: object, limit: int) -> str:

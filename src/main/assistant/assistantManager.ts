@@ -86,6 +86,7 @@ export class AssistantManager {
     chat: this.modelSettings.snapshot(),
     chatBackend: this.modelSettings.backendPreference(),
     managedChat: this.getManagedChatState(),
+    managedVision: this.getManagedVisionState(),
     managedWebSearch: this.getManagedWebSearchState(),
     embedding: this.embeddingModels.capabilityState(),
     vision: this.visionSettings.snapshot(),
@@ -112,6 +113,13 @@ export class AssistantManager {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   } = () => ({ enabled: false, authenticated: false, runtimeReady: false, errorCode: null })
+  private getManagedVisionState: () => {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  } = () => ({ enabled: false, authenticated: false, runtimeReady: false, errorCode: null })
+  private getManagedAiBaseUrl: () => string = () => 'https://ai.petdock.site'
 
   constructor(
     onStatus: (status: AssistantRuntimeStatus) => void,
@@ -124,6 +132,13 @@ export class AssistantManager {
         errorCode: ManagedRuntimeSessionErrorCode | string | null
       }
       managedWebSearch?: ManagedWebSearchAccess
+      getManagedVisionState?: () => {
+        enabled: boolean
+        authenticated: boolean
+        runtimeReady: boolean
+        errorCode: ManagedRuntimeSessionErrorCode | string | null
+      }
+      getManagedAiBaseUrl?: () => string
       getManagedWebSearchState?: () => {
         enabled: boolean
         authenticated: boolean
@@ -150,6 +165,8 @@ export class AssistantManager {
       errorCode: null
     }))
     this.getManagedWebSearchState = runtimeLifecycle.getManagedWebSearchState || this.getManagedWebSearchState
+    this.getManagedVisionState = runtimeLifecycle.getManagedVisionState || this.getManagedVisionState
+    this.getManagedAiBaseUrl = runtimeLifecycle.getManagedAiBaseUrl || this.getManagedAiBaseUrl
     this.webSearch.setManagedAccess(runtimeLifecycle.managedWebSearch || null)
     this.onManagedAuthRefreshRequired = onManagedAuthRefreshRequired
     this.runtime = new AssistantRuntimeProcess(
@@ -216,6 +233,15 @@ export class AssistantManager {
   setWebSearchSource(source: 'byok' | 'managed' | 'disabled'): AssistantCapabilitySettingsSnapshot {
     this.capabilitySettings.setSelectedSource('web_search', source)
     logInfo('助手 Web Search 来源已切换', { source })
+    return this.capabilitySettings.snapshot()
+  }
+
+  /** 设置 Vision 独立来源并重启 Runtime；切换模式不会删除 BYOK 视觉密钥。 */
+  async setVisionSource(source: 'byok' | 'managed' | 'disabled'): Promise<AssistantCapabilitySettingsSnapshot> {
+    this.capabilitySettings.setSelectedSource('vision', source)
+    await this.cancelAll()
+    await this.runtime.restart()
+    logInfo('助手 Vision 来源已切换', { source })
     return this.capabilitySettings.snapshot()
   }
 
@@ -988,6 +1014,7 @@ export class AssistantManager {
         }
     return {
       PETDOCK_CLIENT_VERSION: app.getVersion(),
+      PETDOCK_AI_BASE_URL: this.getManagedAiBaseUrl(),
       ...modelEnvironment,
       ...embeddingEnvironment,
       ...visionEnvironment,

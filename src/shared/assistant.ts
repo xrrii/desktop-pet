@@ -147,7 +147,7 @@ export type AssistantVisionStatus =
 
 export interface AssistantVisionSnapshot {
   status: AssistantVisionStatus
-  source: 'inherited' | 'custom'
+  source: 'inherited' | 'custom' | 'managed'
   model: string
   configured: boolean
   lastError: string | null

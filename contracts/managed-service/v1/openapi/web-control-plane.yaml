@@ -16,6 +16,8 @@ tags:
     description: 官网当前服务访问与计费模式快照
   - name: Web Device
     description: 官网活动桌面设备查询与显式撤销
+  - name: Web Admin
+    description: 仅管理员可访问的用户能力授权管理
 paths:
   /api/v1/web/session:
     get:
@@ -250,6 +252,145 @@ paths:
           $ref: '#/components/responses/CapabilityNotEntitled'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/web/admin/capabilities/users:
+    get:
+      tags: [Web Admin]
+      summary: 查询用户 Managed 能力授权
+      description: 仅管理员可访问；capability 只允许当前开放管理的能力白名单。
+      operationId: listAdminCapabilityUsers
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: capability
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/AdminManagedCapability'
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        '200':
+          description: 指定能力的用户授权摘要
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCapabilityUser'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+    put:
+      tags: [Web Admin]
+      summary: 更新用户 Managed 能力授权
+      description: 仅管理员可访问；更新会同步递增用户全部授权版本，桌面端需重新获取 Runtime Token。
+      operationId: updateAdminCapabilityUser
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+        - name: username
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Username'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCapabilityUpdateRequest'
+      responses:
+        '200':
+          description: 更新后的用户授权摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCapabilityUser'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+  /api/v1/web/admin/web-search/users:
+    get:
+      tags: [Web Admin]
+      summary: 查询用户 Managed Web Search 授权
+      description: 仅 username 为配置管理员且带有 ROLE_ADMIN 的官网 Session 可访问。
+      operationId: listAdminWebSearchUsers
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        '200':
+          description: 用户授权摘要
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminWebSearchUser'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+    put:
+      tags: [Web Admin]
+      summary: 更新用户 Managed Web Search 授权
+      description: 仅管理员可访问；更新会递增用户授权版本，桌面端需重新获取 Runtime Token。
+      operationId: updateAdminWebSearchUser
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+        - name: username
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Username'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminWebSearchUpdateRequest'
+      responses:
+        '200':
+          description: 更新后的用户授权摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminWebSearchUser'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
   /api/v1/web/devices:
     get:
       tags: [Web Device]
@@ -439,6 +580,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
+    AdminRequired:
+      description: 仅管理员账号可访问
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
     WebSessionSnapshot:
       type: object
@@ -464,7 +611,7 @@ components:
     WebProfile:
       type: object
       additionalProperties: false
-      required: [username, displayName, email, emailVerified, passwordEnabled]
+      required: [username, displayName, email, emailVerified, passwordEnabled, admin]
       properties:
         username:
           $ref: '#/components/schemas/Username'
@@ -479,6 +626,94 @@ components:
         emailVerified:
           type: boolean
         passwordEnabled:
+          type: boolean
+        admin:
+          type: boolean
+          description: 服务端根据角色判定的管理员标记
+    AdminWebSearchUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, monthlyLimit]
+      properties:
+        enabled:
+          type: boolean
+        monthlyLimit:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 2000000000
+    AdminManagedCapability:
+      type: string
+      enum: [web_search, vision]
+    AdminCapabilityUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [capability, enabled, monthlyLimit]
+      properties:
+        capability:
+          $ref: '#/components/schemas/AdminManagedCapability'
+        enabled:
+          type: boolean
+        monthlyLimit:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 2000000000
+    AdminCapabilityUser:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, capability, enabled, remaining, unit, version, expiresAt, planSupportsCapability]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        displayName:
+          type: string
+        capability:
+          $ref: '#/components/schemas/AdminManagedCapability'
+        enabled:
+          type: boolean
+        remaining:
+          type: integer
+          format: int64
+          minimum: 0
+        unit:
+          type: string
+          enum: [requests, tokens]
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+        planSupportsCapability:
+          type: boolean
+    AdminWebSearchUser:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, enabled, remaining, unit, version, expiresAt, planSupportsWebSearch]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        displayName:
+          type: string
+        enabled:
+          type: boolean
+        remaining:
+          type: integer
+          format: int64
+          minimum: 0
+        unit:
+          type: string
+          const: requests
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+        planSupportsWebSearch:
           type: boolean
     RegisterRequest:
       type: object

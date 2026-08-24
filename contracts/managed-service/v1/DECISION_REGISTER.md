@@ -360,6 +360,7 @@
 
 - Embedding Descriptor 必须包含逻辑 ID、Revision、Dimensions、Tokenizer、归一化、Pooling、查询/文档前缀、Chunk 策略和检索阈值；任一变化都生成新的 Signature，向量空间禁止混写。
 - Vision 只接受单张由客户端安全派生的 PNG/JPEG/WebP 图片，校验 MIME、魔数、解码后字节、宽高、总像素和动图策略；不接受路径或远程 URL。
+- Vision Descriptor 固定包含公开逻辑 ID、Revision、提示版本和输出 Schema 版本；请求必须携带 Revision，响应回显同一 Revision，客户端缓存按 Revision 隔离。Vision 只返回固定结构化摘要，不返回 Provider 原始正文。
 - Rerank 只接受本地召回和准入后的候选 ID/正文，数据面只能返回原 ID 的有限分数，不得新增候选或修改正文。
 - Embedding/Rerank 按输入 Token 计量，Vision 按可靠输入/输出 Token 计量，Web Search 按成功 Provider 请求计量；无可靠用量时进入 `failed` 并保留预占。
 

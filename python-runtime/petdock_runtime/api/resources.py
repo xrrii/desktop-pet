@@ -25,6 +25,9 @@ from ..skills.installer import SkillInstaller
 from ..skills.registry import SkillRegistry
 from ..skills.store import SkillStore
 from ..vision.analyzer import VisionAnalyzer, VisionConfiguration, VisionRequestError
+from ..vision.managed_provider import ManagedVisionProvider
+from ..agent.contracts import ManagedAuthRefreshRequired
+from collections.abc import Awaitable, Callable
 
 """Runtime 服务资源的创建、依赖装配和关闭顺序。"""
 
@@ -57,6 +60,7 @@ class RuntimeResources:
         await self.managed_auth_refresh.close()
         await self.chat_models.close()
         await self.knowledge.close()
+        await self.vision.close_managed_provider()
         self.vision.close()
         self.skills.close()
         self.attachments.cleanup_drafts()
@@ -72,6 +76,15 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
     memory = MemoryStore(config.memory_db_path)
     parser_registry = DocumentParserRegistry()
     attachments = AttachmentStore(config.memory_db_path, config.attachment_root, parser_registry)
+    managed_session = ManagedSessionStore()
+    managed_auth_refresh = ManagedAuthRefreshCoordinator()
+    managed_vision = ManagedVisionProvider(
+        config.managed_ai_base_url,
+        config.managed_client_version,
+        config.managed_device_id,
+        managed_session,
+        managed_auth_refresh,
+    ) if config.vision_source == "managed" else None
     vision = VisionAnalyzer(
         VisionConfiguration(
             config.vision_base_url,
@@ -80,6 +93,7 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
             config.vision_source,
         ),
         config.memory_db_path,
+        managed_vision,
     )
     artifacts = ArtifactStore(config.memory_db_path, config.artifact_root)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
@@ -101,8 +115,6 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
     skill_store = SkillStore(config.skills_db_path)
     skills = SkillRegistry(config.skills_root, skill_store)
     skill_installer = SkillInstaller(config.skills_root, skills)
-    managed_session = ManagedSessionStore()
-    managed_auth_refresh = ManagedAuthRefreshCoordinator()
     chat_models = ChatModelFactory(
         config.chat_source or ("byok" if config.resolved_backend == "langchain" else "mock"),
         api_key=config.api_key,
@@ -115,16 +127,21 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         managed_auth_refresh=managed_auth_refresh,
     )
 
-    async def prepare_attachments(request: AssistantRequest) -> None:
+    async def prepare_attachments(
+        request: AssistantRequest,
+        notify_refresh: Callable[[ManagedAuthRefreshRequired], Awaitable[None]],
+    ) -> None:
         """发送任务开始后生成图片视觉摘要，登记阶段不调用外部视觉端点。"""
         records = attachments.validate_for_request(request.attachmentIds, request.conversationId)
         for record in records:
             if record.parser_id != "image-metadata-v1":
                 continue
-            if vision.status != "supported":
+            if vision.status != "supported" and vision.config.source != "managed":
                 raise VisionRequestError(vision.status, _vision_status_code(vision.status))
-            source, derived = attachments.vision_source(record.id)
-            summary = await vision.analyze(f"{request.taskId}:{record.id}", source, derived)
+            source, derived = attachments.vision_source(record.id, request.conversationId)
+            summary = await vision.analyze(
+                f"{request.taskId}:{record.id}", source, derived, notify_refresh,
+            )
             attachments.apply_vision_summary(record.id, summary.as_dict())
 
     assistant = AssistantService(

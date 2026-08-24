@@ -127,6 +127,18 @@ assistantManager = new AssistantManager(
         errorCode: status?.runtimeSessionErrorCode || null
       }
     },
+    getManagedVisionState: () => {
+      const status = managedAuthManager?.getStatus()
+      return {
+        enabled: status?.managedVisionEnabled === true,
+        authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
+        runtimeReady: status?.runtimeSessionState === 'ready',
+        errorCode: status?.runtimeSessionErrorCode || null
+      }
+    },
+    getManagedAiBaseUrl: () => (
+      managedEndpointPolicy.aiDataPlaneBaseUrl || managedEndpointPolicy.controlPlaneBaseUrl
+    ).toString().replace(/\/$/, ''),
     managedWebSearch: {
       selected: () => assistantManager?.getCapabilitySettings().capabilities.web_search.selectedSource === 'managed',
       enabled: () => managedAuthManager?.getStatus().managedWebSearchEnabled === true,
@@ -550,6 +562,13 @@ function registerIpc(): void {
       throw new TypeError('Web Search 来源无效。')
     }
     return assistantManager.setWebSearchSource(source)
+  })
+  ipcMain.handle('assistant:set-vision-source', (event, source: unknown) => {
+    requirePetSender(event)
+    if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
+      throw new TypeError('Vision 来源无效。')
+    }
+    return assistantManager.setVisionSource(source)
   })
 
   ipcMain.handle('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {
