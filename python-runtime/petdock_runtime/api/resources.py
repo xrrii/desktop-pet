@@ -60,6 +60,9 @@ class RuntimeResources:
         await self.managed_auth_refresh.close()
         await self.chat_models.close()
         await self.knowledge.close()
+        close_embedding = getattr(self.embedding, "close", None)
+        if close_embedding:
+            close_embedding()
         await self.vision.close_managed_provider()
         self.vision.close()
         self.skills.close()
@@ -97,7 +100,7 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
     )
     artifacts = ArtifactStore(config.memory_db_path, config.artifact_root)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
-    embedding = create_embedding_provider(config)
+    embedding = create_embedding_provider(config, managed_session)
     attachment_index = AttachmentIndexStore(config.attachment_index_root, embedding)
     attachment_index.reconcile(attachments.conversation_ids())
     attachment_analysis = AttachmentAnalysisService(attachments, attachment_index, embedding)

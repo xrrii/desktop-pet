@@ -56,7 +56,7 @@
 冻结处理：
 
 - Phase 1 不新增第二套通用 Embedding 接口，不移动现有实现。
-- Managed Embedding 必须实现现有 `EmbeddingProvider`。
+- Managed Embedding 必须实现现有 `EmbeddingProvider`；Wave E 使用服务器本地 `bge-base-zh-v1.5`，Desktop 不保存或上传 Embedding API Key。
 - Managed Descriptor 的逻辑模型 ID、Revision、Dimensions 和 Tokenizer 变化必须产生新的 Signature。
 - 不同 Signature 的向量禁止混写；切换后使用新 Collection 或显式重建。
 

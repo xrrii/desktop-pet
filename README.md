@@ -206,7 +206,7 @@ PetDock 会处理模型密钥、本地文件和可能触发系统操作的工具
 
 ## Roadmap
 
-本地 Runtime、BYOK、官方账号、Managed Chat、Managed Web Search 和 Managed Vision 已完成。下一工作项为 Managed Embedding；生产流量仍由各能力白名单和独立开关控制。开发基线见 [Phase 4 多能力开发方案](docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)。
+本地 Runtime、BYOK、官方账号、Managed Chat、Managed Web Search 和 Managed Vision 已完成。Managed Embedding 正在接入服务器本地 `bge-base-zh-v1.5`（不调用外部向量 API）；生产流量仍由各能力白名单和独立开关控制。开发基线见 [Phase 4 多能力开发方案](docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)。
 
 ## 许可证
 

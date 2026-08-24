@@ -136,6 +136,15 @@ assistantManager = new AssistantManager(
         errorCode: status?.runtimeSessionErrorCode || null
       }
     },
+    getManagedEmbeddingState: () => {
+      const status = managedAuthManager?.getStatus()
+      return {
+        enabled: status?.managedEmbeddingEnabled === true,
+        authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
+        runtimeReady: status?.runtimeSessionState === 'ready',
+        errorCode: status?.runtimeSessionErrorCode || null
+      }
+    },
     getManagedAiBaseUrl: () => (
       managedEndpointPolicy.aiDataPlaneBaseUrl || managedEndpointPolicy.controlPlaneBaseUrl
     ).toString().replace(/\/$/, ''),

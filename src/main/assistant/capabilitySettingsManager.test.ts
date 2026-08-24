@@ -108,7 +108,8 @@ describe('CapabilitySettingsManager', () => {
       status: 'provider_unavailable',
       reason: 'managed_chat_disabled'
     })
-    expect(snapshot.capabilities.embedding.effectiveSource).toBe('local')
+    expect(snapshot.capabilities.embedding.effectiveSource).toBe('managed')
+    expect(snapshot.capabilities.embedding.status).toBe('provider_unavailable')
     expect(snapshot.capabilities.vision.effectiveSource).toBe('disabled')
     expect(snapshot.capabilities.web_search.effectiveSource).toBe('disabled')
   })

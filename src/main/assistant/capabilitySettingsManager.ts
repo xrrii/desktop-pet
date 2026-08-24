@@ -39,6 +39,12 @@ export interface CapabilityConfigurationState {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   }
+  managedEmbedding?: {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  }
   embedding: {
     provider: 'hash' | 'local' | 'online'
     configured: boolean
@@ -194,7 +200,7 @@ function resolveSnapshot(
       ? available('byok', 'byok')
       : available('byok', 'local', 'not_configured', 'byok_not_configured')
     : selected.capabilities.embedding === 'managed'
-      ? available('managed', 'local', 'unsupported_client', 'managed_not_supported')
+      ? resolveManagedEmbedding(state.managedEmbedding)
       : available('local', 'local')
 
   const vision = selected.capabilities.vision === 'byok'
@@ -243,6 +249,19 @@ function resolveManagedCapability(
     return available('managed', 'managed', 'provider_unavailable', `managed_${capability}_unavailable`)
   }
   return available('managed', 'managed', 'available', null)
+}
+
+/** 计算 Managed Embedding 的脱敏状态，不因 Runtime 重启回退到本地 Hash。 */
+function resolveManagedEmbedding(state: CapabilityConfigurationState['managedEmbedding']) {
+  if (!state?.enabled) return available('managed', 'managed', 'provider_unavailable', 'managed_embedding_disabled')
+  if (state.errorCode === 'managed_capability_not_entitled') {
+    return available('managed', 'managed', 'not_entitled', 'managed_embedding_not_entitled')
+  }
+  if (!state.authenticated) return available('managed', 'managed', 'not_authenticated', 'managed_authentication_required')
+  if (!state.runtimeReady || state.errorCode) {
+    return available('managed', 'managed', 'provider_unavailable', 'managed_embedding_unavailable')
+  }
+  return available('managed', 'managed')
 }
 
 /** 根据服务端开关、账号会话和 Runtime Lease 计算官方 Chat，不进行隐式 BYOK 回退。 */

@@ -15,7 +15,7 @@ from .providers.selector import (
 """Runtime 启动配置及环境变量解析。"""
 
 BackendName = Literal["mock", "langchain"]
-EmbeddingProviderName = Literal["hash", "local", "online"]
+EmbeddingProviderName = Literal["hash", "local", "online", "managed"]
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,7 @@ class RuntimeConfig:
     embedding_base_url: str | None = None
     embedding_model: str | None = None
     embedding_dimensions: int | None = None
+    embedding_descriptor_revision: str = "bge-base-zh-v1.5"
     attachment_root: str = "attachments"
     artifact_root: str = "artifacts"
     attachment_index_root: str = ":memory:"
@@ -97,8 +98,8 @@ class RuntimeConfig:
             os.getcwd(), "assistant", "session-index"
         )
         embedding_provider = os.environ.get("PETDOCK_EMBEDDING_PROVIDER", "hash").strip().lower()
-        if embedding_provider not in {"hash", "local", "online"}:
-            raise ValueError("PETDOCK_EMBEDDING_PROVIDER must be hash, local, or online.")
+        if embedding_provider not in {"hash", "local", "online", "managed"}:
+            raise ValueError("PETDOCK_EMBEDDING_PROVIDER must be hash, local, online, or managed.")
         embedding_model_dir = os.environ.get("PETDOCK_EMBEDDING_MODEL_DIR", "").strip() or None
         embedding_descriptor_json = (
             os.environ.get("PETDOCK_EMBEDDING_DESCRIPTOR_JSON", "").strip() or None
@@ -108,6 +109,9 @@ class RuntimeConfig:
         embedding_model = os.environ.get("PETDOCK_EMBEDDING_MODEL", "").strip() or None
         raw_dimensions = os.environ.get("PETDOCK_EMBEDDING_DIMENSIONS", "").strip()
         embedding_dimensions = int(raw_dimensions) if raw_dimensions else None
+        embedding_descriptor_revision = os.environ.get(
+            "PETDOCK_EMBEDDING_DESCRIPTOR_REVISION", "bge-base-zh-v1.5"
+        ).strip()
         custom_vision = any(
             os.environ.get(name, "").strip()
             for name in ("PETDOCK_VISION_API_KEY", "PETDOCK_VISION_BASE_URL", "PETDOCK_VISION_MODEL")
@@ -168,6 +172,7 @@ class RuntimeConfig:
             embedding_base_url=embedding_base_url,
             embedding_model=embedding_model,
             embedding_dimensions=embedding_dimensions,
+            embedding_descriptor_revision=embedding_descriptor_revision,
             vision_api_key=vision_api_key,
             vision_base_url=vision_base_url,
             vision_model=vision_model,

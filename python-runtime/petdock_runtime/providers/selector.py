@@ -86,11 +86,11 @@ def resolve_backend(source: ChatSource, has_chat_api_key: bool) -> Literal["mock
 
 def validate_embedding_source(source: EmbeddingSource, provider: str) -> None:
     """校验 Main 下发的有效来源与现有 Embedding Provider 一致。"""
-    if source == "managed":
-        raise ValueError("Phase 1 尚未启用 Managed Embedding 网络适配器。")
+    if source == "managed" and provider != "managed":
+        raise ValueError("Embedding 来源为 Managed，但 Runtime Provider 不是 managed。")
     if source == "byok" and provider != "online":
         raise ValueError("Embedding 来源为 BYOK，但 Runtime Provider 不是 online。")
-    if source == "local" and provider == "online":
+    if source == "local" and provider in {"online", "managed"}:
         raise ValueError("Embedding 来源为 local，但 Runtime Provider 仍为 online。")
 
 

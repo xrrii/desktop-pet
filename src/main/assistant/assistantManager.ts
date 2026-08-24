@@ -88,6 +88,7 @@ export class AssistantManager {
     managedChat: this.getManagedChatState(),
     managedVision: this.getManagedVisionState(),
     managedWebSearch: this.getManagedWebSearchState(),
+    managedEmbedding: this.getManagedEmbeddingState(),
     embedding: this.embeddingModels.capabilityState(),
     vision: this.visionSettings.snapshot(),
     webSearch: this.webSettings.snapshot()
@@ -120,6 +121,12 @@ export class AssistantManager {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   } = () => ({ enabled: false, authenticated: false, runtimeReady: false, errorCode: null })
+  private getManagedEmbeddingState: () => {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  } = () => ({ enabled: false, authenticated: false, runtimeReady: false, errorCode: null })
   private getManagedAiBaseUrl: () => string = () => 'https://ai.petdock.site'
 
   constructor(
@@ -134,6 +141,12 @@ export class AssistantManager {
       }
       managedWebSearch?: ManagedWebSearchAccess
       getManagedVisionState?: () => {
+        enabled: boolean
+        authenticated: boolean
+        runtimeReady: boolean
+        errorCode: ManagedRuntimeSessionErrorCode | string | null
+      }
+      getManagedEmbeddingState?: () => {
         enabled: boolean
         authenticated: boolean
         runtimeReady: boolean
@@ -167,6 +180,7 @@ export class AssistantManager {
     }))
     this.getManagedWebSearchState = runtimeLifecycle.getManagedWebSearchState || this.getManagedWebSearchState
     this.getManagedVisionState = runtimeLifecycle.getManagedVisionState || this.getManagedVisionState
+    this.getManagedEmbeddingState = runtimeLifecycle.getManagedEmbeddingState || this.getManagedEmbeddingState
     this.getManagedAiBaseUrl = runtimeLifecycle.getManagedAiBaseUrl || this.getManagedAiBaseUrl
     this.webSearch.setManagedAccess(runtimeLifecycle.managedWebSearch || null)
     this.onManagedAuthRefreshRequired = onManagedAuthRefreshRequired
@@ -1006,6 +1020,7 @@ export class AssistantManager {
     const chatByok = capabilities.capabilities.chat.effectiveSource === 'byok'
     const visionByok = capabilities.capabilities.vision.effectiveSource === 'byok'
     const embeddingByok = capabilities.capabilities.embedding.effectiveSource === 'byok'
+    const embeddingManaged = capabilities.capabilities.embedding.effectiveSource === 'managed'
     const embeddingState = this.embeddingModels.capabilityState()
 
     const modelEnvironment = chatByok || visionByok
@@ -1017,6 +1032,12 @@ export class AssistantManager {
         }
     const embeddingEnvironment = embeddingByok
       ? this.embeddingModels.runtimeEnvironment()
+      : embeddingManaged
+        ? {
+            PETDOCK_EMBEDDING_PROVIDER: 'managed',
+            PETDOCK_EMBEDDING_DESCRIPTOR_REVISION: 'bge-base-zh-v1.5',
+            PETDOCK_EMBEDDING_DIMENSIONS: '768'
+          }
       : {
           PETDOCK_EMBEDDING_PROVIDER: 'hash',
           PETDOCK_EMBEDDING_API_KEY: '',

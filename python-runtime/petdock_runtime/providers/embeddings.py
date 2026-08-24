@@ -289,10 +289,22 @@ def descriptor_from_dict(value: dict[str, object]) -> EmbeddingDescriptor:
     )
 
 
-def create_embedding_provider(config: RuntimeConfig) -> EmbeddingProvider:
+def create_embedding_provider(config: RuntimeConfig, managed_session=None) -> EmbeddingProvider:
     """根据已校验的 Runtime 配置创建活动 Embedding Provider。"""
     if config.embedding_provider == "hash":
         provider: EmbeddingProvider = LocalHashEmbedding()
+    elif config.embedding_provider == "managed":
+        if managed_session is None:
+            raise ValueError("Managed Embedding 会话服务未准备。")
+        from .managed_embedding import ManagedEmbeddingProvider
+        provider = ManagedEmbeddingProvider(
+            config.managed_ai_base_url,
+            config.managed_client_version,
+            config.managed_device_id,
+            managed_session,
+            config.embedding_descriptor_revision,
+            config.embedding_dimensions or 768,
+        )
     elif config.embedding_provider == "local":
         if not config.embedding_model_dir or not config.embedding_descriptor_json:
             raise ValueError("本地 Embedding 配置不完整。")
@@ -319,7 +331,9 @@ def create_embedding_provider(config: RuntimeConfig) -> EmbeddingProvider:
             model=str(config.embedding_model),
             dimensions=int(config.embedding_dimensions),
         )
-    provider.health_check()
+    # Managed Embedding 需要 Runtime Lease，启动时只校验配置，不主动消耗额度。
+    if config.embedding_provider != "managed":
+        provider.health_check()
     return provider
 
 
