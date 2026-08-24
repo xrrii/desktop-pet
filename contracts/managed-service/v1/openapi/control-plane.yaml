@@ -294,6 +294,18 @@ components:
         managed_chat_enabled:
           type: boolean
           description: Phase 3 Managed Chat 独立开关；字段缺失、类型错误或请求失败时客户端必须按 false 处理。
+        managed_embedding_enabled:
+          type: boolean
+          description: Phase 4 Managed Embedding 独立开关；缺失或异常时按 false 处理。
+        managed_vision_enabled:
+          type: boolean
+          description: Phase 4 Managed Vision 独立开关；缺失或异常时按 false 处理。
+        managed_web_search_enabled:
+          type: boolean
+          description: Phase 4 Managed Web Search 独立开关；缺失或异常时按 false 处理。
+        managed_rerank_enabled:
+          type: boolean
+          description: Phase 4 Managed Rerank 独立开关；缺失或异常时按 false 处理。
         minimum_client_version: { type: string, pattern: '^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$' }
     RuntimeSessionRequest:
       type: object

@@ -196,6 +196,7 @@ assets/pets/<pet-id>/
 - [RAG 检索设计](docs/features/RAG_RETRIEVAL_OPTIMIZATION.md)
 - [Skill 系统](docs/features/SKILL_SYSTEM_DEVELOPMENT.md)
 - [双模式服务实施计划](docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md)
+- [Phase 4 多能力开发方案](docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)
 
 ## 安全与隐私
 
@@ -205,7 +206,7 @@ PetDock 会处理模型密钥、本地文件和可能触发系统操作的工具
 
 ## Roadmap
 
-当前版本以本地 Runtime 和用户自选模型服务为主。后续计划在保持本地模式的同时，增加官方账号与托管能力入口，两种模式共享客户端领域协议并保持服务实现解耦。设计基线见 [双模式服务实施计划](docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md)。
+本地 Runtime、BYOK、官方账号和 Managed Chat MVP 已完成。当前进入 Phase 4，在保持本地数据与工具边界的前提下，按独立门禁接入 Managed Web Search、Vision、Embedding 和 Rerank；生产流量仍由各能力白名单和独立开关控制。开发基线见 [Phase 4 多能力开发方案](docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)。
 
 ## 许可证
 

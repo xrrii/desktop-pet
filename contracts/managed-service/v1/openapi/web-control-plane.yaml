@@ -227,8 +227,8 @@ paths:
   /api/v1/web/usage/summary:
     get:
       tags: [Web Usage]
-      summary: 获取当前免费 Beta 周期的真实 Chat 用量摘要
-      description: 只读取 PostgreSQL 已提交的 Usage 事实；未开通时返回稳定错误，不使用全零数据伪装。
+      summary: 获取当前免费 Beta 周期的真实 Managed 能力用量摘要
+      description: 只读取 PostgreSQL 已提交的 Usage 事实；未开通时返回稳定错误，不使用全零数据伪装。Phase 4 能力字段按服务端真实授权按需返回。
       operationId: getWebUsageSummary
       security:
         - webSession: []
@@ -236,7 +236,7 @@ paths:
         - $ref: '#/components/parameters/RequestId'
       responses:
         '200':
-          description: 当前 Chat 用量摘要
+          description: 当前 Managed 能力用量摘要
           headers:
             Cache-Control:
               $ref: '#/components/headers/NoStore'
@@ -585,21 +585,32 @@ components:
           type: string
           format: date-time
         chat:
-          type: object
-          additionalProperties: false
-          required: [used, remaining, unit]
-          properties:
-            used:
-              type: integer
-              format: int64
-              minimum: 0
-            remaining:
-              type: integer
-              format: int64
-              minimum: 0
-            unit:
-              type: string
-              const: tokens
+          $ref: '#/components/schemas/WebUsageCapabilitySummary'
+        embedding:
+          $ref: '#/components/schemas/WebUsageCapabilitySummary'
+        vision:
+          $ref: '#/components/schemas/WebUsageCapabilitySummary'
+        web_search:
+          $ref: '#/components/schemas/WebUsageCapabilitySummary'
+        rerank:
+          $ref: '#/components/schemas/WebUsageCapabilitySummary'
+    WebUsageCapabilitySummary:
+      type: object
+      additionalProperties: false
+      required: [used, remaining, unit]
+      properties:
+        used:
+          type: integer
+          format: int64
+          minimum: 0
+        remaining:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: 配额模式返回剩余量；按量模式返回 null，不表示免费或无限。
+        unit:
+          type: string
+          enum: [tokens, requests]
     Username:
       type: string
       minLength: 3

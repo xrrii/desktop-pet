@@ -2,5 +2,9 @@
   "version": 1,
   "managed_login_enabled": true,
   "managed_chat_enabled": false,
+  "managed_embedding_enabled": false,
+  "managed_vision_enabled": false,
+  "managed_web_search_enabled": false,
+  "managed_rerank_enabled": false,
   "minimum_client_version": "0.2.0"
 }

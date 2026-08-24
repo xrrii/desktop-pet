@@ -333,3 +333,41 @@
 - 模型名固定为 `deepseek-v4-flash-vision-exp`；上游必须同时支持 SSE、Tool Calling 和可靠 Usage 返回，缺少 Usage 或工具参数无法闭合时按无效响应失败。
 - 服务商及实际接口必须满足中国大陆数据驻留要求；当前非敏感配置使用 `https://api.deepseek.com` 作为不含查询参数或片段的 HTTPS API 根地址，但该公开域名本身不构成区域合规证明，生产启用前仍须取得服务商说明并通过白名单联调。
 - API Key 只允许通过服务器 Docker Secret 文件注入 AI Gateway，不得进入 `.env`、镜像层、日志、契约、测试快照或客户端。
+
+## 7. Phase 4 多能力决定
+
+### `D-P4-01` 四项能力的独立开关与来源
+
+状态：`Frozen`
+
+- Phase 4 只扩展 `embedding-standard`、`vision-standard`、`web-search-standard` 和 `rerank-standard` 四个逻辑能力；实际 Provider、地址、Revision、预算和凭据不进入公共契约。
+- 四项能力分别使用 `managed_embedding_enabled`、`managed_vision_enabled`、`managed_web_search_enabled` 和 `managed_rerank_enabled`；字段缺失、类型错误、请求失败或版本不兼容时对应能力必须失败关闭。
+- Embedding 允许 `byok`、`managed`、`local`；Vision 允许 `byok`、`managed`、`disabled`；Web Search 允许 `byok`、`managed`、`disabled`；Rerank 只允许 `managed`、`disabled`。
+- Managed 不自动回退到 BYOK。Embedding 仅可使用已经就绪且 Signature 独立的 Local Hash 影子索引；Rerank 仅回退到现有 Weighted RRF/本地评分。
+
+### `D-P4-02` 数据所有权与调用路径
+
+状态：`Frozen`
+
+- Embedding、Vision 和 Rerank 由 Python Runtime 通过短期 Runtime Token 直接调用 FastAPI AI 数据面；Spring Boot 不进入数据热路径。
+- Web Search 由 Electron Main 选择 Provider 并调用 FastAPI 的搜索候选接口；候选 URL、DNS、SSRF、重定向、MIME、正文大小和抓取始终由 Main 执行。
+- Cloud 不接收网页正文、用户磁盘路径、未加入会话的图片或本地工具权限；不新增 `/ai/v1/web/fetch`。
+- Web 只调用 Spring Boot Web API，不上传 Chunk、图片、查询或候选，也不持有 Runtime Token。
+
+### `D-P4-03` Descriptor、数据预算与用量
+
+状态：`Frozen`
+
+- Embedding Descriptor 必须包含逻辑 ID、Revision、Dimensions、Tokenizer、归一化、Pooling、查询/文档前缀、Chunk 策略和检索阈值；任一变化都生成新的 Signature，向量空间禁止混写。
+- Vision 只接受单张由客户端安全派生的 PNG/JPEG/WebP 图片，校验 MIME、魔数、解码后字节、宽高、总像素和动图策略；不接受路径或远程 URL。
+- Rerank 只接受本地召回和准入后的候选 ID/正文，数据面只能返回原 ID 的有限分数，不得新增候选或修改正文。
+- Embedding/Rerank 按输入 Token 计量，Vision 按可靠输入/输出 Token 计量，Web Search 按成功 Provider 请求计量；无可靠用量时进入 `failed` 并保留预占。
+
+### `D-P4-04` 失败关闭、幂等与发布
+
+状态：`Frozen`
+
+- 每次请求必须同时满足客户端选择、Feature Flag、Runtime Token capability、Entitlement、实时 capability 和客户端版本检查；任一失败不得调用 Provider。
+- 复用 Phase 3 的 `trace_id`、`request_id`、`attempt_id` 和 `reserved -> settled|released|failed` 状态机；同一请求标识携带不同能力、逻辑模型或指纹时返回幂等冲突。
+- Provider 调用后不自动重试、不跨 Provider、不跨区域；取消、超时、断流和内部配额失败必须闭合到确定终态。
+- Phase 4 路由按能力精确开放；每项能力都必须独立完成关闭态、白名单真实 Provider、数据驻留、敏感扫描和回滚门禁，不能因 Phase 3 Chat 完成而自动放量。

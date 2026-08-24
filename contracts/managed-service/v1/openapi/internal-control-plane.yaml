@@ -14,7 +14,7 @@ paths:
   /internal/v1/usage/reservations:
     post:
       operationId: reserveManagedChatUsage
-      summary: 为一次逻辑 Chat 请求幂等预占 Beta 额度
+      summary: 为一次逻辑 Managed 能力请求幂等预占 Beta 额度
       description: 仅 reserved 状态允许同身份、同指纹重放；已有任一终态时返回 usage_state_conflict，禁止再次调用 Provider。
       tags: [Internal Usage]
       parameters:
@@ -145,8 +145,8 @@ components:
         sessionId: { type: string, format: uuid }
         userId: { type: string, format: uuid }
         deviceId: { type: string, format: uuid }
-        capability: { type: string, const: chat }
-        logicalModel: { type: string, const: chat-standard }
+        capability: { type: string, enum: [chat, embedding, vision, web_search, rerank] }
+        logicalModel: { type: string, enum: [chat-standard, embedding-standard, vision-standard, web-search-standard, rerank-standard] }
         requestFingerprint:
           type: string
           pattern: '^[a-f0-9]{64}$'

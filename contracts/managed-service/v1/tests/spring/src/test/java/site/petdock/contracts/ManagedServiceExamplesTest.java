@@ -53,6 +53,10 @@ class ManagedServiceExamplesTest {
         JsonNode featureFlags = read("feature-flags.json");
         assertTrue(featureFlags.path("managed_login_enabled").asBoolean());
         assertFalse(featureFlags.path("managed_chat_enabled").asBoolean());
+        assertFalse(featureFlags.path("managed_embedding_enabled").asBoolean());
+        assertFalse(featureFlags.path("managed_vision_enabled").asBoolean());
+        assertFalse(featureFlags.path("managed_web_search_enabled").asBoolean());
+        assertFalse(featureFlags.path("managed_rerank_enabled").asBoolean());
         JsonNode chatRequest = read("chat-request.json");
         assertEquals("chat-standard", chatRequest.path("logicalModel").asText());
         assertTrue(chatRequest.path("stream").asBoolean());
@@ -69,6 +73,8 @@ class ManagedServiceExamplesTest {
         JsonNode webUsage = read("web-usage-summary.json");
         assertEquals("tokens", webUsage.path("chat").path("unit").asText());
         assertEquals(100000, webUsage.path("chat").path("used").asInt() + webUsage.path("chat").path("remaining").asInt());
+        assertEquals("requests", webUsage.path("vision").path("unit").asText());
+        assertEquals("tokens", webUsage.path("embedding").path("unit").asText());
         JsonNode anonymousWebSession = read("web-session-anonymous.json");
         assertEquals(1, anonymousWebSession.path("version").asInt());
         assertFalse(anonymousWebSession.path("authenticated").asBoolean());

@@ -471,8 +471,14 @@ def test_p3_00_internal_usage_protocol_is_frozen() -> None:
     reserve_operation = internal["paths"]["/internal/v1/usage/reservations"]["post"]
     assert "已有任一终态" in reserve_operation["description"]
     reserve = internal["components"]["schemas"]["UsageReservationRequest"]
-    assert reserve["properties"]["capability"]["const"] == "chat"
-    assert reserve["properties"]["logicalModel"]["const"] == "chat-standard"
+    assert reserve["properties"]["capability"]["enum"] == ["chat", "embedding", "vision", "web_search", "rerank"]
+    assert reserve["properties"]["logicalModel"]["enum"] == [
+        "chat-standard",
+        "embedding-standard",
+        "vision-standard",
+        "web-search-standard",
+        "rerank-standard",
+    ]
     assert reserve["properties"]["requestFingerprint"]["pattern"] == "^[a-f0-9]{64}$"
     terminal = internal["components"]["schemas"]["UsageTerminalResponse"]
     assert set(terminal["properties"]["status"]["enum"]) == {"settled", "released", "failed"}
@@ -529,7 +535,8 @@ def test_p3_00_sse_usage_and_web_summary_are_frozen() -> None:
     assert operation["operationId"] == "getWebUsageSummary"
     assert operation["security"] == [{"webSession": []}]
     summary = web["components"]["schemas"]["WebUsageSummary"]
-    assert summary["properties"]["chat"]["properties"]["unit"]["const"] == "tokens"
+    assert summary["properties"]["chat"]["$ref"] == "#/components/schemas/WebUsageCapabilitySummary"
+    assert "tokens" in web["components"]["schemas"]["WebUsageCapabilitySummary"]["properties"]["unit"]["enum"]
     example = _read_json(EXAMPLE_ROOT / "web-usage-summary.json")
     assert example["chat"]["used"] >= 0
     assert example["chat"]["remaining"] >= 0
@@ -553,3 +560,81 @@ def test_p3_00_decisions_and_error_codes_are_frozen() -> None:
         "usage_service_unavailable",
         "stream_protocol_error",
     } <= codes
+
+
+def test_p4_00_capabilities_have_independent_contract_boundaries() -> None:
+    """冻结 Phase 4 四项能力的独立开关、逻辑模型、预算和数据面边界。"""
+    ai = _read_yaml(OPENAPI_ROOT / "ai-data-plane.yaml")
+    control = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
+    internal = _read_yaml(OPENAPI_ROOT / "internal-control-plane.yaml")
+    flags = control["components"]["schemas"]["FeatureFlagSnapshot"]["properties"]
+    for name in (
+        "managed_embedding_enabled",
+        "managed_vision_enabled",
+        "managed_web_search_enabled",
+        "managed_rerank_enabled",
+    ):
+        assert flags[name]["type"] == "boolean"
+        assert name not in control["components"]["schemas"]["FeatureFlagSnapshot"]["required"]
+
+    expected = {
+        "/ai/v1/embeddings": ("embedding", "embedding-standard"),
+        "/ai/v1/vision/analyze": ("vision", "vision-standard"),
+        "/ai/v1/web/search": ("web_search", "web-search-standard"),
+        "/ai/v1/rerank": ("rerank", "rerank-standard"),
+    }
+    for path, (capability, logical_model) in expected.items():
+        operation = ai["paths"][path]["post"]
+        assert operation["x-petdock-availability"] == "phase-4"
+        assert operation["x-petdock-capability"] == capability
+        assert operation["x-petdock-logical-model"] == logical_model
+        assert operation["x-petdock-request-body-max-bytes"] > 0
+        assert operation["x-petdock-concurrency-limit"] >= 1
+        assert operation["x-petdock-timeouts-seconds"]["total"] >= operation["x-petdock-timeouts-seconds"]["firstResponse"]
+
+    descriptor = ai["components"]["schemas"]["EmbeddingDescriptor"]
+    assert descriptor["properties"]["id"]["const"] == "embedding-standard"
+    assert {
+        "id",
+        "revision",
+        "dimensions",
+        "tokenizerVersion",
+        "chunkStrategyVersion",
+        "candidateMinSimilarity",
+        "finalMinSimilarity",
+    } <= set(descriptor["required"])
+    vision = ai["components"]["schemas"]["VisionRequest"]
+    assert vision["required"] == ["logicalModel", "image"]
+    assert vision["properties"]["image"]["format"] == "binary"
+    rerank = ai["components"]["schemas"]["RerankRequest"]
+    assert rerank["properties"]["logicalModel"]["const"] == "rerank-standard"
+    assert rerank["properties"]["candidates"]["maxItems"] == 50
+    assert "/ai/v1/web/fetch" not in ai["paths"]
+
+    reservation = internal["components"]["schemas"]["UsageReservationRequest"]
+    assert set(reservation["properties"]["capability"]["enum"]) == {"chat", "embedding", "vision", "web_search", "rerank"}
+    assert set(reservation["properties"]["logicalModel"]["enum"]) == {
+        "chat-standard",
+        "embedding-standard",
+        "vision-standard",
+        "web-search-standard",
+        "rerank-standard",
+    }
+    usage_schema = _read_json(SCHEMA_ROOT / "usage-event.schema.json")
+    assert set(usage_schema["properties"]["logicalModel"]["enum"]) == set(
+        reservation["properties"]["logicalModel"]["enum"]
+    )
+
+
+def test_p4_00_web_summary_supports_real_capability_breakdown() -> None:
+    """冻结 Web 只展示控制面真实摘要，并允许 Phase 4 能力按需返回。"""
+    web = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    summary = web["components"]["schemas"]["WebUsageSummary"]
+    assert summary["required"] == ["version", "periodStart", "periodEnd", "chat"]
+    assert {"embedding", "vision", "web_search", "rerank"} <= set(summary["properties"])
+    capability = web["components"]["schemas"]["WebUsageCapabilitySummary"]
+    assert set(capability["properties"]["unit"]["enum"]) == {"tokens", "requests"}
+    assert "null" in capability["properties"]["remaining"]["type"]
+    example = _read_json(EXAMPLE_ROOT / "web-usage-summary.json")
+    assert set(example) >= {"chat", "embedding", "vision", "web_search", "rerank"}
+    assert example["vision"]["unit"] == "requests"

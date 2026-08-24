@@ -50,6 +50,11 @@ test('Managed Service v1 固定样例兼容 TypeScript', async () => {
   const featureFlags = await example<any>('feature-flags.json')
   assert.equal(featureFlags.managed_login_enabled, true)
   assert.equal(featureFlags.managed_chat_enabled, false)
+  assert.deepEqual(
+    ['managed_embedding_enabled', 'managed_vision_enabled', 'managed_web_search_enabled', 'managed_rerank_enabled']
+      .map((key) => featureFlags[key]),
+    [false, false, false, false]
+  )
 
   const chatRequest = await example<any>('chat-request.json')
   assert.equal(chatRequest.logicalModel, 'chat-standard')
@@ -72,6 +77,10 @@ test('Managed Service v1 固定样例兼容 TypeScript', async () => {
   assert.equal(webUsage.version, 1)
   assert.equal(webUsage.chat.unit, 'tokens')
   assert.equal(webUsage.chat.used + webUsage.chat.remaining, 100000)
+  assert.equal(webUsage.embedding.unit, 'tokens')
+  assert.equal(webUsage.vision.unit, 'requests')
+  assert.equal(webUsage.web_search.unit, 'requests')
+  assert.equal(webUsage.rerank.unit, 'tokens')
 
   const anonymousWebSession = await example<any>('web-session-anonymous.json')
   assert.equal(anonymousWebSession.version, 1)

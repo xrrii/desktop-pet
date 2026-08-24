@@ -13,7 +13,7 @@
     "attemptId": { "type": "string", "format": "uuid" },
     "sessionId": { "type": "string", "format": "uuid" },
     "capability": { "enum": ["chat", "embedding", "vision", "rerank", "web_search"] },
-    "logicalModel": { "const": "chat-standard" },
+    "logicalModel": { "enum": ["chat-standard", "embedding-standard", "vision-standard", "web-search-standard", "rerank-standard"] },
     "requestFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "status": { "enum": ["reserved", "settled", "released", "failed"] },
     "reservedInputUnits": { "type": "integer", "minimum": 0 },

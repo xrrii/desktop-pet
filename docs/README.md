@@ -4,7 +4,7 @@
 
 本目录按文档职责组织。开始开发前，先根据任务类型找到对应基线；当多份文档存在交叉时，总体架构和开发规范优先，功能专项负责补充领域细节。
 
-最后审阅日期：2026-08-15。
+最后审阅日期：2026-08-24。
 
 ## 2. 状态说明
 
@@ -21,7 +21,7 @@
 1. 阅读 [开发指南](guides/DEVELOPMENT.md)，了解环境、命令、测试和打包要求。
 2. 阅读 [AI 助手总体架构](architecture/AI_ASSISTANT_ARCHITECTURE.md)，确认进程边界、安全边界和 Runtime 职责。
 3. 根据任务进入相应功能专项文档。
-4. 涉及 BYOK 与官方服务时，先阅读 [官方托管服务进度与交接记录](roadmap/MANAGED_SERVICE_PROGRESS.md)，再阅读 [双模式实施方案](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md)。
+4. 涉及 BYOK 与官方服务时，先阅读 [官方托管服务进度与交接记录](roadmap/MANAGED_SERVICE_PROGRESS.md)，再阅读 [双模式实施方案](architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md)；Phase 4 任务还需阅读 [多能力开发方案](features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)。
 5. 涉及跨端协议时，读取仓库根目录的 `contracts/managed-service/v1`，不从架构文档重新猜测字段。
 6. 开始其他 AI 助手阶段开发或验收时，核对 [AI 助手进度记录](roadmap/AI_ASSISTANT_PROGRESS.md)。
 
@@ -52,6 +52,7 @@
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |
 | [MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md](features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md) | Active | Phase 2 身份、设备、会话、共享开发环境和跨仓库实施细节 |
+| [MANAGED_SERVICE_PHASE4_CAPABILITIES.md](features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md) | Active | Phase 4 Managed Embedding、Vision、Web Search、Rerank 的跨仓开发、门禁和回滚基线 |
 
 ### 4.4 路线与进度
 
@@ -69,6 +70,7 @@
 | 修改 Agent、工具协议或进程通信 | AI 助手总体架构、开发指南 |
 | 开发 BYOK 或官方托管服务 | 官方托管服务进度、双模式实施方案、AI 助手总体架构 |
 | 开发 Managed Phase 2 登录、设备或 Token | Phase 2 身份与会话方案、Managed v1 契约、双模式实施方案 |
+| 开发 Phase 4 Embedding、Vision、Web Search 或 Rerank | Phase 4 多能力方案、Managed v1 契约、Provider 盘点、对应本地专项文档 |
 | 部署 Managed Phase 2 共享开发依赖 | Phase 2 身份与会话方案、Shared Dev 部署指南、部署基线契约 |
 | 修改 Managed Service API、Token、错误码或 SSE | `contracts/managed-service/v1`、双模式实施方案、官方托管服务进度 |
 | 修改附件、文件生成、视觉或联网搜索 | 对话资源能力、AI 助手总体架构 |

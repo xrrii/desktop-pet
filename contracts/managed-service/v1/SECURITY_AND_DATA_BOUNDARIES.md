@@ -26,6 +26,8 @@
 
 Managed Web Search 第一版不接收网页正文读取 URL，也不提供 `/ai/v1/web/fetch`。URL 校验、DNS 固定、SSRF 防护和正文抓取由 Electron Main 执行。
 
+Phase 4 进一步冻结以下边界：Embedding 只接收用户明确加入知识库或会话的 Chunk/查询；Vision 只接收单张安全派生图片并校验魔数、解码尺寸和像素预算；Rerank 只接收本地召回且通过准入的候选，不得新增候选或修改正文。四项能力分别使用独立 Feature Flag、Entitlement、配额和 Provider Secret，任一校验失败都必须在 Provider 调用前失败关闭。
+
 全部 Managed 用户数据只允许在中国大陆境内传输和处理。上游 Provider、日志、监控、对象存储和备份只要接触用户数据，也必须使用中国大陆境内资源；第一版不做跨境或跨 Provider 自动故障切换。
 
 ## 3. 日志

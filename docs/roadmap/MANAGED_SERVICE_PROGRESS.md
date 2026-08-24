@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-23
+最后更新时间：2026-08-24
 
 ## 1. 新会话快速开始
 
@@ -11,12 +11,13 @@
 1. 阅读本文档，确认当前阶段、下一工作项和阻塞项。
 2. 阅读 `docs/architecture/MANAGED_SERVICE_IMPLEMENTATION_PLAN.md`，以其中冻结的架构、安全和阶段要求为准。
 3. 进入 Phase 3 时阅读 `docs/features/MANAGED_SERVICE_PHASE3_CHAT_MVP.md`，确认调用拓扑、契约门禁、配额状态机和三仓边界。
-4. 需要回看 Phase 2 身份基础时阅读 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`。
-5. 正式部署或线上联调时阅读 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md`。
-6. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
-7. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
-8. 执行 `git status --short`，区分已有用户改动和本次改动。
-9. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
+4. 进入 Phase 4 时阅读 `docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md`，按 P4-00 和 E/V/W/R 独立门禁实施，不将四项能力捆绑放量。
+5. 需要回看 Phase 2 身份基础时阅读 `docs/features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md`。
+6. 正式部署或线上联调时阅读 `petdock-cloud/docs/guides/PRODUCTION_DEPLOYMENT_AND_ONLINE_INTEGRATION.md`。
+7. 阅读 `docs/architecture/AI_ASSISTANT_ARCHITECTURE.md`，理解现有 Electron Main、Renderer 和 Python Runtime 边界。
+8. 根据本次工作项阅读对应代码和专项文档，不要在当前桌面仓库创建官网或云端服务代码。
+9. 执行 `git status --short`，区分已有用户改动和本次改动。
+10. 开发结束后更新本文档的阶段状态、验证记录、阻塞项和变更记录。
 
 文档优先级：
 
@@ -55,8 +56,8 @@ Phase 3 Managed Chat MVP 详细开发方案
 ## 3. 当前总览
 
 ```text
-总体状态：Phase 3 Done
-当前阶段：Phase 3 Managed Chat MVP（Wave F 自动门禁与受限线上 Provider 冒烟已完成）
+总体状态：Phase 4 In Progress
+当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00 契约闭合，业务能力尚未实现）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
@@ -65,8 +66,8 @@ FastAPI AI 数据面：Wave C Done（位于 `petdock-cloud`；Chat SSE、单 Pro
 桌面 Runtime Managed 消费：Wave D Done；Wave E Done（P3-14 至 P3-16 来源选择、官方 Chat 状态、额度摘要、手动切回 BYOK 与脱敏入口已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：无代码交付阻塞；Provider 数据驻留合规证明、白名单范围和生产回滚演练属于发布运营风险
-下一建议工作项：进入 Phase 4 方案评审；Phase 3 继续保持白名单和独立开关，不自动扩大普通用户流量
+当前阻塞：各能力真实 Provider、境内数据驻留证明、生产预算、额度和白名单仍需按能力确认
+下一建议工作项：按方案进入 Wave B 共用底座/ Web Search 实现；所有 Phase 4 开关和公网路由继续保持关闭
 ```
 
 当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave F。Wave F 已完成自动门禁和受限正式 HTTPS 真实 Provider 文本 Chat 冒烟；Desktop 官方 Chat 产品入口、Runtime SSE、真实额度摘要、Web `/account/usage` 和 BYOK 隔离均已闭合。生产 Chat 仍由白名单和独立开关控制。
@@ -141,7 +142,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 | Phase 1 Chat 路由与能力配置 | `Done` | Phase 0 的相关协议和 BYOK 基线可用 | Phase 2 `P2-06` PKCE + loopback 登录 |
 | Phase 2 官网、身份、设备和会话 | `Done` | P2-11、P2-W01 至 W05 与正式 HTTPS 验收均已完成 | Phase 3 方案冻结 |
 | Phase 3 Managed Chat MVP | `Done` | `P3-00`、Wave B 至 Wave F、自动门禁和受限线上 Provider 冒烟均已完成 | Phase 4 其他 Managed 能力 |
-| Phase 4 其他 Managed 能力 | `Not Started` | Managed Chat 链路稳定 | 按 E/V/W/R 独立排期 |
+| Phase 4 其他 Managed 能力 | `In Progress` | P4-00 契约闭合；Managed Chat 链路稳定 | 按 W/V/E/R 独立门禁和灰度 |
 | Phase 5 正式收费与可靠性 | `Not Started` | Beta 配额和各能力稳定 | 生产账本、支付和运营能力 |
 | Phase 6 服务端 Agent | `Deferred` | Phase 5 后重新评审 | 不得提前复制本地 Agent |
 
@@ -149,7 +150,7 @@ Phase 0 的产品、基础设施、数据治理和跨语言契约交付物已经
 
 ### 当前优先事项
 
-`P3-00`、Wave B 与 Wave C 已完成：Cloud v1 权威源与 Desktop 快照保持 53 个受控文件一致；控制面具备独立 Chat 开关、Beta Entitlement/额度事实、Usage 状态机、Desktop/Web 摘要和内网服务认证；FastAPI 具备 Runtime Token/JWKS/Redis 撤销失败关闭、严格 Chat/SSE、预占后调用、取消/三类超时、用量终态和脱敏指标。下一步由 Desktop Wave D 消费这些冻结边界，不提前进入 Web 产品入口。
+Phase 3 已完成并保持白名单与独立开关控制。Phase 4 跨仓方案已冻结，当前优先完成 Cloud `P4-00`：把现有 Phase 4 OpenAPI 草案升级为权威契约，闭合四项独立 Feature Flag、Entitlement、Runtime Claims、Descriptor、请求预算、配额/Usage、错误码和跨语言固定样例；通过前不实现真实 Provider、不开放公网路由，也不修改 Desktop/Web 产品入口。
 
 ### `petdock-cloud` 契约同步规则
 
@@ -175,9 +176,9 @@ npm.cmd run test:e2e:assistant:c5
 
 ## 10. 当前待确认事项
 
-服务器、`petdock.site` ICP 备案、正式 DNS 和 TLS 条件已经就绪。普通用户公网登录流量仍须等待生产 PostgreSQL/Redis/JWT 密钥隔离、Nginx 精确路由和来源 IP 白名单线上门禁通过；日常开发继续使用本地 Mock 或 `shared-dev`，数据库和中间件端口不得直接暴露公网。
+服务器、`petdock.site` ICP 备案、正式 DNS、TLS、生产隔离和 Phase 3 受限线上门禁已经完成。普通用户 Managed 流量仍由白名单和独立开关控制；Phase 4 各能力必须重新完成自己的真实 Provider、数据驻留和回滚门禁。日常开发继续使用本地 Mock 或 `shared-dev`，数据库和中间件端口不得直接暴露公网。
 
-Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose、Nginx 和 SSH 隧道开发接入。UserInfo/账号快照、Refresh Token 主动撤销、Feature Flag 下发、开发环境端点覆盖、设备显示名、服务端时间、P2-10 生命周期边界和官网 Web API/Web Session 契约已由 `petdock-cloud` 及 Desktop 消费快照冻结；官网契约位于独立 `web-control-plane.yaml`，不改变桌面 Bearer API。实际 Provider/模型安全配置和 Beta 免费额度仍属于后续上线配置前置条件。
+Phase 2/3 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Server、Docker Compose、Nginx、SSH 隧道、Runtime Token、Chat 配额和 Usage 链路。Phase 4 的实际 Provider、境内地址、Descriptor Revision、请求预算、Beta 额度和白名单仍须按 E/V/W/R 分别确认；这些值不进入公开契约或客户端。
 
 ## 11. 验证记录
 
@@ -216,6 +217,7 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 | 2026-08-20 | Desktop/Cloud/Web P2-W04 实现与收尾工作区 | 调用边界、精确路由、生产端点和安全链 | 通过（Docker 集成项条件通过） | Desktop Vitest 159、契约 17、Runtime 87、检索评估、类型检查、生产构建和依赖审计 0 漏洞；Web Vitest 35、Playwright E2E 10 通过/1 跳过、生产构建、Nginx 精确路由和依赖审计 0 漏洞；Cloud pytest 18、JDK 21 Maven 120 中 115 通过/5 跳过且无失败；Testcontainers PostgreSQL/Redis 因本机无可用 Docker 未运行；41 个契约文件一致 |
 | 2026-08-20 | Desktop/Cloud/Web P2-W05 首页与线上收尾 | 官方首页实现、浏览器视觉验收、生产发布与正式 HTTPS 复验 | 通过 | Web Vitest 37、Playwright E2E 12 通过/1 既有真实环境用例跳过、生产构建、Canvas 像素、截图和 390px/320px 无横向溢出通过；官网生产制品已上线，首页、账号/OAuth、Desktop 登录、Consent、Refresh、UserInfo、设备同步与撤销未发现异常；Windows 安装包仍待发布，官网入口保持禁用状态 |
 | 2026-08-21 | Phase 3 Wave C 三仓工作区 | Cloud Chat 数据面、AI 容器与公网精确路由、三仓回归 | 通过 | AI Gateway pytest 38 项、Ruff、mypy；Cloud 契约 pytest 22 项、JDK 21 Maven 130 项全部通过，Testcontainers PostgreSQL 17/Redis 8 实际运行，53 文件快照一致；Desktop 类型检查、Vitest 165 项、契约 21 项、Runtime 87 项、检索、构建和审计 0 漏洞；Web Vitest 37 项、Playwright 12 通过/1 跳过、构建、Nginx 检查和审计 0 漏洞。Compose 校验、AI 镜像构建及只读/非 root/Capability/健康/404 容器门禁通过 |
+| 2026-08-24 | Phase 4 P4-00 三仓工作区 | 权威契约闭合、快照同步、Web 类型和三仓门禁 | 通过 | Cloud pytest 24 项、TypeScript 契约 1 项、Spring/Jackson 1 项；Desktop 契约 pytest 23 项；Cloud/Desktop 53 文件快照一致；Web 类型生成、typecheck、Vitest 39 项、生产构建和 Nginx 检查通过；真实 Provider、Phase 4 路由和生产放量未运行 |
 
 测试结果必须记录实际执行事实，不引用过期测试数量冒充本次验证。未执行的测试明确写“未运行”。
 
@@ -245,6 +247,14 @@ Phase 2 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Serv
 不要在本进度文档中记录 API Key、Token、用户正文、附件内容、生产地址凭据或其他敏感数据。
 
 ## 13. 变更记录
+
+### 2026-08-24（Phase 4 多能力方案输出）
+
+- 新增 `docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md`，冻结 Phase 4 共用契约门禁、独立开关/配额/回滚、四项能力边界、三仓职责、测试矩阵和完成定义。
+- 推荐发布顺序为 `P4-00 -> Web Search -> Vision -> Embedding -> Rerank`；P4-00 后允许并行开发，但每项能力必须独立完成真实 Provider、数据驻留、白名单和回滚门禁。
+- P4-00 已完成：Cloud 权威契约扩展并同步 Desktop 快照，v1 共 53 个受控文件一致；四项生产开关继续关闭，真实 Provider 和公网路由尚未实现。
+- 验证通过：Cloud 全量 pytest 24 项、TypeScript 契约 1 项、Spring/Jackson 1 项、Desktop 契约 pytest 23 项；Web API 类型生成、typecheck、Vitest 39 项、生产构建和 Nginx 路由检查通过。
+- 下一工作项为按 `Web Search -> Vision -> Embedding -> Rerank` 顺序逐项实现和验收。
 
 ### 2026-08-21（Phase 3 Wave C Cloud Chat 数据面）
 

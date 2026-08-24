@@ -54,3 +54,12 @@
 - `POST /ai/v1/chat/completions` 在首次实现前收紧为 `chat-standard`、结构化消息和工具定义；Phase 4 草案操作通过 `x-petdock-availability: phase-4` 保留，但不属于 Phase 3 公网路由。
 - `/api/v1/web/usage/summary` 与 `internal-control-plane.yaml` 是新增接口，不改变既有 Web Session、桌面 OAuth 或公开控制面字段；内部接口不得进入公网入口。
 - Usage Event 在首次生产写入前增加请求指纹、原始预占值和终态原因，用于证明幂等与保守结算；后续已落库后不得再以 v1 兼容方式删除这些字段或改变状态语义。
+
+## 8. Phase 4 首次实现前契约闭合
+
+- `FeatureFlagSnapshot` 增加四个可选能力开关；旧客户端忽略未知字段，新客户端遇到缺失或无效字段按对应能力关闭处理。
+- `ai-data-plane.yaml` 的 Embedding、Vision、Web Search 和 Rerank 操作从 Phase 4 草案升级为受控契约，但在各自生产路由批准前仍不得对公网开放。
+- 内部 Usage 预占和 Usage Event 的能力、逻辑模型枚举扩展为五项能力；Phase 3 `chat-standard` 的字段和状态语义保持不变。
+- Web Usage Summary 保留必填 `chat` 字段，并以可选字段表达真实 Phase 4 能力；旧 Web 客户端忽略未知能力字段。
+- Vision 的请求体从 Base64 JSON 草案收紧为单张 `multipart/form-data` 安全派生图片；这属于 Phase 4 草案首次实现前校正，未发布旧客户端不受影响。
+- Embedding Descriptor Revision、维度、Tokenizer、Pooling、前后缀、Chunk 策略或阈值变化必须产生新 Signature；不同向量空间不得混写。
