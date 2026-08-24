@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AssistantWebSettingsSnapshot } from '../../shared/assistant'
 import {
   createPinnedLookup,
@@ -19,6 +19,48 @@ const settings = {
 }
 
 describe('WebSearchService', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('Managed 来源只发送查询候选并继续由 Main 执行 URL 安全校验', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      results: [{ title: 'Managed 来源', url: 'https://example.com/managed', excerpt: '摘要', publishedAt: null }],
+      usage: { inputUnits: 0, outputUnits: 1 }
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const service = new WebSearchService(settings)
+    service.setManagedAccess({
+      selected: () => true,
+      enabled: () => true,
+      getToken: async () => ({ accessToken: 'runtime-token', deviceId: 'device-id' }),
+      endpoint: () => new URL('https://ai.example.test'),
+      clientVersion: () => '0.2.0'
+    })
+    service.beginTask('managed-task', '测试')
+    const result = await service.search('managed-task', ' PetDock ', 1)
+    expect(result.results[0]).toMatchObject({ title: 'Managed 来源', url: 'https://example.com/managed' })
+    expect(fetcher).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ query: 'PetDock', maxResults: 1 })
+    }))
+  })
+
+  it('Managed 响应中的内网候选不会进入来源列表', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      results: [{ title: '内网', url: 'http://127.0.0.1/admin', excerpt: '不可信', publishedAt: null }],
+      usage: { inputUnits: 0, outputUnits: 1 }
+    }), { status: 200 }))
+    const service = new WebSearchService(settings)
+    service.setManagedAccess({
+      selected: () => true,
+      enabled: () => true,
+      getToken: async () => ({ accessToken: 'runtime-token', deviceId: 'device-id' }),
+      endpoint: () => new URL('https://ai.example.test'),
+      clientVersion: () => '0.2.0'
+    })
+    service.beginTask('managed-task', '测试')
+    const result = await service.search('managed-task', '测试', 1)
+    expect(result.results).toEqual([])
+  })
+
   it('清理脚本、导航和隐藏内容，只保留正文结构', () => {
     const result = extractWebPageText(`
       <html><head><title>测试页面</title><script>steal()</script></head>

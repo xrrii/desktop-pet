@@ -46,7 +46,7 @@ import type { ManagedRuntimeSessionErrorCode } from '../../shared/managed'
 import { EmbeddingModelManager } from './embeddingModelManager'
 import { AssistantToolHost, webToolErrorMessage } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
-import { WebSearchService } from './webSearchService'
+import { WebSearchService, type ManagedWebSearchAccess } from './webSearchService'
 import { WebSettingsManager } from './webSettingsManager'
 import { VisionSettingsManager } from './visionSettingsManager'
 import { ModelSettingsManager } from './modelSettingsManager'
@@ -85,6 +85,7 @@ export class AssistantManager {
     chat: this.modelSettings.snapshot(),
     chatBackend: this.modelSettings.backendPreference(),
     managedChat: this.getManagedChatState(),
+    managedWebSearch: this.getManagedWebSearchState(),
     embedding: this.embeddingModels.capabilityState(),
     vision: this.visionSettings.snapshot(),
     webSearch: this.webSettings.snapshot()
@@ -104,12 +105,25 @@ export class AssistantManager {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   }
+  private getManagedWebSearchState: () => {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  } = () => ({ enabled: false, authenticated: false, runtimeReady: false, errorCode: null })
 
   constructor(
     onStatus: (status: AssistantRuntimeStatus) => void,
     private readonly onEvent: (event: AssistantEvent) => void,
     runtimeLifecycle: AssistantRuntimeLifecycle & {
       getManagedChatState?: () => {
+        enabled: boolean
+        authenticated: boolean
+        runtimeReady: boolean
+        errorCode: ManagedRuntimeSessionErrorCode | string | null
+      }
+      managedWebSearch?: ManagedWebSearchAccess
+      getManagedWebSearchState?: () => {
         enabled: boolean
         authenticated: boolean
         runtimeReady: boolean
@@ -134,6 +148,8 @@ export class AssistantManager {
       runtimeReady: false,
       errorCode: null
     }))
+    this.getManagedWebSearchState = runtimeLifecycle.getManagedWebSearchState || this.getManagedWebSearchState
+    this.webSearch.setManagedAccess(runtimeLifecycle.managedWebSearch || null)
     this.onManagedAuthRefreshRequired = onManagedAuthRefreshRequired
     this.runtime = new AssistantRuntimeProcess(
       onStatus,
@@ -174,6 +190,13 @@ export class AssistantManager {
     await this.cancelAll()
     await this.runtime.restart()
     logInfo('助手 Chat 来源已切换', { source })
+    return this.capabilitySettings.snapshot()
+  }
+
+  /** 设置 Web Search 独立来源；Managed 故障时保留选择且不改写 BYOK。 */
+  setWebSearchSource(source: 'byok' | 'managed' | 'disabled'): AssistantCapabilitySettingsSnapshot {
+    this.capabilitySettings.setSelectedSource('web_search', source)
+    logInfo('助手 Web Search 来源已切换', { source })
     return this.capabilitySettings.snapshot()
   }
 

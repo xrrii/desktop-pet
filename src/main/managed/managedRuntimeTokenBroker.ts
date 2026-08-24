@@ -83,6 +83,18 @@ export class ManagedRuntimeTokenBroker {
     return { ...this.status }
   }
 
+  /** 为 Main 受控能力请求提供短期 Runtime Token；Token 不经过 IPC 或 Renderer。 */
+  async getToken(): Promise<{ accessToken: string; deviceId: string }> {
+    if (!this.context) {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    await this.ensureSession(false)
+    if (!this.lease || this.remainingLifetime(this.lease) <= 0) {
+      throw new ManagedControlPlaneError(401, 'token_expired', true)
+    }
+    return { accessToken: this.lease.accessToken, deviceId: this.context.deviceId }
+  }
+
   /** 登录或恢复成功后创建 Runtime Session，并保留后续刷新所需的 Main 回调。 */
   async activate(context: ManagedRuntimeAccessContext): Promise<void> {
     this.context = context

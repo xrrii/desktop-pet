@@ -2,7 +2,7 @@ import type { ManagedEndpointPolicy, ManagedEnvironment } from './managedOAuthTy
 
 const OFFICIAL_ISSUER = 'https://account.petdock.site'
 const OFFICIAL_CONTROL_PLANE = 'https://api.petdock.site'
-const OVERRIDE_KEYS = ['PETDOCK_MANAGED_ISSUER', 'PETDOCK_MANAGED_CONTROL_PLANE_URL'] as const
+const OVERRIDE_KEYS = ['PETDOCK_MANAGED_ISSUER', 'PETDOCK_MANAGED_CONTROL_PLANE_URL', 'PETDOCK_MANAGED_AI_BASE_URL'] as const
 
 /**
  * 解析 Main 专用的 Managed Service 端点策略。
@@ -29,7 +29,8 @@ export function resolveManagedEndpointPolicy(
     return {
       environment: selected,
       issuer: new URL(OFFICIAL_ISSUER),
-      controlPlaneBaseUrl: new URL(OFFICIAL_CONTROL_PLANE)
+      controlPlaneBaseUrl: new URL(OFFICIAL_CONTROL_PLANE),
+      aiDataPlaneBaseUrl: new URL('https://ai.petdock.site')
     }
   }
 
@@ -39,7 +40,11 @@ export function resolveManagedEndpointPolicy(
     '控制面',
     selected
   )
-  return { environment: selected, issuer, controlPlaneBaseUrl }
+  const aiDataPlaneBaseUrl = parseEndpoint(
+    environment.PETDOCK_MANAGED_AI_BASE_URL || environment.PETDOCK_MANAGED_CONTROL_PLANE_URL,
+    'AI 数据面', selected
+  )
+  return { environment: selected, issuer, controlPlaneBaseUrl, aiDataPlaneBaseUrl }
 }
 
 /** 校验开发端点只能指向回环或私有网地址，且不能携带凭据和查询参数。 */
@@ -92,5 +97,6 @@ function isAllowedDevelopmentHost(hostname: string): boolean {
 /** 供生产构建扫描器复用的官方端点常量。 */
 export const managedOfficialEndpoints = {
   issuer: OFFICIAL_ISSUER,
-  controlPlane: OFFICIAL_CONTROL_PLANE
+  controlPlane: OFFICIAL_CONTROL_PLANE,
+  aiDataPlane: 'https://ai.petdock.site'
 } as const

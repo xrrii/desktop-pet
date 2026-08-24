@@ -1,6 +1,7 @@
 import { request as httpRequest, type RequestOptions } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import type { LookupFunction } from 'node:net'
+import { randomUUID } from 'node:crypto'
 import { JSDOM } from 'jsdom'
 import type {
   AssistantWebProvider,
@@ -27,6 +28,15 @@ interface WebSettingsAccess {
   apiKey(provider: AssistantWebProvider): string | null
 }
 
+/** Main 内 Managed Web Search 访问端口；不向 Renderer 暴露 Token。 */
+export interface ManagedWebSearchAccess {
+  selected(): boolean
+  enabled(): boolean
+  getToken(): Promise<{ accessToken: string; deviceId: string }>
+  endpoint(): URL
+  clientVersion(): string
+}
+
 interface ProviderResult {
   title: string
   url: string
@@ -38,6 +48,47 @@ export interface WebSearchProvider {
   search(query: string, maxResults: number, apiKey: string, signal: AbortSignal): Promise<ProviderResult[]>
   /** 测试 Provider 可在本地返回净化后的正文；生产 Provider 仍使用 Main 网络策略抓取。 */
   fetch?(url: string, signal: AbortSignal): Promise<{ title: string; content: string; finalUrl: string }>
+}
+
+/** 严格解析 Cloud 候选响应，不信任任何额外字段或 URL。 */
+function parseManagedWebResponse(value: unknown): ProviderResult[] {
+  if (!value || typeof value !== 'object') throw new Error('web_provider_response_invalid')
+  const root = value as Record<string, unknown>
+  if (!Array.isArray(root.results) || !root.results.every((item) => item && typeof item === 'object')) {
+    throw new Error('web_provider_response_invalid')
+  }
+  return root.results.map((item) => {
+    const result = item as Record<string, unknown>
+    if (typeof result.title !== 'string' || typeof result.url !== 'string' ||
+      typeof result.excerpt !== 'string' || (result.publishedAt !== null && typeof result.publishedAt !== 'string')) {
+      throw new Error('web_provider_response_invalid')
+    }
+    return {
+      title: result.title,
+      url: result.url,
+      excerpt: result.excerpt,
+      publishedAt: result.publishedAt
+    }
+  })
+}
+
+/** 将 AI Gateway 错误码收敛为 Web Search 本地稳定分类。 */
+function mapManagedWebError(code: string): string {
+  const allowed = new Set([
+    'authentication_required', 'token_expired', 'device_revoked', 'capability_disabled',
+    'capability_not_entitled', 'quota_exhausted', 'rate_limited', 'provider_timeout',
+    'provider_invalid_response', 'provider_unavailable', 'request_cancelled', 'invalid_request'
+  ])
+  if (code === 'authentication_required' || code === 'token_expired' || code === 'device_revoked') {
+    return 'managed_authentication_required'
+  }
+  if (code === 'capability_disabled') return 'managed_web_search_disabled'
+  if (code === 'capability_not_entitled') return 'managed_web_search_not_entitled'
+  if (code === 'quota_exhausted') return 'managed_web_search_quota_exhausted'
+  if (code === 'provider_timeout') return 'web_timeout'
+  if (code === 'provider_invalid_response') return 'web_provider_response_invalid'
+  if (code === 'request_cancelled') return 'web_request_cancelled'
+  return allowed.has(code) ? 'web_provider_failed' : 'web_provider_failed'
 }
 
 type WebSearchProviderRegistry = Partial<Record<AssistantWebProvider, WebSearchProvider>>
@@ -70,8 +121,14 @@ export class WebSearchService {
 
   constructor(
     private readonly settings: WebSettingsAccess,
-    private readonly providers: WebSearchProviderRegistry = createDefaultProviders()
+    private readonly providers: WebSearchProviderRegistry = createDefaultProviders(),
+    private managed: ManagedWebSearchAccess | null = null
   ) {}
+
+  /** 注入 Main 专用 Managed 访问端口，不向 Renderer 暴露凭据。 */
+  setManagedAccess(access: ManagedWebSearchAccess | null): void {
+    this.managed = access
+  }
 
   beginTask(taskId: string, userInput: string): void {
     this.finishTask(taskId)
@@ -89,6 +146,9 @@ export class WebSearchService {
 
   async search(taskId: string, query: string, maxResults: number): Promise<WebSearchToolResult> {
     const state = this.requireTask(taskId)
+    if (this.managed?.selected()) {
+      return this.searchManaged(state, query, maxResults)
+    }
     const { provider, apiKey } = this.requireConfiguredProvider()
     if (state.searches >= SEARCH_LIMIT_PER_TASK) {
       throw new Error('web_search_limit_reached')
@@ -224,6 +284,11 @@ export class WebSearchService {
   }
 
   async testConnection(): Promise<number> {
+    if (this.managed?.selected()) {
+      if (!this.managed.enabled()) throw new Error('managed_web_search_disabled')
+      const response = await this.requestManagedSearch('PetDock', 1)
+      return response.length
+    }
     const { provider, apiKey } = this.requireConfiguredProvider(false)
     const controller = new AbortController()
     const results = await provider.search('PetDock', 1, apiKey, controller.signal)
@@ -234,6 +299,83 @@ export class WebSearchService {
     const state = this.tasks.get(taskId)
     if (!state) throw new Error('web_task_not_found')
     return state
+  }
+
+  /** 调用 Managed 数据面并沿用 Main 的候选 URL 安全策略。 */
+  private async searchManaged(state: WebTaskState, query: string, maxResults: number): Promise<WebSearchToolResult> {
+    if (!this.managed?.enabled()) throw new Error('managed_web_search_disabled')
+    if (state.searches >= SEARCH_LIMIT_PER_TASK) throw new Error('web_search_limit_reached')
+    state.searches += 1
+    const normalizedQuery = query.trim()
+    if (!normalizedQuery || normalizedQuery.length > 500) throw new Error('web_query_invalid')
+    if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > SEARCH_RESULTS_LIMIT) {
+      throw new Error('web_result_limit_invalid')
+    }
+    const candidates = await this.withController(state, async (signal) => {
+      const response = await this.requestManagedSearch(normalizedQuery, maxResults, signal)
+      return Promise.all(response.slice(0, maxResults).map(async (candidate) => {
+        try {
+          const target = await withWebDeadline(resolvePublicWebTarget(candidate.url), signal, Date.now() + REQUEST_TIMEOUT_MS)
+          return { candidate, url: canonicalizeWebUrl(target.url.toString()) }
+        } catch (error) {
+          if (signal.aborted || (error instanceof Error && ['web_timeout', 'web_request_cancelled'].includes(error.message))) throw error
+          return null
+        }
+      }))
+    })
+    return this.recordSearchCandidates(state, candidates)
+  }
+
+  /** 调用 AI Gateway `/ai/v1/web/search`，只发送查询与数量。 */
+  private async requestManagedSearch(query: string, maxResults: number, signal?: AbortSignal): Promise<ProviderResult[]> {
+    if (!this.managed) throw new Error('managed_web_search_disabled')
+    const { accessToken, deviceId } = await this.managed.getToken()
+    const requestId = randomUUID()
+    const response = await fetch(new URL('/ai/v1/web/search', this.managed.endpoint()), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-PetDock-Trace-Id': randomUUID(),
+        'X-PetDock-Request-Id': requestId,
+        'X-PetDock-Attempt-Id': randomUUID(),
+        'X-PetDock-Device-Id': deviceId,
+        'X-PetDock-Client-Version': this.managed.clientVersion()
+      },
+      body: JSON.stringify({ query, maxResults }),
+      signal: signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    }).catch(() => { throw new Error('web_provider_failed') })
+    if (!response.ok) {
+      let code = 'web_provider_failed'
+      try {
+        const body = await response.json() as { error?: { code?: unknown } }
+        if (typeof body.error?.code === 'string') code = mapManagedWebError(body.error.code)
+      } catch { /* 统一按稳定错误处理 */ }
+      throw new Error(code)
+    }
+    let payload: unknown
+    try { payload = await response.json() } catch { throw new Error('web_provider_response_invalid') }
+    return parseManagedWebResponse(payload)
+  }
+
+  /** 将候选写入当前任务的来源索引。 */
+  private recordSearchCandidates(
+    state: WebTaskState,
+    checked: Array<{ candidate: ProviderResult; url: string } | null>
+  ): WebSearchToolResult {
+    const results: AssistantWebSource[] = []
+    for (const item of checked) {
+      if (!item || state.sources.has(item.url)) continue
+      const source = createSource(state.nextCitationIndex, item.candidate.title, item.url,
+        item.candidate.excerpt, 'search-summary', item.candidate.publishedAt)
+      state.nextCitationIndex += 1
+      state.sources.set(item.url, source)
+      state.sourcesByIndex.set(source.citationIndex, source)
+      state.authorizedUrls.add(item.url)
+      results.push(source)
+    }
+    return { type: 'search_web', results }
   }
 
   private requireConfiguredProvider(requireEnabled = true): {

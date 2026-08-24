@@ -26,6 +26,12 @@ export interface CapabilityConfigurationState {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   }
+  managedWebSearch?: {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  }
   embedding: {
     provider: 'hash' | 'local' | 'online'
     configured: boolean
@@ -186,7 +192,7 @@ function resolveSnapshot(
       ? available('byok', 'byok')
       : available('byok', 'disabled', 'not_configured', 'byok_not_configured')
     : selected.capabilities.web_search === 'managed'
-      ? available('managed', 'disabled', 'unsupported_client', 'managed_not_supported')
+      ? resolveManagedCapability('managed', state.managedWebSearch)
       : available('disabled', 'disabled', 'disabled', 'user_disabled')
 
   return {
@@ -201,6 +207,22 @@ function resolveSnapshot(
       web_search: webSearch
     }
   }
+}
+
+/** 计算独立 Managed Web Search 的脱敏状态，不自动切换 BYOK。 */
+function resolveManagedCapability(
+  selectedSource: 'managed',
+  state: CapabilityConfigurationState['managedWebSearch']
+) {
+  if (!state?.enabled) return available(selectedSource, 'disabled', 'provider_unavailable', 'managed_web_search_disabled')
+  if (state.errorCode === 'managed_capability_not_entitled') {
+    return available(selectedSource, 'disabled', 'not_entitled', 'managed_web_search_not_entitled')
+  }
+  if (!state.authenticated) return available(selectedSource, 'disabled', 'not_authenticated', 'managed_authentication_required')
+  if (!state.runtimeReady || state.errorCode) {
+    return available(selectedSource, 'disabled', 'provider_unavailable', 'managed_web_search_unavailable')
+  }
+  return available(selectedSource, 'managed', 'available', null)
 }
 
 /** 根据服务端开关、账号会话和 Runtime Lease 计算官方 Chat，不进行隐式 BYOK 回退。 */

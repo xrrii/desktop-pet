@@ -94,6 +94,10 @@ export function webToolErrorMessage(error: unknown): string {
     web_provider_key_mode_invalid: '豆包搜索 API Key 与当前计费模式不匹配。',
     web_provider_rate_limited: '豆包搜索请求过于频繁，请稍后重试。',
     web_provider_failed: '搜索服务返回了错误，请检查服务配置。',
+    managed_web_search_disabled: '官方联网搜索当前未启用。',
+    managed_web_search_not_entitled: '当前账号未授权官方联网搜索。',
+    managed_web_search_quota_exhausted: '官方联网搜索额度已用尽。',
+    managed_authentication_required: '官方服务登录状态已失效，请重新登录。',
     web_http_401: '搜索 API Key 无效或已失效。',
     web_http_403: '搜索服务拒绝了当前 API Key。',
     web_http_429: '搜索请求额度已用尽或请求过于频繁。'

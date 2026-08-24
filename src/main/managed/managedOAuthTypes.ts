@@ -8,6 +8,8 @@ export interface ManagedEndpointPolicy {
   readonly environment: ManagedEnvironment
   readonly issuer: URL
   readonly controlPlaneBaseUrl: URL
+  /** AI 数据面地址只在 Main 内部使用；Renderer 不可见。 */
+  readonly aiDataPlaneBaseUrl?: URL
 }
 
 /** 一次授权准备结果，Verifier 只在 Main 内存中存活。 */

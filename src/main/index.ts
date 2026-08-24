@@ -104,7 +104,8 @@ const managedRuntimeTokenBroker = new ManagedRuntimeTokenBroker(
 )
 const managedRuntimeAuthRefreshHandler = new ManagedRuntimeAuthRefreshHandler(managedRuntimeTokenBroker)
 let managedAuthManager: ManagedAuthManager
-const assistantManager = new AssistantManager(
+let assistantManager: AssistantManager
+assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
   (event) => petWindow?.webContents.send('assistant:event', event),
   {
@@ -115,6 +116,22 @@ const assistantManager = new AssistantManager(
       authenticated: false,
       runtimeReady: false,
       errorCode: null
+    },
+    getManagedWebSearchState: () => {
+      const status = managedAuthManager?.getStatus()
+      return {
+        enabled: status?.managedWebSearchEnabled === true,
+        authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
+        runtimeReady: status?.runtimeSessionState === 'ready',
+        errorCode: status?.runtimeSessionErrorCode || null
+      }
+    },
+    managedWebSearch: {
+      selected: () => assistantManager?.getCapabilitySettings().capabilities.web_search.selectedSource === 'managed',
+      enabled: () => managedAuthManager?.getStatus().managedWebSearchEnabled === true,
+      getToken: () => managedRuntimeTokenBroker.getToken(),
+      endpoint: () => managedEndpointPolicy.aiDataPlaneBaseUrl || managedEndpointPolicy.controlPlaneBaseUrl,
+      clientVersion: () => app.getVersion()
     }
   },
   (event, client) => managedRuntimeAuthRefreshHandler.handle(event, client)
@@ -519,6 +536,13 @@ function registerIpc(): void {
     }
     return assistantManager.setChatSource(source)
   })
+  ipcMain.handle('assistant:set-web-search-source', (event, source: unknown) => {
+    requirePetSender(event)
+    if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
+      throw new TypeError('Web Search 来源无效。')
+    }
+    return assistantManager.setWebSearchSource(source)
+  })
 
   ipcMain.handle('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {
     requirePetSender(event)
@@ -698,7 +722,7 @@ function registerIpc(): void {
   ipcMain.handle('assistant:delete-knowledge-library', (event, libraryId: string) => {
     requirePetSender(event)
     requireKnowledgeLibraryId(libraryId)
-    return assistantManager.deleteKnowledgeLibrary(libraryId).then((deleted) => {
+    return assistantManager.deleteKnowledgeLibrary(libraryId).then((deleted: boolean) => {
       if (deleted) {
         const selected = loadSettings().assistantKnowledgeLibraryIds.filter((id) => id !== libraryId)
         updateSettings({ assistantKnowledgeLibraryIds: selected })
