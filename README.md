@@ -206,7 +206,7 @@ PetDock 会处理模型密钥、本地文件和可能触发系统操作的工具
 
 ## Roadmap
 
-本地 Runtime、BYOK、官方账号和 Managed Chat MVP 已完成。当前进入 Phase 4，在保持本地数据与工具边界的前提下，按独立门禁接入 Managed Web Search、Vision、Embedding 和 Rerank；生产流量仍由各能力白名单和独立开关控制。开发基线见 [Phase 4 多能力开发方案](docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)。
+本地 Runtime、BYOK、官方账号、Managed Chat 和 Phase 4 Managed Web Search 已完成。当前准备进入 Managed Vision；生产流量仍由各能力白名单和独立开关控制。开发基线见 [Phase 4 多能力开发方案](docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)。
 
 ## 许可证
 

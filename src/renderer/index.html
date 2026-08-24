@@ -21,72 +21,82 @@
           </div>
         </header>
         <div class="settings-content">
-          <section id="managed-account-panel" class="managed-account-panel" aria-labelledby="managed-account-title">
-            <div class="settings-section-heading">
-              <strong id="managed-account-title">PetDock Cloud</strong>
-              <small id="managed-account-status" role="status">未登录</small>
-            </div>
-            <div class="managed-account-summary">
-              <strong id="managed-account-name">未登录</strong>
-              <small id="managed-account-email"></small>
-              <small id="managed-device-name"></small>
-            </div>
-            <div class="settings-actions">
-              <button id="managed-login" class="secondary-button" type="button">登录</button>
-              <button id="managed-logout" class="secondary-button" type="button" disabled>退出登录</button>
-              <button id="managed-revoke-device" class="secondary-button" type="button" disabled>撤销此设备</button>
-              <button id="managed-open-portal" class="secondary-button" type="button">前往官网管理</button>
-            </div>
-          </section>
-          <form id="model-settings-form" class="model-settings-form">
-            <div class="settings-section-heading">
-              <strong>主模型</strong>
-              <small id="model-configured-status">使用环境配置</small>
-            </div>
-            <label class="web-field" for="chat-source-select">
-              <span>Chat 来源</span>
-              <select id="chat-source-select" aria-label="选择 Chat 来源">
-                <option value="byok">使用我的模型配置</option>
-                <option value="managed">使用官方 Chat</option>
-                <option value="disabled">关闭 Chat</option>
-              </select>
-            </label>
-            <small id="chat-source-status" class="web-test-status" role="status"></small>
-            <section id="managed-usage-summary" class="managed-usage-summary" aria-label="官方 Chat 额度" hidden>
+          <nav class="service-mode-switch" aria-label="服务模式">
+            <button id="service-mode-managed" type="button" aria-pressed="false">官方服务</button>
+            <button id="service-mode-byok" type="button" aria-pressed="false">自有配置</button>
+          </nav>
+          <small id="service-mode-status" class="visually-hidden" role="status"></small>
+
+          <div id="managed-settings-panel" class="service-mode-panel" hidden>
+            <section id="managed-account-panel" class="managed-account-panel" aria-labelledby="managed-account-title">
               <div class="settings-section-heading">
-                <strong>官方 Chat 额度</strong>
-                <button id="managed-usage-refresh" class="icon-button" type="button" title="刷新额度" aria-label="刷新官方 Chat 额度">↻</button>
+                <strong id="managed-account-title">PetDock Cloud</strong>
+                <small id="managed-account-status" role="status">未登录</small>
+              </div>
+              <div class="managed-account-summary">
+                <strong id="managed-account-name">未登录</strong>
+                <small id="managed-account-email"></small>
+                <small id="managed-device-name"></small>
+              </div>
+              <div class="settings-actions">
+                <button id="managed-login" class="secondary-button" type="button">登录</button>
+                <button id="managed-logout" class="secondary-button" type="button" disabled>退出登录</button>
+                <button id="managed-revoke-device" class="secondary-button" type="button" disabled>撤销此设备</button>
+                <button id="managed-open-portal" class="secondary-button" type="button">前往官网管理</button>
+              </div>
+            </section>
+            <section id="managed-usage-summary" class="managed-usage-summary" aria-label="官方能力与额度">
+              <div class="settings-section-heading">
+                <strong>官方能力</strong>
+                <button id="managed-usage-refresh" class="icon-button" type="button" title="刷新额度" aria-label="刷新官方能力额度">↻</button>
               </div>
               <small id="managed-usage-period"></small>
-              <div class="managed-usage-values">
-                <span>已使用 <strong id="managed-usage-used">-</strong></span>
-                <span>剩余 <strong id="managed-usage-remaining">-</strong></span>
+              <div class="managed-capability-list">
+                <div class="managed-capability-row">
+                  <span><strong>Chat</strong><small id="chat-source-status" role="status"></small></span>
+                  <strong id="managed-usage-chat">-</strong>
+                </div>
+                <div class="managed-capability-row">
+                  <span><strong>Web Search</strong><small id="managed-web-search-status" role="status"></small></span>
+                  <strong id="managed-usage-web-search">-</strong>
+                </div>
               </div>
               <small id="managed-usage-status" role="status"></small>
             </section>
-            <button id="chat-switch-byok" class="secondary-button" type="button" hidden>切回我的模型配置</button>
-            <label class="web-field" for="model-base-url">
-              <span>Base URL（可选）</span>
-              <input id="model-base-url" type="url" maxlength="500" placeholder="例如 https://api.openai.com/v1" autocomplete="off" />
-            </label>
-            <label class="web-field" for="model-name">
-              <span>模型名称</span>
-              <input id="model-name" type="text" maxlength="200" placeholder="例如 gpt-4o-mini" required autocomplete="off" />
-            </label>
-            <label class="web-field" for="model-api-key">
-              <span>API Key</span>
-              <input id="model-api-key" type="password" maxlength="2000" placeholder="输入 API Key" autocomplete="off" />
-            </label>
-            <div class="settings-actions">
-              <button id="model-clear-key" class="secondary-button" type="button">删除密钥</button>
-              <button id="model-save" class="primary-button" type="submit">保存主模型</button>
-            </div>
-            <small id="model-save-status" class="web-test-status" role="status"></small>
-          </form>
+          </div>
+
+          <div id="byok-settings-panel" class="service-mode-panel" hidden>
+            <form id="model-settings-form" class="model-settings-form">
+              <div class="settings-section-heading">
+                <strong>主模型</strong>
+                <small id="model-configured-status">使用环境配置</small>
+              </div>
+              <label class="web-field" for="model-base-url">
+                <span>Base URL（可选）</span>
+                <input id="model-base-url" type="url" maxlength="500" placeholder="例如 https://api.openai.com/v1" autocomplete="off" />
+              </label>
+              <label class="web-field" for="model-name">
+                <span>模型名称</span>
+                <input id="model-name" type="text" maxlength="200" placeholder="例如 gpt-4o-mini" required autocomplete="off" />
+              </label>
+              <label class="web-field" for="model-api-key">
+                <span>API Key</span>
+                <input id="model-api-key" type="password" maxlength="2000" placeholder="输入 API Key" autocomplete="off" />
+              </label>
+              <div class="settings-actions">
+                <button id="model-clear-key" class="secondary-button" type="button">删除密钥</button>
+                <button id="model-save" class="primary-button" type="submit">保存主模型</button>
+              </div>
+              <small id="model-save-status" class="web-test-status" role="status"></small>
+            </form>
+            <nav class="settings-links byok-settings-links" aria-label="自有能力配置">
+              <button id="settings-open-web" class="settings-link" type="button"><strong>联网与图片理解</strong><small>搜索服务、视觉模型与主动探测</small><span aria-hidden="true">›</span></button>
+              <button id="settings-open-knowledge" class="settings-link" type="button"><strong>知识库</strong><small>索引目录与 Embedding 模型</small><span aria-hidden="true">›</span></button>
+            </nav>
+          </div>
+
           <nav class="settings-links" aria-label="其他助手配置">
             <button id="settings-open-pet-manager" class="settings-link" type="button"><strong>桌宠管理</strong><small>创建、切换和删除用户桌宠</small><span aria-hidden="true">›</span></button>
-            <button id="settings-open-web" class="settings-link" type="button"><strong>联网与图片理解</strong><small>搜索服务、视觉模型与主动探测</small><span aria-hidden="true">›</span></button>
-            <button id="settings-open-knowledge" class="settings-link" type="button"><strong>知识库</strong><small>索引目录与 Embedding 模型</small><span aria-hidden="true">›</span></button>
             <button id="settings-open-skill" class="settings-link" type="button"><strong>Skill</strong><small>安装、启停和更新 Skill</small><span aria-hidden="true">›</span></button>
           </nav>
         </div>

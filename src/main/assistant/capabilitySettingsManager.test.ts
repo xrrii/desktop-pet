@@ -138,6 +138,22 @@ describe('CapabilitySettingsManager', () => {
     expect(manager.snapshot().capabilities.embedding.selectedSource).toBe('local')
   })
 
+  it('服务模式切换会一次性同步 Chat 与 Web Search 且不改写其他能力', () => {
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.snapshot()
+
+    manager.setServiceMode('managed')
+    const managed = manager.snapshot()
+    expect(managed.capabilities.chat.selectedSource).toBe('managed')
+    expect(managed.capabilities.web_search.selectedSource).toBe('managed')
+    expect(managed.capabilities.embedding.selectedSource).toBe('local')
+
+    manager.setServiceMode('byok')
+    const byok = manager.snapshot()
+    expect(byok.capabilities.chat.selectedSource).toBe('byok')
+    expect(byok.capabilities.web_search.selectedSource).toBe('byok')
+  })
+
   it('配置损坏时按当前脱敏状态重新迁移', async () => {
     await mkdir(join(electronState.userDataPath, 'assistant'), { recursive: true })
     await writeFile(settingsPath(), '{invalid', 'utf8')

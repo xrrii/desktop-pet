@@ -25,6 +25,7 @@ import type {
   AssistantPermissionResolution,
   AssistantRequest,
   AssistantRuntimeStatus,
+  AssistantServiceMode,
   AssistantSkillInstallPreview,
   AssistantSkillSnapshot,
   AssistantToolResultRequest,
@@ -191,6 +192,24 @@ export class AssistantManager {
     await this.runtime.restart()
     logInfo('助手 Chat 来源已切换', { source })
     return this.capabilitySettings.snapshot()
+  }
+
+  /** 同步切换 Chat 与联网搜索服务模式；重启失败时恢复原来源配置。 */
+  async setServiceMode(mode: AssistantServiceMode): Promise<AssistantCapabilitySettingsSnapshot> {
+    const backup = this.capabilitySettings.captureConfiguration()
+    await this.cancelAll()
+    try {
+      this.capabilitySettings.setServiceMode(mode)
+      await this.runtime.restart()
+      logInfo('助手服务模式已切换', { mode })
+      return this.capabilitySettings.snapshot()
+    } catch (error) {
+      this.capabilitySettings.restoreConfiguration(backup)
+      await this.runtime.restart().catch((rollbackError: unknown) => {
+        logError('助手服务模式回滚失败', rollbackError)
+      })
+      throw error
+    }
   }
 
   /** 设置 Web Search 独立来源；Managed 故障时保留选择且不改写 BYOK。 */

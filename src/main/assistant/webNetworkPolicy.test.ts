@@ -57,4 +57,38 @@ describe('webNetworkPolicy', () => {
       ])
     ).resolves.toMatchObject({ address: '93.184.216.34', family: 4 })
   })
+
+  it('系统 DNS 统一使用 Fake-IP 时允许域名交给本机代理接管', async () => {
+    const lookup = async (hostname: string): Promise<Array<{ address: string; family: number }>> => {
+      if (hostname === 'news.example.test') return [{ address: '198.18.0.88', family: 4 }]
+      if (hostname === 'example.com') return [{ address: '198.18.0.90', family: 4 }]
+      return []
+    }
+    await expect(
+      resolvePublicWebTarget('https://news.example.test/article', lookup)
+    ).resolves.toMatchObject({ address: '198.18.0.88', family: 4 })
+  })
+
+  it('没有系统级 Fake-IP 证据时仍拒绝保留网段解析结果', async () => {
+    const lookup = async (hostname: string): Promise<Array<{ address: string; family: number }>> => {
+      if (hostname === 'news.example.test') return [{ address: '198.18.0.88', family: 4 }]
+      if (hostname === 'example.com') return [{ address: '93.184.216.34', family: 4 }]
+      return []
+    }
+    await expect(
+      resolvePublicWebTarget('https://news.example.test/article', lookup)
+    ).rejects.toThrow('web_address_denied')
+  })
+
+  it('Fake-IP 模式下仍拒绝直接地址和其他私网解析结果', async () => {
+    const lookup = async (hostname: string): Promise<Array<{ address: string; family: number }>> => {
+      if (hostname === 'private.example.test') return [{ address: '192.168.1.20', family: 4 }]
+      if (hostname === 'example.com') return [{ address: '198.18.0.90', family: 4 }]
+      return []
+    }
+    expect(() => validateWebUrl('https://198.18.0.88/article')).toThrow('web_address_denied')
+    await expect(
+      resolvePublicWebTarget('https://private.example.test/article', lookup)
+    ).rejects.toThrow('web_address_denied')
+  })
 })

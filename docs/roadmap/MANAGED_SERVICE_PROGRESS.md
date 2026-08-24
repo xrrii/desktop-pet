@@ -57,17 +57,17 @@ Phase 3 Managed Chat MVP 详细开发方案
 
 ```text
 总体状态：Phase 4 In Progress
-当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00、Wave B Done；Wave C 自动化实现完成，真实 Provider 灰度待配置）
+当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00、Wave B、Wave C Done；准备进入 Wave D Managed Vision）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
 Spring Boot 控制面：P2-01、P2-02、P2-04、P2-05、P2-08、P2-09、P2-W01、P2-W02、P2-W03 Done；P2-06 loopback 兼容已实现（位于独立 `petdock-cloud`）
-FastAPI AI 数据面：Phase 3 Wave C Done；Phase 4 Wave C In Progress（Managed Web Search 路由、候选 Adapter、Usage 闭合和脱敏指标已实现，真实 Provider 灰度待配置）
+FastAPI AI 数据面：Phase 3 Wave C Done；Phase 4 Wave C Done（Managed Web Search 火山 Provider、Usage 闭合、正式精确路由和受限真实调用已完成）
 桌面 Runtime Managed 消费：Wave D Done；Wave E Done（P3-14 至 P3-16 来源选择、官方 Chat 状态、额度摘要、手动切回 BYOK 与脱敏入口已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：Wave C 尚缺境内 HTTPS Provider 地址/Revision、Secret 注入、数据驻留与保留证明、生产预算/额度和白名单
-下一建议工作项：补齐 Wave C 真实 Provider 灰度门禁；所有 Phase 4 开关和公网路由继续保持关闭
+当前阻塞：无 Wave C 技术阻塞；数据驻留、训练使用和保留期限证明仍是扩大白名单前的持续发布控制项
+下一建议工作项：进入 Wave D Managed Vision；Embedding 与 Rerank 继续保持关闭且公网路径不存在
 ```
 
 当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave F。Wave F 已完成自动门禁和受限正式 HTTPS 真实 Provider 文本 Chat 冒烟；Desktop 官方 Chat 产品入口、Runtime SSE、真实额度摘要、Web `/account/usage` 和 BYOK 隔离均已闭合。生产 Chat 仍由白名单和独立开关控制。
@@ -273,8 +273,10 @@ Phase 2/3 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Se
 - Cloud AI Gateway 已实现 `POST /ai/v1/web/search`：独立 `web_search` Claim/Feature Flag/Provider 注册、查询和结果数量校验、候选规范化、`requests` 用量预占/结算/失败终态、低基数指标和错误映射；不新增 `/web/fetch`。
 - Desktop Main 已通过 Runtime Token Broker 调用 Managed Search；搜索候选继续经过 Main 的协议、DNS、公网 IP、SSRF、重定向、MIME、响应大小和正文预算策略，网页正文仍由 Main 抓取；Managed 故障不自动切换 BYOK。
 - Web `/account/usage` 仅在 Cloud 返回真实字段时展示 `web_search` 的 `requests` 摘要，未返回时不展示假数据。
-- 自动验证通过：AI Gateway 51 项 pytest、Ruff、mypy；Desktop TypeScript、Vitest 170 项、契约 23 项、生产构建；Web TypeScript、Vitest 39 项和生产构建。
-- Wave C 尚不能标记 `Done`：真实 Provider、境内数据驻留/保留证明、白名单、生产额度、正式精确路由和受限 HTTPS 真实 Provider 冒烟仍待外部配置；生产开关继续为 `false`，公网 `/ai/v1/web/search` 继续关闭。
+- 自动验证通过：AI Gateway 58 项 pytest、Ruff、mypy；Desktop TypeScript、Vitest 174 项、契约 23 项、生产构建和设置页隔离 Electron Smoke；Web TypeScript、Vitest 39 项和生产构建。
+- 受限正式环境已完成火山搜索 Secret 注入、Provider 开启、`POST /ai/v1/web/search` 精确路由、管理员授权、真实 `requests` 额度展示和 Desktop 真实搜索闭环；未开放 `/web/fetch`。
+- 收尾修复包括：管理员更新单项授权时统一用户全部 Entitlement Version、OpenAI-compatible 工具历史转换、Nginx Web Search 超时配置去重、代理 Fake-IP DNS 与 SSRF 边界兼容，以及设置页“官方服务 / 自有配置”互斥展示。
+- Wave C 技术交付标记为 `Done`。数据驻留、训练使用和保留期限证明、白名单扩容与回滚演练继续作为发布负责人控制项；未完成证明时不得扩大普通用户范围，也不影响 Wave D 在关闭态开发和受限验收。
 
 ### 2026-08-21（Phase 3 Wave C Cloud Chat 数据面）
 

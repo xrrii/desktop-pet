@@ -27,6 +27,7 @@ import type {
   AssistantModelSettingsSnapshot,
   AssistantPermissionResolution,
   AssistantRuntimeStatus,
+  AssistantServiceMode,
   AssistantSkillInstallPreview,
   AssistantSkillSnapshot,
   AssistantWebSettingsInput,
@@ -146,6 +147,9 @@ const api = {
   setAssistantChatSource: (
     source: AssistantChatSelectedSource
   ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-chat-source', source),
+  setAssistantServiceMode: (
+    mode: AssistantServiceMode
+  ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-service-mode', mode),
   setAssistantWebSearchSource: (
     source: AssistantWebSearchSelectedSource
   ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-web-search-source', source),

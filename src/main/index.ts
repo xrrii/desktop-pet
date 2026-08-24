@@ -22,6 +22,7 @@ import type {
   AssistantLayoutTrace,
   AssistantWebSettingsInput,
   AssistantVisionSettingsInput,
+  AssistantServiceMode,
   MemoryClearScope,
   MemoryItemKind,
   AssistantPermissionResolution
@@ -535,6 +536,13 @@ function registerIpc(): void {
       throw new TypeError('Chat 来源无效。')
     }
     return assistantManager.setChatSource(source)
+  })
+  ipcMain.handle('assistant:set-service-mode', async (event, mode: unknown) => {
+    requirePetSender(event)
+    if (mode !== 'byok' && mode !== 'managed') {
+      throw new TypeError('助手服务模式无效。')
+    }
+    return assistantManager.setServiceMode(mode as AssistantServiceMode)
   })
   ipcMain.handle('assistant:set-web-search-source', (event, source: unknown) => {
     requirePetSender(event)

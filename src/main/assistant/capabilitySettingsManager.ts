@@ -8,6 +8,7 @@ import type {
   AssistantChatSelectedSource,
   AssistantEmbeddingSelectedSource,
   AssistantModelSettingsSnapshot,
+  AssistantServiceMode,
   AssistantVisionSelectedSource,
   AssistantVisionSettingsSnapshot,
   AssistantWebSearchSelectedSource,
@@ -80,6 +81,14 @@ export class CapabilitySettingsManager {
       throw new TypeError(`能力 ${capability} 的来源无效。`)
     }
     selected.capabilities[capability] = source as never
+    this.save(selected)
+  }
+
+  /** 原子更新 Chat 与 Web Search 来源，供设置页在两种服务模式间切换。 */
+  setServiceMode(mode: AssistantServiceMode): void {
+    const selected = this.loadOrMigrate(this.getState())
+    selected.capabilities.chat = mode
+    selected.capabilities.web_search = mode
     this.save(selected)
   }
 

@@ -26,6 +26,7 @@ const c3Only = process.env.PETDOCK_SMOKE_C3_ONLY === '1'
 const backend = process.env.PETDOCK_SMOKE_BACKEND === 'langchain' || c3Only ? 'langchain' : 'mock'
 const c2Only = process.env.PETDOCK_SMOKE_C2_ONLY === '1'
 const c5Only = process.env.PETDOCK_SMOKE_C5_ONLY === '1'
+const settingsOnly = process.env.PETDOCK_SMOKE_SETTINGS_ONLY === '1'
 const realWebSearch = process.env.PETDOCK_SMOKE_REAL_WEB === '1'
 const expectedResponse = backend === 'langchain' ? '本地模型适配测试通过' : '离线模式回应'
 const assistantThemes = ['quiet', 'note', 'glass', 'pixel', 'apple']
@@ -34,7 +35,7 @@ const unsupportedAttachmentSmokePath = join(projectRoot, 'outputs', 'assistant-s
 const artifactSmokeSavePath = join(projectRoot, 'outputs', 'assistant-smoke-saved.md')
 const c5FirstAttachmentPath = join(projectRoot, 'outputs', 'assistant-smoke-c5-first.txt')
 const c5SecondAttachmentPath = join(projectRoot, 'outputs', 'assistant-smoke-c5-second.txt')
-const smokeUserDataPath = c2Only || c3Only || c5Only
+const smokeUserDataPath = c2Only || c3Only || c5Only || settingsOnly
   ? join(projectRoot, 'temp', `assistant-smoke-user-${process.pid}`)
   : null
 let child
@@ -272,16 +273,56 @@ async function main() {
         composerSkillHidden: document.querySelector('#skill-button').hidden,
         composerWebHidden: document.querySelector('#web-button').hidden,
         hasModelForm: !!document.querySelector('#model-settings-form'),
-        modelName: document.querySelector('#model-name').value
+        modelName: document.querySelector('#model-name').value,
+        byokPressed: document.querySelector('#service-mode-byok').getAttribute('aria-pressed'),
+        byokPanelVisible: !document.querySelector('#byok-settings-panel').hidden,
+        managedPanelHidden: document.querySelector('#managed-settings-panel').hidden
       }))()`
     )
     if (!settingsState.composerKnowledgeHidden || !settingsState.composerSkillHidden ||
-        !settingsState.composerWebHidden || !settingsState.hasModelForm || !settingsState.modelName) {
+        !settingsState.composerWebHidden || !settingsState.hasModelForm || !settingsState.modelName ||
+        settingsState.byokPressed !== 'true' || !settingsState.byokPanelVisible || !settingsState.managedPanelHidden) {
       throw new Error(`Unified settings view is invalid: ${JSON.stringify(settingsState)}`)
     }
     const settingsScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
     const settingsScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-settings$1')
     await writeFile(settingsScreenshotPath, Buffer.from(settingsScreenshot.data, 'base64'))
+    await evaluate(petClient, `document.querySelector('#service-mode-managed').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#service-mode-managed').getAttribute('aria-pressed')`,
+      (value) => value === 'true',
+      10_000
+    )
+    const managedSettingsState = await evaluate(
+      petClient,
+      `(() => ({
+        managedPanelVisible: !document.querySelector('#managed-settings-panel').hidden,
+        byokPanelHidden: document.querySelector('#byok-settings-panel').hidden,
+        accountVisible: document.querySelector('#managed-account-panel').getBoundingClientRect().height > 0,
+        capabilityRows: document.querySelectorAll('.managed-capability-row').length,
+        modelFormVisible: document.querySelector('#model-settings-form').getBoundingClientRect().height > 0
+      }))()`
+    )
+    if (!managedSettingsState.managedPanelVisible || !managedSettingsState.byokPanelHidden ||
+        !managedSettingsState.accountVisible || managedSettingsState.capabilityRows !== 2 ||
+        managedSettingsState.modelFormVisible) {
+      throw new Error(`Managed settings view is invalid: ${JSON.stringify(managedSettingsState)}`)
+    }
+    const managedSettingsScreenshot = await petClient.send('Page.captureScreenshot', { format: 'png' })
+    const managedSettingsScreenshotPath = screenshotPath.replace(/(\.[^.]+)$/, '-settings-managed$1')
+    await writeFile(managedSettingsScreenshotPath, Buffer.from(managedSettingsScreenshot.data, 'base64'))
+    await evaluate(petClient, `document.querySelector('#service-mode-byok').click()`)
+    await waitForEvaluation(
+      petClient,
+      `document.querySelector('#service-mode-byok').getAttribute('aria-pressed')`,
+      (value) => value === 'true',
+      10_000
+    )
+    if (settingsOnly) {
+      process.stdout.write(`ASSISTANT_SETTINGS_SMOKE_OK\n${settingsScreenshotPath}\n${managedSettingsScreenshotPath}\n`)
+      return
+    }
     await evaluate(petClient, `document.querySelector('#settings-open-knowledge').click()`)
     await waitForEvaluation(
       petClient,

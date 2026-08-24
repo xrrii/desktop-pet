@@ -112,7 +112,7 @@ managed_rerank_enabled
 
 ### 4.3 来源切换与数据一致性
 
-- Chat、Embedding、Vision、Web Search 和 Rerank 的选择互不联动。
+- Provider 与故障状态仍按 Chat、Embedding、Vision、Web Search 和 Rerank 独立管理；设置页可按“官方服务 / 自有配置”分组展示，但不得把隐藏视图中的密钥或本地数据删除。
 - Managed 失败不得静默使用 BYOK Key；切回 BYOK 必须由用户明确操作。
 - Embedding Descriptor 的逻辑 ID、Revision、Dimensions、Tokenizer、归一化、Chunk 策略或阈值任一变化，都必须产生新的 Descriptor Signature。
 - 不同 Signature 的向量禁止混写。切换到未就绪空间时，UI 必须显示重建状态，旧空间保留到新索引成功或用户明确清理。
@@ -276,7 +276,7 @@ reserved -> failed
 
 ### 11.1 Desktop
 
-- 设置页按能力显示“我的配置 / 官方服务 / 本地 / 关闭”中实际允许的选项，不使用一个总开关联动全部能力。
+- 设置页使用“官方服务 / 自有配置”互斥视图隔离账号额度与 BYOK 密钥；当前模式切换同步 Chat 与 Web Search 来源，后续能力接入前必须明确加入模式切换或保留独立来源，不得依赖页面隐藏产生隐式回退。
 - 每项 Managed 选择都显示将发送的数据类别；Embedding 索引重建和 Vision 图片上传必须有明确状态。
 - Renderer 只接收脱敏来源、状态、Revision、索引进度和用量，不接收 Runtime Token、Provider、内部模型、用户/设备/Session ID。
 - Entitlement 或实时能力不可用时保留用户选择，但 `effectiveSource` 进入不可用或本地降级状态，不静默改写配置。

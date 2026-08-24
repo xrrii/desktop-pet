@@ -181,6 +181,7 @@ export type AssistantCapabilityStatus =
   | 'unsupported_client'
 
 export type AssistantCapabilityName = 'chat' | 'embedding' | 'vision' | 'rerank' | 'web_search'
+export type AssistantServiceMode = 'byok' | 'managed'
 export type AssistantChatSelectedSource = 'byok' | 'managed' | 'disabled'
 export type AssistantChatEffectiveSource = 'byok' | 'managed' | 'disabled' | 'mock'
 export type AssistantEmbeddingSelectedSource = 'byok' | 'managed' | 'local'

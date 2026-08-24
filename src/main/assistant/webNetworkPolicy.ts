@@ -14,6 +14,7 @@ export type WebDnsLookup = (
 ) => Promise<Array<{ address: string; family: number }>>
 
 const BLOCKED_HOST_SUFFIXES = ['.localhost', '.local', '.internal', '.home', '.lan']
+const FAKE_IP_PROBE_HOSTNAME = 'example.com'
 const TRACKING_PARAMETERS = new Set([
   'fbclid',
   'gclid',
@@ -75,12 +76,12 @@ export async function resolvePublicWebTarget(
   } catch {
     throw new Error('web_dns_failed')
   }
-  if (
-    addresses.length === 0 ||
-    addresses.some(
-      (item) => (item.family !== 4 && item.family !== 6) || !isPublicIpAddress(item.address)
-    )
-  ) {
+  if (addresses.length === 0 || addresses.some((item) => item.family !== 4 && item.family !== 6)) {
+    throw new Error('web_address_denied')
+  }
+  const allPublic = addresses.every((item) => isPublicIpAddress(item.address))
+  if (!allPublic && !(addresses.every((item) => isProxyFakeIpAddress(item.address)) &&
+      await usesSystemFakeIpDns(hostname, lookup))) {
     throw new Error('web_address_denied')
   }
   const selected = addresses[0]
@@ -125,6 +126,30 @@ export function isPublicIpAddress(value: string): boolean {
     '2002:',
     '3fff:'
   ].some((prefix) => lower.startsWith(prefix))
+}
+
+/**
+ * 识别代理软件常用的 RFC 2544 Fake-IP 网段。
+ * 该判断不代表地址属于公网，只用于配合独立 DNS 探针确认整机处于 Fake-IP 模式。
+ */
+function isProxyFakeIpAddress(value: string): boolean {
+  const address = normalizedHostname(value)
+  if (isIP(address) !== 4) return false
+  const number = ipv4Number(address)
+  return number !== null && inIpv4Cidr(number, ipv4Number('198.18.0.0')!, 15)
+}
+
+/** 通过独立公网域名确认系统 DNS 正在统一使用 Fake-IP，避免放宽单个可疑解析结果。 */
+async function usesSystemFakeIpDns(targetHostname: string, lookup: WebDnsLookup): Promise<boolean> {
+  const probeHostname = targetHostname === FAKE_IP_PROBE_HOSTNAME ? 'iana.org' : FAKE_IP_PROBE_HOSTNAME
+  try {
+    const probeAddresses = await lookup(probeHostname)
+    return probeAddresses.length > 0 && probeAddresses.every(
+      (item) => item.family === 4 && isProxyFakeIpAddress(item.address)
+    )
+  } catch {
+    return false
+  }
 }
 
 const BLOCKED_IPV4_RANGES: Array<[number, number]> = [
