@@ -17,6 +17,7 @@ from ..documents.chunking import (
 )
 from ..documents.parser import DocumentParseError, DocumentParserRegistry
 from ..providers.embeddings import EmbeddingProvider
+from ..providers.rerank import RerankProvider
 from ..rag.planner import retrieval_query_terms, retrieval_terms
 from ..rag.scoring import content_similarity, normalized_similarity
 from ..rag.vector_store import ChromaVectorStore
@@ -94,6 +95,8 @@ class RetrievalTrace:
     degraded_to_hash: bool
     duration_ms: int
     rejection_counts: dict[str, int]
+    rerank_source: str = "disabled"
+    rerank_fallback_reason: str | None = None
 
     def log_fields(self) -> dict[str, Any]:
         """转换为结构化日志字段。"""
@@ -109,6 +112,8 @@ class RetrievalTrace:
             "degradedToHash": self.degraded_to_hash,
             "durationMs": self.duration_ms,
             "rejectionCounts": self.rejection_counts,
+            "rerankSource": self.rerank_source,
+            "rerankFallbackReason": self.rerank_fallback_reason,
         }
 
 
@@ -151,12 +156,14 @@ class KnowledgeService:
         vectors: ChromaVectorStore,
         fallback_vectors: ChromaVectorStore | None = None,
         parser_registry: DocumentParserRegistry | None = None,
+        rerank: RerankProvider | None = None,
     ) -> None:
         """绑定存储、向量索引和 Runtime 唯一 Parser Registry。"""
         self.store = store
         self.vectors = vectors
         self.fallback_vectors = fallback_vectors
         self.registry = parser_registry or DocumentParserRegistry(vision_enabled=False)
+        self.rerank = rerank
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._controls: dict[str, _IndexControl] = {}
 
@@ -509,7 +516,28 @@ class KnowledgeService:
             else:
                 score_floor = max(FINAL_MIN_SCORE, top_score * SINGLE_RESULT_SCORE_RATIO)
                 accepted = [item for item in accepted if item[0].final_score >= score_floor]
-        selected = _deduplicate_candidates(accepted, desired_limit)
+        # Cloud 契约最多接收 50 个候选；保留本地排序前 50 个作为精排池，最终仍按动态上限截断。
+        rerank_candidates = _deduplicate_candidates(accepted, min(len(accepted), 50))
+        rerank_source = "disabled"
+        rerank_fallback_reason: str | None = None
+        if self.rerank and rerank_candidates:
+            try:
+                scores = self.rerank.rerank(
+                    query,
+                    [{"id": candidate.id, "content": str(record["content"])} for candidate, record in rerank_candidates],
+                )
+                if set(scores) != {candidate.id for candidate, _ in rerank_candidates}:
+                    raise ValueError("Rerank 候选集合不一致")
+                rerank_candidates.sort(key=lambda item: scores[item[0].id], reverse=True)
+                rerank_source = "managed"
+            except Exception as error:
+                rerank_fallback_reason = getattr(error, "code", "provider_unavailable")
+                LOGGER.warning(
+                    "Rerank 失败，回退本地排序 reason=%s candidates=%s",
+                    rerank_fallback_reason,
+                    len(rerank_candidates),
+                )
+        selected = rerank_candidates[:desired_limit]
         sources = [
             RetrievalSource(
                 id=candidate.id,
@@ -535,6 +563,8 @@ class KnowledgeService:
             degraded_to_hash=degraded_to_hash,
             duration_ms=round((time.perf_counter() - started_at) * 1000),
             rejection_counts=rejection_counts,
+            rerank_source=rerank_source,
+            rerank_fallback_reason=rerank_fallback_reason,
         )
         return RetrievalResult(sources, trace)
 
@@ -561,6 +591,7 @@ class KnowledgeService:
                 degraded_to_hash=False,
                 duration_ms=round((time.perf_counter() - started_at) * 1000),
                 rejection_counts={},
+                rerank_source="disabled",
             ),
         )
 

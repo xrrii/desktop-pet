@@ -316,3 +316,36 @@ def test_langchain_progressive_disclosure_and_permission_denial(tmp_path: Path) 
     assert any("权限已拒绝" in event["payload"].get("delta", "") for event in events)
     memory.close()
     registry.close()
+
+
+def test_builtin_web_tools_are_not_blocked_by_skill_network_permission(tmp_path: Path) -> None:
+    """内置联网工具由 Main 的用户能力策略控制，不应被当前 Skill 的权限清单拦截。"""
+    packages = tmp_path / "skills" / "packages"
+    _write_skill(packages / "weekly-report")
+    registry = SkillRegistry(str(packages), SkillStore(str(tmp_path / "skills.db")))
+    memory = MemoryStore(str(tmp_path / "memory.db"))
+    knowledge = KnowledgeService(
+        KnowledgeStore(str(tmp_path / "knowledge.db")),
+        ChromaVectorStore(str(tmp_path / "chroma"), LocalHashEmbedding()),
+    )
+    backend = LangChainBackend(object(), memory, knowledge, registry)
+    request = AssistantRequest(
+        protocolVersion=1,
+        taskId="skill-web-permission-task",
+        conversationId="skill-web-permission-conversation",
+        input="测试联网能力与 Skill 隔离",
+        source="assistant-window",
+        context={"activePetId": "pet", "locale": "zh-CN", "timezone": "UTC", "webSearchEnabled": True},
+    )
+
+    backend._activate_skill(request, "weekly-report", "test")
+    assert backend._skill_tool_denial(request.taskId, "search_web") is None
+    assert backend._skill_tool_denial(request.taskId, "fetch_web_page") is None
+    assert backend._skill_tool_denial(request.taskId, "open_url") == (
+        "skill_permission_denied：Skill 未声明权限 tool.open_url。"
+    )
+
+    backend.finish_task(request.taskId)
+    asyncio.run(knowledge.close())
+    memory.close()
+    registry.close()

@@ -528,7 +528,7 @@ Renderer 使用 `web_sources` 事件展示：
 当前验收记录：
 
 - [x] Main 已实现默认火山引擎 Provider、兼容 Brave Provider、按 Provider 隔离的 `safeStorage` 密钥、旧 Brave 配置迁移、默认关闭状态和脱敏设置 IPC；Renderer 无法读取已保存密钥。
-- [x] `search_web`、`fetch_web_page` 已接入 Main/Runtime 工具循环；Skill 使用联网工具必须声明 `network.read`。
+- [x] `search_web`、`fetch_web_page` 已接入 Main/Runtime 工具循环；它们是用户级内置能力，独立受 Main 的开关、账号授权、额度和网络策略控制，不因当前激活 Skill 缺少 `network.read` 而阻断。Skill 若未来获得直接网络执行能力，仍必须单独声明并通过 `network.read` 收缩校验。
 - [x] URL、端口、凭据、DNS 公网地址、固定解析地址、逐次重定向、MIME、2 MB 响应、15 秒超时和任务取消策略已实现。
 - [x] 网页清洗使用 DOM 解析；完整正文只保留在 Runtime 当前任务内，SQLite 只保存短工具摘要和最终实际引用来源。
 - [x] Renderer 已提供联网设置、火山引擎 API Key 管理页入口、首次启用隐私确认、连接测试和网页来源卡片，并区分搜索摘要与已读取正文。

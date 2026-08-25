@@ -50,6 +50,7 @@ class RuntimeConfig:
     managed_ai_base_url: str = "https://ai.petdock.site"
     managed_client_version: str = "0.2.0"
     managed_device_id: str = ""
+    rerank_source: Literal["managed", "disabled"] = "disabled"
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -184,6 +185,7 @@ class RuntimeConfig:
             managed_ai_base_url=managed_ai_base_url,
             managed_client_version=managed_client_version,
             managed_device_id=managed_device_id,
+            rerank_source=capabilities.rerank,
         )
 
 

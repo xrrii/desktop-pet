@@ -64,6 +64,7 @@ interface ActiveTask {
   lastRuntimeSequence: number
   lastUiSequence: number
   openToolCalls: Set<string>
+  outputChars: number
 }
 
 interface PendingToolContext {
@@ -89,6 +90,7 @@ export class AssistantManager {
     managedVision: this.getManagedVisionState(),
     managedWebSearch: this.getManagedWebSearchState(),
     managedEmbedding: this.getManagedEmbeddingState(),
+    managedRerank: this.getManagedRerankState(),
     embedding: this.embeddingModels.capabilityState(),
     vision: this.visionSettings.snapshot(),
     webSearch: this.webSettings.snapshot()
@@ -99,6 +101,7 @@ export class AssistantManager {
   private readonly pendingPermissions = new Map<string, PendingPermission>()
   private readonly draftAttachments = new Map<string, AssistantAttachmentSummary>()
   private visionSourceChange: Promise<void> = Promise.resolve()
+  private embeddingSourceChange: Promise<void> = Promise.resolve()
   private readonly onManagedAuthRefreshRequired: (
     event: ManagedAuthRefreshRequiredEvent,
     client: AssistantRuntimeClient
@@ -127,6 +130,12 @@ export class AssistantManager {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   } = () => ({ enabled: false, authenticated: false, runtimeReady: false, errorCode: null })
+  private getManagedRerankState: () => {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  } = () => ({ enabled: false, authenticated: false, runtimeReady: false, errorCode: null })
   private getManagedAiBaseUrl: () => string = () => 'https://ai.petdock.site'
 
   constructor(
@@ -147,6 +156,12 @@ export class AssistantManager {
         errorCode: ManagedRuntimeSessionErrorCode | string | null
       }
       getManagedEmbeddingState?: () => {
+        enabled: boolean
+        authenticated: boolean
+        runtimeReady: boolean
+        errorCode: ManagedRuntimeSessionErrorCode | string | null
+      }
+      getManagedRerankState?: () => {
         enabled: boolean
         authenticated: boolean
         runtimeReady: boolean
@@ -181,6 +196,7 @@ export class AssistantManager {
     this.getManagedWebSearchState = runtimeLifecycle.getManagedWebSearchState || this.getManagedWebSearchState
     this.getManagedVisionState = runtimeLifecycle.getManagedVisionState || this.getManagedVisionState
     this.getManagedEmbeddingState = runtimeLifecycle.getManagedEmbeddingState || this.getManagedEmbeddingState
+    this.getManagedRerankState = runtimeLifecycle.getManagedRerankState || this.getManagedRerankState
     this.getManagedAiBaseUrl = runtimeLifecycle.getManagedAiBaseUrl || this.getManagedAiBaseUrl
     this.webSearch.setManagedAccess(runtimeLifecycle.managedWebSearch || null)
     this.onManagedAuthRefreshRequired = onManagedAuthRefreshRequired
@@ -249,6 +265,22 @@ export class AssistantManager {
     this.capabilitySettings.setSelectedSource('web_search', source)
     logInfo('助手 Web Search 来源已切换', { source })
     return this.capabilitySettings.snapshot()
+  }
+
+  /** 切换官方 Rerank；失败时恢复原来源，避免 Runtime 使用隐式配置。 */
+  async setRerankSource(source: 'managed' | 'disabled'): Promise<AssistantCapabilitySettingsSnapshot> {
+    const backup = this.capabilitySettings.captureConfiguration()
+    await this.cancelAll()
+    try {
+      this.capabilitySettings.setSelectedSource('rerank', source)
+      await this.runtime.restart()
+      logInfo('助手 Rerank 来源已切换', { source })
+      return this.capabilitySettings.snapshot()
+    } catch (error) {
+      this.capabilitySettings.restoreConfiguration(backup)
+      await this.runtime.restart().catch((rollbackError: unknown) => logError('Rerank 来源回滚失败', rollbackError))
+      throw error
+    }
   }
 
   /** 设置 Vision 独立来源并重启 Runtime；切换模式不会删除 BYOK 视觉密钥。 */
@@ -487,7 +519,8 @@ export class AssistantManager {
     const state: ActiveTask = {
       lastRuntimeSequence: 0,
       lastUiSequence: 0,
-      openToolCalls: new Set()
+      openToolCalls: new Set(),
+      outputChars: 0
     }
     this.activeTasks.set(taskId, state)
     this.webSearch.beginTask(taskId, message)
@@ -683,6 +716,14 @@ export class AssistantManager {
     return client.deleteKnowledgeLibrary(libraryId)
   }
 
+  /** 在 Managed Runtime Session 就绪后按当前 Embedding Provider 重建全部知识库索引。 */
+  async reindexAllKnowledge(): Promise<number> {
+    const client = await this.runtime.start()
+    const started = await client.reindexAllKnowledge()
+    logInfo('Managed Runtime Session 就绪，已触发知识库索引重建', { started })
+    return started
+  }
+
   /** 返回本地白名单模型、下载进度和当前活动 Provider。 */
   async getEmbeddingSnapshot(): Promise<AssistantEmbeddingSnapshot> {
     return this.embeddingModels.snapshot()
@@ -801,6 +842,10 @@ export class AssistantManager {
       return
     }
 
+    if (event.type === 'message_delta') {
+      state.outputChars += event.payload.delta.length
+    }
+
     if (event.type === 'artifact_created') {
       this.recordArtifactAudit(
         'create',
@@ -820,6 +865,12 @@ export class AssistantManager {
 
     this.emit(event.taskId, event)
     if (event.type === 'done') {
+      logInfo('助手任务流结束', {
+        taskId: event.taskId,
+        finishReason: event.payload.finishReason,
+        outputChars: state.outputChars,
+        runtimeSequence: state.lastRuntimeSequence
+      })
       this.cleanupTask(event.taskId)
     }
   }
@@ -832,6 +883,12 @@ export class AssistantManager {
     }
     state.openToolCalls.add(runtimeCall.id)
     const policy = this.toolHost.evaluate(runtimeCall)
+    logInfo('助手收到 Runtime 工具调用', {
+      taskId,
+      toolCallId: runtimeCall.id,
+      toolName: runtimeCall.name,
+      policy: policy.action
+    })
     const call: ToolCall = {
       id: runtimeCall.id,
       name: runtimeCall.name,
@@ -858,6 +915,11 @@ export class AssistantManager {
     })
 
     if (policy.action === 'deny') {
+      logInfo('助手工具调用被 Main 策略拒绝', {
+        taskId,
+        toolCallId: call.id,
+        toolName: call.name
+      })
       await this.completeToolCall(
         pendingBase,
         { decision: 'denied', ok: false, error: policy.error || '工具被策略拒绝。' }
@@ -868,6 +930,14 @@ export class AssistantManager {
     if (policy.action === 'execute') {
       const startedAt = Date.now()
       const execution = await this.toolHost.execute(policy, taskId)
+      logInfo('助手工具调用执行完成', {
+        taskId,
+        toolCallId: call.id,
+        toolName: call.name,
+        ok: execution.ok,
+        durationMs: Date.now() - startedAt,
+        error: execution.error ? 'tool_execution_failed' : undefined
+      })
       await this.completeToolCall(
         pendingBase,
         {
@@ -1000,6 +1070,29 @@ export class AssistantManager {
     return new AssistantAttachmentManager(join(app.getPath('userData'), 'assistant', 'attachments'))
   }
 
+  /** 切换官方 Embedding 来源并按新的向量签名重建知识库索引。 */
+  async setEmbeddingSource(source: 'managed' | 'local' | 'byok'): Promise<AssistantCapabilitySettingsSnapshot> {
+    const operation = this.embeddingSourceChange.then(async () => {
+      const capabilityBackup = this.capabilitySettings.captureConfiguration()
+      await this.cancelAll()
+      try {
+        this.capabilitySettings.setSelectedSource('embedding', source)
+        const client = await this.runtime.restart()
+        await client.reindexAllKnowledge()
+        logInfo('助手 Embedding 来源已切换', { source })
+        return this.capabilitySettings.snapshot()
+      } catch (error) {
+        this.capabilitySettings.restoreConfiguration(capabilityBackup)
+        await this.runtime.restart().catch((rollbackError: unknown) => {
+          logError('embedding source rollback failed', rollbackError)
+        })
+        throw error
+      }
+    })
+    this.embeddingSourceChange = operation.then(() => undefined, () => undefined)
+    return operation
+  }
+
   /** 按有效能力来源构造 Runtime 环境，禁止无关 BYOK 凭据进入子进程。 */
   private runtimeEnvironment(): Record<string, string> {
     if (process.env.PETDOCK_CAPABILITY_SELECTOR?.trim().toLowerCase() === 'legacy') {
@@ -1015,6 +1108,7 @@ export class AssistantManager {
       chat: capabilities.capabilities.chat.effectiveSource,
       vision: capabilities.capabilities.vision.effectiveSource,
       embedding: capabilities.capabilities.embedding.effectiveSource,
+      rerank: capabilities.capabilities.rerank.effectiveSource,
       webSearch: capabilities.capabilities.web_search.effectiveSource
     })
     const chatByok = capabilities.capabilities.chat.effectiveSource === 'byok'

@@ -266,6 +266,8 @@ reserved -> failed
 - `P4-R05`：失败、关闭、未授权、超时或额度耗尽时回退现有本地顺序，并在 Retrieval Trace 中记录固定原因。
 - `P4-R06`：使用固定评测集证明相关性收益，并记录延迟、回退率和对最终准入结果的影响。
 
+Wave F 实现采用服务器本地 `BAAI/bge-reranker-base`，通过独立 `rerank-runtime` 容器提供服务；不需要外部 Rerank API Key，不复用 Chat LLM，桌面端仍经 AI Gateway 受控调用。
+
 ### 10.2 完成门槛
 
 - Rerank 不得新增候选、不修改候选正文、不绕过本地最低分和来源去重。

@@ -186,6 +186,7 @@ class ManagedChatModel:
         self._task_id: str | None = None
         self._trace_ids: dict[str, str] = {}
         self._output_started: dict[str, bool] = {}
+        self._output_truncated: dict[str, bool] = {}
 
     # 绑定当前 Agent 的固定工具定义。
     def bind_tools(self, tools: list[dict[str, object]]) -> "ManagedChatModel":
@@ -199,18 +200,24 @@ class ManagedChatModel:
         self._task_id = task_id
         self._trace_ids.setdefault(task_id, str(uuid.uuid4()))
         self._output_started.setdefault(task_id, False)
+        self._output_truncated[task_id] = False
 
     # 释放任务和 HTTP 客户端资源。
     def finish_task(self, task_id: str) -> None:
         """清理不含用户正文的任务标识状态。"""
         self._trace_ids.pop(task_id, None)
         self._output_started.pop(task_id, None)
+        self._output_truncated.pop(task_id, None)
         if self._task_id == task_id:
             self._task_id = None
 
     async def close(self) -> None:
         """关闭 HTTP 连接池。"""
         await self._client.aclose()
+
+    def was_output_truncated(self, task_id: str) -> bool:
+        """返回最近一次托管 Chat 调用是否达到 Provider 输出上限。"""
+        return self._output_truncated.get(task_id, False)
 
     async def astream(self, input: Sequence[object]) -> AsyncIterator[_ManagedChunk | ManagedAuthRefreshRequired]:
         """发送一次逻辑模型调用并严格消费 Cloud SSE。"""
@@ -226,6 +233,10 @@ class ManagedChatModel:
         terminal = False
         saw_usage = False
         tool_call_index = 0
+        output_chars = 0
+        finish_reason = "unknown"
+        output_units: int | None = None
+        truncated = False
         payload = {"logicalModel": "chat-standard", "messages": _serialize_messages(input), "stream": True}
         if self._tools:
             payload["tools"] = self._tools
@@ -281,6 +292,7 @@ class ManagedChatModel:
                             text = event.get("text")
                             if not isinstance(text, str) or not text:
                                 raise ManagedProviderError("stream_protocol_error")
+                            output_chars += len(text)
                             self._output_started[task_id] = True
                             yield _ManagedChunk(content=text)
                         elif event_type == "tool_call":
@@ -296,12 +308,21 @@ class ManagedChatModel:
                             if saw_usage:
                                 raise ManagedProviderError("stream_protocol_error")
                             saw_usage = True
+                            raw_output_units = event.get("outputUnits")
+                            if type(raw_output_units) is int and raw_output_units >= 0:
+                                output_units = raw_output_units
                             continue
                         elif event_type == "completed":
                             if not saw_usage:
                                 raise ManagedProviderError("stream_protocol_error")
                             if event.get("finishReason") not in {"stop", "tool_calls", "cancelled"}:
                                 raise ManagedProviderError("stream_protocol_error")
+                            finish_reason = str(event["finishReason"])
+                            raw_truncated = event.get("truncated", False)
+                            if not isinstance(raw_truncated, bool):
+                                raise ManagedProviderError("stream_protocol_error")
+                            truncated = raw_truncated
+                            self._output_truncated[task_id] = truncated
                             terminal = True
                         elif event_type == "error":
                             if not isinstance(event.get("code"), str) or not isinstance(event.get("retryable"), bool):
@@ -311,6 +332,16 @@ class ManagedChatModel:
                             raise ManagedProviderError("stream_protocol_error")
                     if not terminal:
                         raise ManagedProviderError("stream_protocol_error")
+                    LOGGER.info(
+                        "Managed Chat Runtime 流正常闭合 taskId=%s requestId=%s finishReason=%s truncated=%s outputChars=%d outputUnits=%s usage=%s",
+                        task_id,
+                        request_id,
+                        finish_reason,
+                        truncated,
+                        output_chars,
+                        output_units,
+                        saw_usage,
+                    )
                     # completed 表示本次逻辑请求已经闭合，不能再次进入重试循环。
                     return
             except httpx.TimeoutException as error:

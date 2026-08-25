@@ -33,7 +33,7 @@ class MemoryExtractor:
     async def _run(self, request: AssistantRequest, assistant_text: str) -> None:
         """分析本轮对话并把合规结果写成待确认候选。"""
         if self._model is None:
-            candidate = self._fallback_candidate(request.input)
+            candidate = _fallback_candidate(request.input)
             if candidate:
                 self._store.add_candidate(request.conversationId, candidate, 0.86, "明确表达了记忆意图")
             return

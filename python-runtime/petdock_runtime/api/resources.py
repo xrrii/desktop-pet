@@ -20,6 +20,7 @@ from ..managed.session import ManagedSessionStore
 from ..protocol import AssistantRequest
 from ..providers.chat import ChatModelFactory
 from ..providers.embeddings import EmbeddingProvider, LocalHashEmbedding, create_embedding_provider
+from ..providers.rerank import ManagedRerankProvider, RerankProvider
 from ..rag.vector_store import ChromaVectorStore
 from ..skills.installer import SkillInstaller
 from ..skills.registry import SkillRegistry
@@ -44,6 +45,7 @@ class RuntimeResources:
     artifacts: ArtifactStore
     knowledge_store: KnowledgeStore
     embedding: EmbeddingProvider
+    rerank: RerankProvider | None
     attachment_index: AttachmentIndexStore
     knowledge: KnowledgeService
     skills: SkillRegistry
@@ -63,6 +65,8 @@ class RuntimeResources:
         close_embedding = getattr(self.embedding, "close", None)
         if close_embedding:
             close_embedding()
+        if self.rerank:
+            self.rerank.close()
         await self.vision.close_managed_provider()
         self.vision.close()
         self.skills.close()
@@ -101,6 +105,10 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
     artifacts = ArtifactStore(config.memory_db_path, config.artifact_root)
     knowledge_store = KnowledgeStore(config.knowledge_db_path)
     embedding = create_embedding_provider(config, managed_session)
+    rerank: RerankProvider | None = (
+        ManagedRerankProvider(config.managed_ai_base_url, config.managed_client_version, config.managed_device_id, managed_session)
+        if config.rerank_source == "managed" else None
+    )
     attachment_index = AttachmentIndexStore(config.attachment_index_root, embedding)
     attachment_index.reconcile(attachments.conversation_ids())
     attachment_analysis = AttachmentAnalysisService(attachments, attachment_index, embedding)
@@ -114,6 +122,7 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         ChromaVectorStore(config.chroma_path, embedding),
         fallback_vectors,
         parser_registry,
+        rerank,
     )
     skill_store = SkillStore(config.skills_db_path)
     skills = SkillRegistry(config.skills_root, skill_store)
@@ -182,6 +191,7 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         artifacts=artifacts,
         knowledge_store=knowledge_store,
         embedding=embedding,
+        rerank=rerank,
         attachment_index=attachment_index,
         knowledge=knowledge,
         skills=skills,

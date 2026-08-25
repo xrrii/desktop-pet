@@ -45,6 +45,12 @@ export interface CapabilityConfigurationState {
     runtimeReady: boolean
     errorCode: ManagedRuntimeSessionErrorCode | string | null
   }
+  managedRerank?: {
+    enabled: boolean
+    authenticated: boolean
+    runtimeReady: boolean
+    errorCode: ManagedRuntimeSessionErrorCode | string | null
+  }
   embedding: {
     provider: 'hash' | 'local' | 'online'
     configured: boolean
@@ -226,7 +232,7 @@ function resolveSnapshot(
       embedding,
       vision,
       rerank: selected.capabilities.rerank === 'managed'
-        ? available('managed', 'disabled', 'unsupported_client', 'managed_not_supported')
+        ? resolveManagedCapability('rerank', state.managedRerank)
         : available('disabled', 'disabled', 'disabled', 'user_disabled'),
       web_search: webSearch
     }
@@ -235,14 +241,16 @@ function resolveSnapshot(
 
 /** 计算独立 Managed Web Search 的脱敏状态，不自动切换 BYOK。 */
 function resolveManagedCapability(
-  capability: 'vision' | 'web_search',
-  state: CapabilityConfigurationState['managedWebSearch'] | CapabilityConfigurationState['managedVision']
+  capability: 'vision' | 'web_search' | 'rerank',
+  state: CapabilityConfigurationState['managedWebSearch'] | CapabilityConfigurationState['managedVision'] | CapabilityConfigurationState['managedRerank']
 ) {
-  if (!state?.enabled) return available('managed', 'disabled', 'provider_unavailable', `managed_${capability}_disabled`)
+  // 用户明确选择 Managed 时始终保留 managed effectiveSource；启动竞态或服务端暂不可用
+  // 只能影响状态，不能降级成 disabled，否则 Runtime 不会装配对应的 Managed Provider。
+  if (!state?.enabled) return available('managed', 'managed', 'provider_unavailable', `managed_${capability}_disabled`)
   if (state.errorCode === 'managed_capability_not_entitled') {
-    return available('managed', 'disabled', 'not_entitled', `managed_${capability}_not_entitled`)
+    return available('managed', 'managed', 'not_entitled', `managed_${capability}_not_entitled`)
   }
-  if (!state.authenticated) return available('managed', 'disabled', 'not_authenticated', 'managed_authentication_required')
+  if (!state.authenticated) return available('managed', 'managed', 'not_authenticated', 'managed_authentication_required')
   if (!state.runtimeReady || state.errorCode) {
     // Runtime 重启期间仍保持 Managed effectiveSource，避免新进程按 BYOK/inherited 启动；
     // runtimeReady 和 errorCode 继续通过状态字段告知 UI 当前尚未可用。

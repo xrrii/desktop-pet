@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import base64
+import binascii
 import uuid
 from typing import Any
 
@@ -86,7 +88,8 @@ class ManagedEmbeddingProvider:
             "X-PetDock-Request-Id": request_id,
             "X-PetDock-Attempt-Id": attempt_id,
             "X-PetDock-Client-Version": self._client_version,
-            "X-PetDock-Device-Id": self._device_id,
+            # Runtime Session JWT 中的设备 Claim 才是控制面签发的有效设备标识。
+            "X-PetDock-Device-Id": _device_id_from_token(lease.access_token, self._device_id),
             "Accept": "application/json",
         }
         payload = {
@@ -128,3 +131,20 @@ def _response_error(body: bytes) -> str:
         "quota_exhausted": "managed_quota_exhausted",
         "provider_timeout": "embedding_provider_timeout",
     }.get(code, "embedding_provider_unavailable")
+
+
+def _device_id_from_token(token: str, fallback: str) -> str:
+    """读取已由 Main 注入的 JWT 设备 Claim；解析失败时使用启动配置。"""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return fallback
+        padding = "=" * (-len(parts[1]) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(parts[1] + padding))
+        value = claims.get("device_id") if isinstance(claims, dict) else None
+        if isinstance(value, str):
+            uuid.UUID(value)
+            return value
+    except (IndexError, ValueError, TypeError, binascii.Error, json.JSONDecodeError):
+        pass
+    return fallback

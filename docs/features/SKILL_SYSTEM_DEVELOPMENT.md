@@ -790,13 +790,13 @@ Runtime 校验是能力收缩，Electron Main 校验是最终安全边界。
 
 - 没有 `skill.json` 的标准 Skill 默认只拥有纯指令能力。
 - 可以读取自身 `references/` 和 `assets/`，但不能读取 Skill 根目录外文件。
-- 使用 RAG、记忆或 OS 工具前必须有对应 PetDock 扩展权限。
+- 使用 RAG、记忆或 OS 工具前必须有对应 PetDock 扩展权限；内置 `search_web`、`fetch_web_page` 属于用户级联网能力，由 Main 的 Web Search 开关、账号授权、额度和网络策略独立控制，不因当前激活 Skill 缺少 `network.read` 而阻断。
 - Agent 尝试调用未声明工具时，Runtime 返回 `skill_permission_denied`。
 - 权限变化必须展示给用户，新增权限需要重新确认。
 
 ### 16.3 GitHub 内容与工具权限
 
-从 GitHub 安装只代表用户允许保存该 Skill，不代表允许它访问文件、记忆、知识库、网络或系统程序。安装授权与运行权限必须分开。
+从 GitHub 安装只代表用户允许保存该 Skill，不代表允许它访问文件、记忆、知识库、网络或系统程序。安装授权与运行权限必须分开；Skill 不能自行建立网络连接，用户已开启的内置 Web Search 仍按 Main 的独立策略执行。
 
 ## 17. 错误与日志
 

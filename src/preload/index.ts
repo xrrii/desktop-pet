@@ -18,6 +18,7 @@ import type {
   AssistantDocumentCapabilities,
   AssistantEvent,
   AssistantEmbeddingOnlineInput,
+  AssistantEmbeddingSelectedSource,
   AssistantEmbeddingSnapshot,
   AssistantLayoutTrace,
   AssistantKnowledgeLibrary,
@@ -42,7 +43,11 @@ import type {
 } from '../shared/assistant'
 import type { ScreenshotOverlayPayload, ScreenshotSelectionInput } from '../shared/screenshot'
 import type { AssistantThemeId } from '../shared/theme'
-import type { ManagedAuthStatus, ManagedPortalTarget, ManagedUsageSummary } from '../shared/managed'
+import type {
+  ManagedAuthStatus,
+  ManagedPortalTarget,
+  ManagedUsageSummaryResult
+} from '../shared/managed'
 import type {
   AvailablePet,
   CreatePetInput,
@@ -111,7 +116,7 @@ const api = {
   /** 登录前匿名刷新服务端 Feature Flag，永远不发送 Access Token。 */
   refreshManagedFeatures: (): Promise<ManagedAuthStatus> => ipcRenderer.invoke('managed:refresh-features'),
   /** 获取当前账号的真实 Chat 额度摘要，不返回 Token 或 Provider 信息。 */
-  getManagedUsageSummary: (): Promise<ManagedUsageSummary> => ipcRenderer.invoke('managed:get-usage-summary'),
+  getManagedUsageSummary: (): Promise<ManagedUsageSummaryResult> => ipcRenderer.invoke('managed:get-usage-summary'),
   /** 打开 Main 白名单内的官网业务页，不允许 Renderer 传入任意 URL。 */
   openManagedPortal: (target: ManagedPortalTarget): Promise<boolean> =>
     ipcRenderer.invoke('managed:open-portal', target),
@@ -157,6 +162,12 @@ const api = {
   setAssistantVisionSource: (
     source: AssistantVisionSelectedSource
   ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-vision-source', source),
+  setAssistantEmbeddingSource: (
+    source: AssistantEmbeddingSelectedSource
+  ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-embedding-source', source),
+  setAssistantRerankSource: (
+    source: 'managed' | 'disabled'
+  ): Promise<AssistantCapabilitySettingsSnapshot> => ipcRenderer.invoke('assistant:set-rerank-source', source),
   setAssistantModelSettings: (
     input: AssistantModelSettingsInput
   ): Promise<AssistantModelSettingsSnapshot> => ipcRenderer.invoke('assistant:set-model-settings', input),

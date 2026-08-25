@@ -2,7 +2,7 @@
 
 本文档用于跨会话、跨开发者和跨智能体持续跟踪 BYOK 与官方托管服务双模式建设。它是快速交接入口，不替代架构和契约文档。
 
-最后更新时间：2026-08-24
+最后更新时间：2026-08-25
 
 ## 1. 新会话快速开始
 
@@ -56,8 +56,8 @@ Phase 3 Managed Chat MVP 详细开发方案
 ## 3. 当前总览
 
 ```text
-总体状态：Phase 4 In Progress
-当前阶段：Phase 4 Managed Embedding、Vision、Web Search 与 Rerank（P4-00、Wave B、Wave C、Wave D Done；准备进入 Wave E Managed Embedding）
+总体状态：Phase 4 Done
+当前阶段：Phase 5 正式收费与可靠性（Phase 4 P4-00、Wave B 至 Wave G Done）
 架构对齐：Decision Frozen
 桌面端 Managed 实现：P2-06、P2-07、P2-08、P2-09、P2-10、P2-11 Done（Main 已接入 PKCE、loopback、Refresh Token safeStorage、轮换恢复、UserInfo、设备同步、退出、当前设备撤销、Runtime Token Broker、本地 Session Bridge、时钟偏差校正、离线退避和并发刷新协调，以及受控官网管理入口与返回应用刷新）
 独立官网前端：`petdock-web` P2-W01 至 P2-W05 Done（独立仓库；P2-W05 正式 HTTPS 验收通过）
@@ -66,11 +66,17 @@ FastAPI AI 数据面：Phase 3 Wave C Done；Phase 4 Wave C Done（Managed Web S
 桌面 Runtime Managed 消费：Phase 3 Wave D、Wave E Done；Phase 4 Wave D Done（Managed Vision Adapter、Descriptor、安全派生图上传、独立官方开关和真实 Token 额度已完成）
 云端基础设施：服务器、ICP 备案、正式 DNS 和 TLS 条件已就绪，受限线上门禁已完成
 共享开发依赖：PostgreSQL、Redis 和控制面已通过服务器内部网络/SSH 隧道完成开发验收
-当前阻塞：无 Wave D 技术阻塞；Vision 真实密钥注入和受限账号线上调用由发布负责人按增量部署文档验收
-下一建议工作项：进入 Wave E Managed Embedding；Rerank 继续保持关闭且公网路径不存在
+当前阻塞：无 Phase 4 阻塞；Phase 5 尚未开始
+下一建议工作项：输出并冻结 Phase 5 配额、可靠性、成本和正式收费方案
 ```
 
 当前已完成基础方案、BYOK 基线、权威契约迁移、Phase 1 本地来源抽象、Phase 2 全部工作项、Phase 3 `P3-00`、Wave B 至 Wave F。Wave F 已完成自动门禁和受限正式 HTTPS 真实 Provider 文本 Chat 冒烟；Desktop 官方 Chat 产品入口、Runtime SSE、真实额度摘要、Web `/account/usage` 和 BYOK 隔离均已闭合。生产 Chat 仍由白名单和独立开关控制。
+
+### 2026-08-25（Phase 4 Wave G 整体验收完成）
+
+- 三仓契约快照 53 个文件一致；Desktop/Web/Cloud 自动测试、类型检查、构建、依赖审计和生产制品检查通过。
+- 生产 `control-plane`、`ai-gateway`、`embedding-runtime`、`rerank-runtime`、`web`、`nginx` 全部 healthy；控制面、AI Gateway 和公网 Feature Flags 的四项能力均为开启状态。
+- 生产数据库中 Embedding、Vision、Web Search、Rerank 最新受控请求均为 `settled`；Nginx 配置测试通过。Wave G 和 Phase 4 标记为 `Done`，下一阶段进入 Phase 5。
 
 ## 4. 产品与仓库边界
 

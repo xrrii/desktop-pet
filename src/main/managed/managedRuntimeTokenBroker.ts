@@ -116,17 +116,8 @@ export class ManagedRuntimeTokenBroker {
     if (this.disposed) {
       return
     }
-    if (this.lease && this.remainingLifetime(this.lease) > 0) {
-      try {
-        await this.bridge.update(this.lease)
-        this.setStatus({ state: 'ready', errorCode: null })
-        return
-      } catch {
-        this.setStatus({ state: 'failed', errorCode: 'managed_runtime_bridge_failed' })
-        logError('managed Runtime Session 重新注入失败', { errorCode: 'managed_runtime_bridge_failed' })
-        return
-      }
-    }
+    // Runtime 重启可能紧随管理员授权变更；旧 Lease 即使尚未过期，也可能缺少新的能力 Claim。
+    // 每次重新绑定都强制签发最新 Runtime Token，避免 Rerank/Embedding 使用旧版本返回 401。
     if (this.context) {
       await this.ensureSession(true)
     }

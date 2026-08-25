@@ -27,13 +27,16 @@ import type {
   MemoryItemKind,
   AssistantPermissionResolution
 } from '../shared/assistant'
-import type { ManagedPortalTarget } from '../shared/managed'
+import type { ManagedPortalTarget, ManagedUsageSummaryResult } from '../shared/managed'
 import type { CreatePetInput, PetSpritesheetSelection } from '../shared/pet'
 import { AssistantManager } from './assistant/assistantManager'
 import { writeArtifactAtomically } from './assistant/artifactFileWriter'
 import { logError, logInfo } from './logger'
 import { ManagedAuthManager } from './managed/managedAuthManager'
-import { ManagedControlPlaneClient } from './managed/managedControlPlaneClient'
+import {
+  ManagedControlPlaneError,
+  ManagedControlPlaneClient
+} from './managed/managedControlPlaneClient'
 import { resolveManagedEndpointPolicy } from './managed/managedEndpointPolicy'
 import { isManagedPortalTarget, resolveManagedPortalUrl } from './managed/managedPortalRoutes'
 import { ManagedRuntimeSessionBridge } from './managed/managedRuntimeSessionBridge'
@@ -145,6 +148,15 @@ assistantManager = new AssistantManager(
         errorCode: status?.runtimeSessionErrorCode || null
       }
     },
+    getManagedRerankState: () => {
+      const status = managedAuthManager?.getStatus()
+      return {
+        enabled: status?.managedRerankEnabled === true,
+        authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
+        runtimeReady: status?.runtimeSessionState === 'ready',
+        errorCode: status?.runtimeSessionErrorCode || null
+      }
+    },
     getManagedAiBaseUrl: () => (
       managedEndpointPolicy.aiDataPlaneBaseUrl || managedEndpointPolicy.controlPlaneBaseUrl
     ).toString().replace(/\/$/, ''),
@@ -168,6 +180,13 @@ const screenshotManager = new ScreenshotManager(
 managedAuthManager = new ManagedAuthManager(managedEndpointPolicy, app.getVersion(), {
   runtimeTokenBroker: managedRuntimeTokenBroker,
   serverClock: managedServerClock,
+  onRuntimeSessionReady: async () => {
+    try {
+      await assistantManager.reindexAllKnowledge()
+    } catch (error: unknown) {
+      logError('Managed Runtime Session 就绪后的知识库重建失败', error)
+    }
+  },
   onStatusChange: (status) => petWindow?.webContents.send('managed:status-changed', status)
 })
 
@@ -498,9 +517,17 @@ function registerIpc(): void {
     return managedAuthManager.refreshFeatures()
   })
 
-  ipcMain.handle('managed:get-usage-summary', (event) => {
+  ipcMain.handle('managed:get-usage-summary', async (event): Promise<ManagedUsageSummaryResult> => {
     requirePetSender(event)
-    return managedAuthManager.getUsageSummary()
+    try {
+      return await managedAuthManager.getUsageSummary()
+    } catch (error) {
+      // 登出期间旧额度请求返回 401 是正常竞态，不把它作为 IPC 异常传播给 Renderer。
+      if (error instanceof ManagedControlPlaneError && error.code === 'authentication_required') {
+        return null
+      }
+      throw error
+    }
   })
 
   ipcMain.handle('managed:open-portal', async (event, target: unknown) => {
@@ -578,6 +605,20 @@ function registerIpc(): void {
       throw new TypeError('Vision 来源无效。')
     }
     return assistantManager.setVisionSource(source)
+  })
+  ipcMain.handle('assistant:set-embedding-source', (event, source: unknown) => {
+    requirePetSender(event)
+    if (source !== 'managed' && source !== 'local' && source !== 'byok') {
+      throw new TypeError('Embedding 来源无效。')
+    }
+    return assistantManager.setEmbeddingSource(source)
+  })
+  ipcMain.handle('assistant:set-rerank-source', (event, source: unknown) => {
+    requirePetSender(event)
+    if (source !== 'managed' && source !== 'disabled') {
+      throw new TypeError('Rerank 来源无效。')
+    }
+    return assistantManager.setRerankSource(source)
   })
 
   ipcMain.handle('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {

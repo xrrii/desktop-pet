@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 from collections.abc import Awaitable, Callable
@@ -20,6 +21,9 @@ from ..memory.extractor import MemoryExtractor
 from ..protocol import AssistantRequest, ToolResultRequest
 
 """Runtime 任务生命周期、SSE 事件和工具结果等待逻辑。"""
+
+
+LOGGER = logging.getLogger("petdock.agent.service")
 
 
 @dataclass
@@ -206,8 +210,19 @@ class AssistantService:
                 if not waiting_for_tool:
                     break
         except asyncio.CancelledError:
+            LOGGER.info(
+                "Agent 任务已取消 taskId=%s outputChars=%d",
+                request.taskId,
+                len("".join(assistant_text_parts)),
+            )
             await emit("done", {"finishReason": "cancelled"})
         except ManagedProviderError as error:
+            LOGGER.warning(
+                "Agent 任务 Managed 失败 taskId=%s code=%s outputChars=%d",
+                request.taskId,
+                error.code,
+                len("".join(assistant_text_parts)),
+            )
             await emit(
                 "error",
                 {
@@ -219,6 +234,12 @@ class AssistantService:
             )
             await emit("done", {"finishReason": "error"})
         except Exception as error:
+            LOGGER.exception(
+                "Agent 任务失败 taskId=%s errorType=%s outputChars=%d",
+                request.taskId,
+                type(error).__name__,
+                len("".join(assistant_text_parts)),
+            )
             await emit(
                 "error",
                 {
@@ -229,6 +250,11 @@ class AssistantService:
             )
             await emit("done", {"finishReason": "error"})
         else:
+            LOGGER.info(
+                "Agent 任务正常完成 taskId=%s outputChars=%d",
+                request.taskId,
+                len("".join(assistant_text_parts)),
+            )
             await emit("done", {"finishReason": "stop"})
             completed = True
         finally:

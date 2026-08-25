@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import socket
 import sys
@@ -17,6 +18,12 @@ from petdock_runtime.api.server import create_app
 async def run() -> None:
     """创建监听 socket、启动 FastAPI，并等待优雅关闭信号。"""
     config = RuntimeConfig.from_environment()
+    # Runtime 的日志只写入 Electron Main 的 stderr，由 Main 统一落盘；不记录 Prompt、回答正文或凭据。
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("127.0.0.1", 0))

@@ -110,8 +110,50 @@ describe('CapabilitySettingsManager', () => {
     })
     expect(snapshot.capabilities.embedding.effectiveSource).toBe('managed')
     expect(snapshot.capabilities.embedding.status).toBe('provider_unavailable')
-    expect(snapshot.capabilities.vision.effectiveSource).toBe('disabled')
-    expect(snapshot.capabilities.web_search.effectiveSource).toBe('disabled')
+    expect(snapshot.capabilities.vision.effectiveSource).toBe('managed')
+    expect(snapshot.capabilities.vision.status).toBe('provider_unavailable')
+    expect(snapshot.capabilities.web_search.effectiveSource).toBe('managed')
+    expect(snapshot.capabilities.web_search.status).toBe('provider_unavailable')
+  })
+
+  it('Managed Rerank 在启动竞态期间保留来源，Runtime 恢复后可用', () => {
+    state = configuredState()
+    state.managedRerank = { enabled: true, authenticated: false, runtimeReady: false, errorCode: null }
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.setSelectedSource('rerank', 'managed')
+
+    expect(manager.snapshot().capabilities.rerank).toMatchObject({
+      selectedSource: 'managed',
+      effectiveSource: 'managed',
+      status: 'not_authenticated'
+    })
+
+    state.managedRerank = { enabled: true, authenticated: true, runtimeReady: true, errorCode: null }
+    expect(manager.snapshot().capabilities.rerank).toEqual({
+      selectedSource: 'managed',
+      effectiveSource: 'managed',
+      status: 'available',
+      reason: null
+    })
+  })
+
+  it('Managed Rerank 未获得套餐授权时不降级为 disabled', () => {
+    state = configuredState()
+    state.managedRerank = {
+      enabled: true,
+      authenticated: true,
+      runtimeReady: true,
+      errorCode: 'managed_capability_not_entitled'
+    }
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.setSelectedSource('rerank', 'managed')
+
+    expect(manager.snapshot().capabilities.rerank).toEqual({
+      selectedSource: 'managed',
+      effectiveSource: 'managed',
+      status: 'not_entitled',
+      reason: 'managed_rerank_not_entitled'
+    })
   })
 
   it('Managed 登录、Runtime 和开关都就绪时才进入官方 Chat', () => {
@@ -201,6 +243,7 @@ function offlineState(): CapabilityConfigurationState {
     chat: { baseUrl: '', model: 'gpt-4o-mini', configuredKey: false, source: 'environment' },
     chatBackend: 'auto',
     managedChat: { enabled: false, authenticated: false, runtimeReady: false, errorCode: null },
+    managedRerank: { enabled: false, authenticated: false, runtimeReady: false, errorCode: null },
     embedding: { provider: 'hash', configured: true },
     vision: {
       mode: 'inherit',
@@ -228,6 +271,7 @@ function configuredState(): CapabilityConfigurationState {
     },
     chatBackend: 'auto',
     managedChat: { enabled: false, authenticated: false, runtimeReady: false, errorCode: null },
+    managedRerank: { enabled: false, authenticated: false, runtimeReady: false, errorCode: null },
     embedding: { provider: 'online', configured: true },
     vision: {
       mode: 'custom',

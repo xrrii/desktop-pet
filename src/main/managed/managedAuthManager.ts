@@ -85,6 +85,7 @@ export class ManagedAuthManager {
       serverClock?: ManagedServerClock
       openExternal?: (url: string) => Promise<void>
       onStatusChange?: (status: ManagedAuthStatus) => void
+      onRuntimeSessionReady?: () => void | Promise<void>
     } = {}
   ) {
     this.serverClock = dependencies.serverClock || new ManagedServerClock()
@@ -108,6 +109,7 @@ export class ManagedAuthManager {
     )
     this.openExternal = dependencies.openExternal || ((url) => shell.openExternal(url))
     this.onStatusChange = dependencies.onStatusChange || (() => undefined)
+    this.onRuntimeSessionReady = dependencies.onRuntimeSessionReady || (() => undefined)
     this.runtimeTokenBroker = dependencies.runtimeTokenBroker || null
     this.runtimeTokenBroker?.setStatusListener((runtimeStatus) => {
       this.setStatus({
@@ -122,6 +124,7 @@ export class ManagedAuthManager {
 
   private readonly openExternal: (url: string) => Promise<void>
   private readonly onStatusChange: (status: ManagedAuthStatus) => void
+  private readonly onRuntimeSessionReady: () => void | Promise<void>
 
   /** 获取只包含登录状态和稳定错误分类的快照。 */
   getStatus(): ManagedAuthStatus {
@@ -542,10 +545,15 @@ export class ManagedAuthManager {
         device: toManagedDeviceStatus(snapshot.device)
       })
       if (this.runtimeTokenBroker) {
-        await this.runtimeTokenBroker.activate({
+        const runtimeReady = await this.runtimeTokenBroker.activate({
           deviceId: snapshot.device.id,
           getAccessToken: (forceRefresh) => this.ensureAccessTokenForRuntime(forceRefresh)
-        }).catch(() => undefined)
+        }).then(() => true, () => false)
+        if (runtimeReady) {
+          // Managed Embedding/Rerank 必须等 Runtime Lease 注入后才能请求官方数据面；
+          // 登录前启动的旧 Hash 索引在这里自动按当前 Provider 签名重建。
+          await this.onRuntimeSessionReady()
+        }
       }
       return null
     } catch (error) {

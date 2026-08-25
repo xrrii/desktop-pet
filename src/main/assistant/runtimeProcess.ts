@@ -159,11 +159,10 @@ export class AssistantRuntimeProcess {
       const client = new AssistantRuntimeClient(readiness, token)
       await waitForHealth(client)
       this.client = client
+      // Managed Session 必须先注入，Runtime 才能对外提供 ready 状态；否则知识库 Rerank/Embedding
+      // 可能在令牌注入完成前发出请求并收到 401，然后静默回退本地能力。
+      await Promise.resolve(this.lifecycle.onReady?.(client))
       this.setStatus({ state: 'ready', backend: readiness.backend, error: null })
-      void Promise.resolve(this.lifecycle.onReady?.(client)).catch(() => {
-        // Managed Bridge 失败不得阻断 BYOK Runtime 启动，详细状态由 Broker 单独上报。
-        logError('assistant runtime managed session synchronization failed')
-      })
       logInfo('assistant runtime ready', {
         pid: readiness.pid,
         port: readiness.port,

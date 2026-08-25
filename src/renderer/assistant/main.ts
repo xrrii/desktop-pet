@@ -116,6 +116,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const knowledgeDeleteCancel = requireElement<HTMLButtonElement>('#knowledge-delete-cancel')
   const knowledgeDeleteConfirm = requireElement<HTMLButtonElement>('#knowledge-delete-confirm')
   const embeddingSelect = requireElement<HTMLSelectElement>('#embedding-select')
+  const embeddingControls = requireElement<HTMLElement>('#embedding-controls')
+  const embeddingManagedSummary = requireElement<HTMLElement>('#embedding-managed-summary')
   const embeddingAction = requireElement<HTMLButtonElement>('#embedding-action')
   const embeddingDelete = requireElement<HTMLButtonElement>('#embedding-delete')
   const embeddingStatus = requireElement<HTMLElement>('#embedding-status')
@@ -161,13 +163,19 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const byokSettingsPanel = requireElement<HTMLElement>('#byok-settings-panel')
   const chatSourceStatus = requireElement<HTMLElement>('#chat-source-status')
   const managedWebSearchStatus = requireElement<HTMLElement>('#managed-web-search-status')
+  const managedEmbeddingStatus = requireElement<HTMLElement>('#managed-embedding-status')
+  const managedEmbeddingEnabled = requireElement<HTMLInputElement>('#managed-embedding-enabled')
   const managedVisionStatus = requireElement<HTMLElement>('#managed-vision-status')
   const managedVisionEnabled = requireElement<HTMLInputElement>('#managed-vision-enabled')
+  const managedRerankEnabled = requireElement<HTMLInputElement>('#managed-rerank-enabled')
+  const managedRerankStatus = requireElement<HTMLElement>('#managed-rerank-status')
   const managedUsageRefresh = requireElement<HTMLButtonElement>('#managed-usage-refresh')
   const managedUsagePeriod = requireElement<HTMLElement>('#managed-usage-period')
   const managedUsageChat = requireElement<HTMLElement>('#managed-usage-chat')
   const managedUsageWebSearch = requireElement<HTMLElement>('#managed-usage-web-search')
+  const managedUsageEmbedding = requireElement<HTMLElement>('#managed-usage-embedding')
   const managedUsageVision = requireElement<HTMLElement>('#managed-usage-vision')
+  const managedUsageRerank = requireElement<HTMLElement>('#managed-usage-rerank')
   const managedUsageStatus = requireElement<HTMLElement>('#managed-usage-status')
   const modelBaseUrl = requireElement<HTMLInputElement>('#model-base-url')
   const modelName = requireElement<HTMLInputElement>('#model-name')
@@ -271,6 +279,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let managedPortalBusy = false
   let managedUsageBusy = false
   let managedUsage: ManagedUsageSummary | null = null
+  // 额度请求可能跨越登出操作；版本号用于丢弃旧会话的迟到响应。
+  let managedUsageRequestVersion = 0
   let managedPortalReturnPending = false
   let managedPortalReturnArmed = false
   let managedPortalReturnInteractionObserved = false
@@ -520,6 +530,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   serviceModeByok.addEventListener('click', () => void changeServiceMode('byok'))
   managedUsageRefresh.addEventListener('click', () => void loadManagedUsageSummary())
   managedVisionEnabled.addEventListener('change', () => void changeManagedVision())
+  managedRerankEnabled.addEventListener('change', () => void changeManagedRerank())
   modelClearKey.addEventListener('click', () => void clearModelKey())
   managedLogin.addEventListener('click', () => void startManagedLogin())
   managedLogout.addEventListener('click', () => void logoutManaged())
@@ -611,6 +622,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     void saveVisionSettings()
   })
   visionTest.addEventListener('click', () => void testVisionCapability())
+  managedEmbeddingEnabled.addEventListener('change', () => void changeManagedEmbedding())
   skillBack.addEventListener('click', closeSkillView)
   skillRefresh.addEventListener('click', () => void refreshSkills())
   skillAddLocal.addEventListener('click', () => void previewLocalSkills())
@@ -752,6 +764,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       : ''
     managedAccountStatus.textContent = managedStatusLabel(status)
     const authenticated = status.state === 'authenticated' && status.sessionSyncState === 'ready'
+    if (!authenticated) {
+      managedUsageRequestVersion += 1
+      if (status.sessionSyncState === 'logging_out' || status.state !== 'authenticated') {
+        clearManagedUsageDisplay()
+      }
+    }
     const synchronizing = status.sessionSyncState === 'syncing' || status.sessionSyncState === 'logging_out'
     const retainedSession = status.sessionSyncState === 'failed'
     const loginEligible = status.state === 'idle' || status.state === 'reauth_required'
@@ -785,9 +803,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 渲染互斥服务模式及对应设置面板，不展示 Provider 或内部模型信息。 */
   function renderServiceMode(): void {
     const chat = capabilitySettings?.capabilities.chat
+    const embedding = capabilitySettings?.capabilities.embedding
     const webSearch = capabilitySettings?.capabilities.web_search
     const vision = capabilitySettings?.capabilities.vision
-    if (!chat || !webSearch || !vision) return
+    const rerank = capabilitySettings?.capabilities.rerank
+    if (!chat || !embedding || !webSearch || !vision || !rerank) return
     const mode = selectedServiceMode()
     const managedSelected = mode === 'managed'
     serviceModeManaged.setAttribute('aria-pressed', String(managedSelected))
@@ -805,9 +825,15 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     chatSourceStatus.textContent = labels[chat.status] || '状态未知'
     managedWebSearchStatus.textContent = labels[webSearch.status] || '状态未知'
+    managedEmbeddingStatus.textContent = labels[embedding.status] || '状态未知'
     managedVisionStatus.textContent = labels[vision.status] || '状态未知'
+    managedRerankStatus.textContent = labels[rerank.status] || '状态未知'
+    managedEmbeddingEnabled.checked = embedding.selectedSource === 'managed'
+    managedEmbeddingEnabled.disabled = modelBusy || !managedSelected
     managedVisionEnabled.checked = vision.selectedSource === 'managed'
     managedVisionEnabled.disabled = modelBusy || !managedSelected
+    managedRerankEnabled.checked = rerank.selectedSource === 'managed'
+    managedRerankEnabled.disabled = modelBusy || !managedSelected
     serviceModeStatus.textContent = managedSelected
       ? '账号、额度和官方能力'
       : '使用本机保存的模型与搜索配置'
@@ -823,7 +849,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       managedUsagePeriod.textContent = ''
       managedUsageChat.textContent = '-'
       managedUsageWebSearch.textContent = '-'
+      managedUsageEmbedding.textContent = '-'
       managedUsageVision.textContent = '-'
+      managedUsageRerank.textContent = '-'
       managedUsageStatus.textContent = ''
     } else if (!managedAuthStatus || managedAuthStatus.state !== 'authenticated') {
       managedUsageStatus.textContent = '登录后可查看额度。'
@@ -834,30 +862,122 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   async function loadManagedUsageSummary(): Promise<void> {
     if (managedUsageBusy || selectedServiceMode() !== 'managed') return
     if (!managedAuthStatus || managedAuthStatus.state !== 'authenticated') return
+    const requestVersion = managedUsageRequestVersion
     managedUsageBusy = true
     managedUsageStatus.textContent = '正在读取额度…'
     try {
       managedUsage = await window.desktopPet.getManagedUsageSummary()
+      if (!managedUsage) {
+        clearManagedUsageDisplay()
+        return
+      }
+      if (
+        requestVersion !== managedUsageRequestVersion ||
+        !managedAuthStatus ||
+        managedAuthStatus.state !== 'authenticated'
+      ) {
+        return
+      }
       const chat = managedUsage.capabilities.chat
       managedUsagePeriod.textContent = `${formatUsageDate(managedUsage.periodStart)} 至 ${formatUsageDate(managedUsage.periodEnd)}`
       managedUsageChat.textContent = formatManagedCapabilityUsage(chat)
       managedUsageWebSearch.textContent = managedUsage.capabilities.web_search
         ? formatManagedCapabilityUsage(managedUsage.capabilities.web_search)
         : '未授权'
+      managedUsageEmbedding.textContent = managedUsage.capabilities.embedding
+        ? formatManagedCapabilityUsage(managedUsage.capabilities.embedding)
+        : '未授权'
       managedUsageVision.textContent = managedUsage.capabilities.vision
         ? formatManagedCapabilityUsage(managedUsage.capabilities.vision)
+        : '未授权'
+      managedUsageRerank.textContent = managedUsage.capabilities.rerank
+        ? formatManagedCapabilityUsage(managedUsage.capabilities.rerank)
         : '未授权'
       managedUsageStatus.textContent = ''
     } catch (error) {
       managedUsage = null
-      managedUsagePeriod.textContent = ''
-      managedUsageChat.textContent = '-'
-      managedUsageWebSearch.textContent = '-'
-      managedUsageVision.textContent = '-'
-      managedUsageStatus.textContent = '暂时无法读取额度，请稍后重试。'
-      showError(error)
+      clearManagedUsageDisplay()
+      const sessionEnded =
+        requestVersion !== managedUsageRequestVersion ||
+        !managedAuthStatus ||
+        managedAuthStatus.state !== 'authenticated'
+      if (!sessionEnded && !isAuthenticationRequiredError(error)) {
+        managedUsageStatus.textContent = '暂时无法读取额度，请稍后重试。'
+        showError(error)
+      }
     } finally {
       managedUsageBusy = false
+      if (
+        requestVersion !== managedUsageRequestVersion &&
+        managedAuthStatus?.state === 'authenticated' &&
+        selectedServiceMode() === 'managed'
+      ) {
+        void loadManagedUsageSummary()
+      }
+    }
+  }
+
+  /** 切换服务器本地 Rerank；失败时恢复开关并保留本地排序。 */
+  async function changeManagedRerank(): Promise<void> {
+    if (modelBusy) return
+    modelBusy = true
+    renderModelBusyState()
+    try {
+      capabilitySettings = await window.desktopPet.setAssistantRerankSource(
+        managedRerankEnabled.checked ? 'managed' : 'disabled'
+      )
+      renderServiceMode()
+      clearError()
+      if (managedRerankEnabled.checked) void loadManagedUsageSummary()
+    } catch (error) {
+      managedRerankEnabled.checked = !managedRerankEnabled.checked
+      showError(error)
+    } finally {
+      modelBusy = false
+      renderModelBusyState()
+    }
+  }
+
+  /** 清空只属于已登录账号的额度展示，避免登出后残留旧账号数据。 */
+  function clearManagedUsageDisplay(): void {
+    managedUsage = null
+    managedUsagePeriod.textContent = ''
+    managedUsageChat.textContent = '-'
+    managedUsageWebSearch.textContent = '-'
+    managedUsageEmbedding.textContent = '-'
+    managedUsageVision.textContent = '-'
+    managedUsageStatus.textContent = managedAuthStatus?.state === 'authenticated'
+      ? ''
+      : '登录后可查看额度。'
+  }
+
+  /** 识别登出竞态产生的 401，不把预期的会话失效显示为错误。 */
+  function isAuthenticationRequiredError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+    const value = error as { code?: unknown; status?: unknown; message?: unknown }
+    return value.code === 'authentication_required' ||
+      value.status === 401 ||
+      (typeof value.message === 'string' && value.message.includes('authentication_required'))
+  }
+
+  /** 官方文本向量是独立开关；切换后 Runtime 会按新向量签名重建索引。 */
+  async function changeManagedEmbedding(): Promise<void> {
+    if (modelBusy) return
+    modelBusy = true
+    renderModelBusyState()
+    try {
+      capabilitySettings = await window.desktopPet.setAssistantEmbeddingSource(
+        managedEmbeddingEnabled.checked ? 'managed' : 'local'
+      )
+      renderServiceMode()
+      clearError()
+      if (managedEmbeddingEnabled.checked) void loadManagedUsageSummary()
+    } catch (error) {
+      managedEmbeddingEnabled.checked = !managedEmbeddingEnabled.checked
+      showError(error)
+    } finally {
+      modelBusy = false
+      renderModelBusyState()
     }
   }
 
@@ -1451,9 +1571,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   async function openKnowledgeView(): Promise<void> {
     clearError()
     try {
-      ;[knowledgeSnapshot, embeddingSnapshot] = await Promise.all([
+      ;[knowledgeSnapshot, embeddingSnapshot, capabilitySettings] = await Promise.all([
         window.desktopPet.getAssistantKnowledge(),
-        window.desktopPet.getAssistantEmbeddingModels()
+        window.desktopPet.getAssistantEmbeddingModels(),
+        window.desktopPet.getAssistantCapabilitySettings()
       ])
       knowledgeMode = true
       conversation.hidden = true
@@ -1610,6 +1731,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     serviceModeManaged.disabled = modelBusy
     serviceModeByok.disabled = modelBusy
     managedUsageRefresh.disabled = modelBusy || managedUsageBusy
+    managedEmbeddingEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed'
     managedVisionEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed'
   }
 
@@ -2264,6 +2386,15 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 渲染当前 Provider、本地模型安装进度和安全的在线配置入口。 */
   function renderEmbeddingPanel(): void {
     if (!embeddingSnapshot) {
+      return
+    }
+    const managed = capabilitySettings?.capabilities.embedding.effectiveSource === 'managed'
+    embeddingControls.hidden = managed
+    embeddingManagedSummary.hidden = !managed
+    if (managed) {
+      embeddingOnlineForm.hidden = true
+      embeddingProgress.hidden = true
+      embeddingStatus.textContent = '当前使用官方文本向量 · bge-base-zh-v1.5（768 维）'
       return
     }
     const previous = embeddingSelect.value
@@ -2960,6 +3091,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       setBusy(false)
       activeTaskId = null
       input.focus()
+      // 知识库任务可能已完成 Rerank；刷新一次托管额度，避免页面继续显示旧摘要。
+      if (selectedServiceMode() === 'managed') void loadManagedUsageSummary()
     }
   }
 

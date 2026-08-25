@@ -164,6 +164,68 @@ def test_web_tool_loop_emits_only_referenced_sources_without_persisting_page_bod
     skills.close()
 
 
+def test_managed_output_limit_is_continued_and_persisted_once(tmp_path: Path) -> None:
+    """托管流标记截断时自动续写，最终历史只保存合并后的回答。"""
+    memory = MemoryStore(str(tmp_path / "memory.db"))
+    knowledge = KnowledgeService(
+        KnowledgeStore(str(tmp_path / "knowledge.db")),
+        ChromaVectorStore(str(tmp_path / "chroma"), LocalHashEmbedding()),
+    )
+    skills = SkillRegistry(
+        str(tmp_path / "skills" / "packages"),
+        SkillStore(str(tmp_path / "skills.db")),
+    )
+
+    class FakeManagedModel:
+        """用两次托管响应模拟达到预算后的透明续写。"""
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.truncated = False
+
+        def set_request_context(self, _: str) -> None:
+            self.truncated = False
+
+        def was_output_truncated(self, _: str) -> bool:
+            return self.truncated
+
+        async def astream(self, messages):
+            del messages
+            self.calls += 1
+            if self.calls == 1:
+                self.truncated = True
+                yield SimpleNamespace(content="前半段", tool_call_chunks=[])
+            else:
+                self.truncated = False
+                yield SimpleNamespace(content="后半段", tool_call_chunks=[])
+
+    model = FakeManagedModel()
+    backend = LangChainBackend(model, memory, knowledge, skills)
+    request = AssistantRequest(
+        protocolVersion=1,
+        taskId="continuation-task",
+        conversationId="continuation-conversation",
+        input="给出完整回答",
+        source="assistant-window",
+        context={
+            "activePetId": "pet",
+            "locale": "zh-CN",
+            "timezone": "Asia/Shanghai",
+            "webSearchEnabled": False,
+        },
+    )
+
+    async def scenario() -> list[str]:
+        return [item async for item in backend.stream(request) if isinstance(item, str)]
+
+    assert asyncio.run(scenario()) == ["前半段", "后半段"]
+    assert model.calls == 2
+    assert memory.conversation_messages(request.conversationId)[-1]["content"] == "前半段后半段"
+    asyncio.run(knowledge.close())
+    memory.close()
+    skills.close()
+
+
 def _source(index: int, title: str, url: str) -> dict[str, object]:
     """生成符合 Main 工具结果协议的测试来源。"""
     domain = "example.com" if index == 1 else "example.org"

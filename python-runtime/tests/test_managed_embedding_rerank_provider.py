@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import base64
+import json
+from datetime import UTC, datetime, timedelta
+
+import httpx
+
+from petdock_runtime.managed.session import ManagedSessionStore
+from petdock_runtime.providers.managed_embedding import ManagedEmbeddingProvider
+from petdock_runtime.providers.rerank import ManagedRerankProvider
+
+
+def _token(device_id: str) -> str:
+    """构造只用于测试设备 Claim 读取的非签名 JWT。"""
+    header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
+    claims = base64.urlsafe_b64encode(
+        json.dumps({"device_id": device_id}).encode()
+    ).rstrip(b"=").decode()
+    return f"{header}.{claims}.signature"
+
+
+def _session(device_id: str) -> ManagedSessionStore:
+    """创建带有效 Runtime Lease 的测试会话。"""
+    session = ManagedSessionStore()
+    session.update(_token(device_id), datetime.now(UTC) + timedelta(minutes=5), 1)
+    return session
+
+
+def test_managed_embedding_uses_device_claim_from_runtime_token() -> None:
+    expected_device = "11111111-1111-4111-8111-111111111111"
+    observed: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["device"] = request.headers["X-PetDock-Device-Id"]
+        return httpx.Response(
+            200,
+            json={
+                "descriptorId": "embedding-standard",
+                "revision": "bge-base-zh-v1.5",
+                "vectors": [[1.0] * 768],
+            },
+        )
+
+    provider = ManagedEmbeddingProvider(
+        "https://ai.example.test", "0.2.0", "99999999-9999-4999-8999-999999999999", _session(expected_device)
+    )
+    provider._client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert len(provider.embed_documents(["测试文本"])[0]) == 768
+    assert observed["device"] == expected_device
+
+
+def test_managed_rerank_uses_device_claim_from_runtime_token() -> None:
+    expected_device = "22222222-2222-4222-8222-222222222222"
+    observed: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["device"] = request.headers["X-PetDock-Device-Id"]
+        return httpx.Response(200, json={"results": [{"id": "a", "score": 0.9}]})
+
+    provider = ManagedRerankProvider(
+        "https://ai.example.test", "0.2.0", "99999999-9999-4999-8999-999999999999", _session(expected_device)
+    )
+    provider._client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert provider.rerank("查询", [{"id": "a", "content": "候选"}]) == {"a": 0.9}
+    assert observed["device"] == expected_device

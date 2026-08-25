@@ -644,7 +644,7 @@ components:
           maximum: 2000000000
     AdminManagedCapability:
       type: string
-      enum: [web_search, vision]
+      enum: [embedding, web_search, vision, rerank]
     AdminCapabilityUpdateRequest:
       type: object
       additionalProperties: false

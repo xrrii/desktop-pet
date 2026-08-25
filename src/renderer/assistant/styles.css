@@ -868,6 +868,12 @@ button:disabled {
   gap: 4px;
 }
 
+/* 官方 Embedding 模式不展示本地/BYOK 模型选择控件。 */
+.embedding-controls[hidden],
+.embedding-managed-summary[hidden] {
+  display: none !important;
+}
+
 .embedding-controls select,
 .embedding-online-form input {
   min-width: 0;
@@ -883,6 +889,23 @@ button:disabled {
 
 .embedding-controls select {
   padding: 0 6px;
+}
+
+.embedding-managed-summary {
+  display: grid;
+  gap: 2px;
+  min-height: 30px;
+  align-content: center;
+}
+
+.embedding-managed-summary strong {
+  color: #2e7767;
+  font-size: 12px;
+}
+
+.embedding-managed-summary small {
+  color: #66707c;
+  font-size: 11px;
 }
 
 .embedding-panel small {

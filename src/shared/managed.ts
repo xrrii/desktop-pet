@@ -63,6 +63,9 @@ export interface ManagedUsageSummary {
   }
 }
 
+/** 额度读取在登出竞态中可能没有结果；null 表示当前没有可用登录会话。 */
+export type ManagedUsageSummaryResult = ManagedUsageSummary | null
+
 /** Renderer 可见的稳定登录错误分类。 */
 export type ManagedAuthErrorCode =
   | 'managed_login_disabled'

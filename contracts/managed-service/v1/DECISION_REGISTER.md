@@ -314,7 +314,7 @@
 - 流前失败使用 HTTP `ErrorEnvelope`；HTTP 200 建流后所有业务结果只通过 `chat-stream-event.schema.json` 返回。
 - `sequence` 从 1 开始严格递增且不允许跳号；每个事件的 `traceId`、`requestId` 必须与请求 Header 一致；`usage` 最多一次且只能位于终止事件之前。
 - 每条流必须且只能以一个 `completed` 或 `error` 结束，终止后不得再发送事件。客户端断开必须取消上游任务，并根据 Provider 是否被调用及用量是否可靠进入正确用量终态。
-- `completed.finishReason` 只允许 `stop`、`tool_calls`、`cancelled`；未知关键事件、身份不一致、序号异常、重复终止或终止后事件均映射为 `stream_protocol_error` 并失败关闭。
+- `completed.finishReason` 只允许 `stop`、`tool_calls`、`cancelled`；未知关键事件、身份不一致、序号异常、重复终止或终止后事件均映射为 `stream_protocol_error` 并失败关闭。`completed.truncated` 为可选布尔字段，Provider 达到输出预算时置为 `true`，旧客户端缺省按 `false` 处理。
 
 ### `D-P3-06` Usage Summary 与数据边界
 
@@ -343,13 +343,13 @@
 - Phase 4 只扩展 `embedding-standard`、`vision-standard`、`web-search-standard` 和 `rerank-standard` 四个逻辑能力；实际 Provider、地址、Revision、预算和凭据不进入公共契约。
 - 四项能力分别使用 `managed_embedding_enabled`、`managed_vision_enabled`、`managed_web_search_enabled` 和 `managed_rerank_enabled`；字段缺失、类型错误、请求失败或版本不兼容时对应能力必须失败关闭。
 - Embedding 允许 `byok`、`managed`、`local`；Vision 允许 `byok`、`managed`、`disabled`；Web Search 允许 `byok`、`managed`、`disabled`；Rerank 只允许 `managed`、`disabled`。
-- Managed 不自动回退到 BYOK。Embedding 仅可使用已经就绪且 Signature 独立的 Local Hash 影子索引；Rerank 仅回退到现有 Weighted RRF/本地评分。
+- Managed 不自动回退到 BYOK。Embedding 使用服务器本地 `bge-base-zh-v1.5`，并在 Desktop 侧保持独立 Signature/Collection；模型不可用时只进入失败状态，不静默写入 Local Hash 影子索引；Rerank 仅回退到现有 Weighted RRF/本地评分。
 
 ### `D-P4-02` 数据所有权与调用路径
 
 状态：`Frozen`
 
-- Embedding、Vision 和 Rerank 由 Python Runtime 通过短期 Runtime Token 直接调用 FastAPI AI 数据面；Spring Boot 不进入数据热路径。
+- Embedding、Vision 和 Rerank 由 Python Runtime 通过短期 Runtime Token 直接调用 FastAPI AI 数据面；Embedding 的模型计算再经 AI Gateway 内部网络转发到独立本地模型容器，Spring Boot 不进入数据热路径。
 - Web Search 由 Electron Main 选择 Provider 并调用 FastAPI 的搜索候选接口；候选 URL、DNS、SSRF、重定向、MIME、正文大小和抓取始终由 Main 执行。
 - Cloud 不接收网页正文、用户磁盘路径、未加入会话的图片或本地工具权限；不新增 `/ai/v1/web/fetch`。
 - Web 只调用 Spring Boot Web API，不上传 Chunk、图片、查询或候选，也不持有 Runtime Token。

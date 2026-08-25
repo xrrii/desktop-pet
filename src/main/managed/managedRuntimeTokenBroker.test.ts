@@ -14,7 +14,13 @@ describe('ManagedRuntimeTokenBroker', () => {
   })
 
   it('创建 Lease 后等待 Runtime，并在 Runtime 就绪时重新注入', async () => {
-    const controlPlane = controlPlaneDouble([lease('039f8b64-dc93-4b7f-a94d-cf88400f2615')])
+    const controlPlane = controlPlaneDouble([
+      lease('039f8b64-dc93-4b7f-a94d-cf88400f2615'),
+      {
+        ...lease('9e60cf9e-1283-4c95-a193-ef0218c5cf0f'),
+        accessToken: 'synthetic-runtime-access-token-value-0002'
+      }
+    ])
     const bridge = new ManagedRuntimeSessionBridge()
     const broker = new ManagedRuntimeTokenBroker(controlPlane.value, bridge, {
       now: () => Date.parse('2026-08-16T00:00:00Z')
@@ -30,7 +36,7 @@ describe('ManagedRuntimeTokenBroker', () => {
     await broker.attachRuntime(transport.value)
 
     expect(transport.updateManagedSession).toHaveBeenCalledWith({
-      accessToken: 'synthetic-runtime-access-token-value-0001',
+      accessToken: 'synthetic-runtime-access-token-value-0002',
       expiresAt: '2026-08-16T00:15:00Z',
       capabilitySnapshotVersion: 3
     })

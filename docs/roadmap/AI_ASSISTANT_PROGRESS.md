@@ -442,7 +442,7 @@ C5 已实现：
 - 联网默认关闭，API Key 由 Electron `safeStorage` 按 Provider 隔离加密；旧版 Brave 配置和密钥继续按 Brave 读取，Renderer 只读取启用和脱敏配置状态。
 - 完成 `search_web`、`fetch_web_page`、任务配额、取消、SSRF/DNS 重绑定防护、逐次重定向校验、正文大小/超时/MIME 限制及 DOM 清洗。
 - Runtime 将网页正文限制在当前任务内，持久化工具摘要时脱敏查询和 URL；最终回答只按实际 `[网页N]` 引用发出 `web_sources` 并保存短来源。
-- 完成联网设置、火山引擎 API Key 管理页入口、首次启用隐私确认、连接测试、搜索摘要/已读取正文来源卡片和历史恢复；Skill 联网新增 `network.read` 权限。
+- 完成联网设置、火山引擎 API Key 管理页入口、首次启用隐私确认、连接测试、搜索摘要/已读取正文来源卡片和历史恢复；保留 `network.read` 作为未来 Skill 直接网络能力的收缩权限，当前内置联网工具由 Main 的用户级 Web Search 策略独立控制。
 - 当前 TypeScript 类型检查、60 项 TypeScript 全量测试（其中 32 项 C3 联网测试）和 37 项 Python Runtime 测试通过；生产构建、开发版/解包版联网设置与 `safeStorage` 脱敏 E2E、独立 Runtime 冒烟通过，生产依赖审计为 0 个漏洞。
 - 修复 Node 22 以 `lookupOptions.all = true` 建立 HTTPS 连接时固定 DNS 回调返回单地址导致的 `Invalid IP address: undefined`；同步 Runtime 协议的 `volcengine` Provider 字面量，避免启用火山搜索后创建对话返回 422。
 - 修复应用在 PyInstaller Runtime 冷启动期间退出时只终止外层进程、遗留内层 Runtime 的竞态，并增加“启动中退出”回归测试。

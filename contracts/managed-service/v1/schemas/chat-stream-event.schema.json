@@ -98,7 +98,8 @@
             "sequence": { "type": "integer", "minimum": 1 },
             "traceId": { "type": "string", "format": "uuid" },
             "requestId": { "type": "string", "format": "uuid" },
-            "finishReason": { "enum": ["stop", "tool_calls", "cancelled"] }
+            "finishReason": { "enum": ["stop", "tool_calls", "cancelled"] },
+            "truncated": { "type": "boolean" }
           }
         }
       ]
