@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776ab" alt="Python 3.11+">
 </p>
 
-PetDock 是一个 Windows 桌面宠物与 AI 助手应用。它使用 Electron 提供透明桌宠、动画、拖拽和托盘交互，并由本地 Python Runtime 承载对话、记忆、知识库、附件分析、文件生成和 Skill 扩展。
+PetDock 是一个 Windows 桌面宠物与 AI 助手应用。它使用 Electron 提供透明桌宠、动画、拖拽和托盘交互，并由本地 Python Runtime 承载对话、记忆、知识库、附件分析、文件生成和 Skill 扩展。AI 能力既可以使用登录即用的 PetDock 官方服务，也可以接入用户自己的 OpenAI-compatible 服务。
 
 项目目前处于早期开发阶段，优先支持 Windows 10/11。界面、配置格式和扩展协议仍可能调整。
 
@@ -32,16 +32,38 @@ PetDock 是一个 Windows 桌面宠物与 AI 助手应用。它使用 Electron �
 
 ### AI 助手
 
-- OpenAI-compatible 模型接入与流式 Markdown 对话
+- 流式 Markdown 对话与多轮工具调用
 - 会话历史、长期偏好和记忆候选管理
 - PDF、DOCX、XLSX、PPTX、文本与图片附件
 - 本地知识库、来源引用和可切换 Embedding Provider
 - 受控 Artifact 文件生成与原生“另存为”
 - 本地目录或 GitHub 公共仓库 Skill 安装
 - Brave Search、火山引擎豆包搜索与网页读取
-- 主模型、视觉模型、Embedding 和搜索能力独立启停
+- 区域截图并作为对话附件使用
+- Chat、Embedding、图片理解、联网搜索和 Rerank 独立启停
 
-未配置在线模型时，助手自动使用离线 Mock 后端，方便体验界面和验证本地流程；Mock 后端不提供真实模型推理。
+### 官方服务与账号
+
+- 使用系统浏览器完成 OAuth 2.1/OIDC Authorization Code + PKCE 登录
+- 官方 Chat、Embedding、图片理解、联网搜索和 Rerank，无需填写 Provider API Key
+- 套餐授权、服务开关和能力状态在登录及会话恢复时自动同步
+- 展示当前周期的真实额度摘要，未开通套餐时保持明确的空状态
+- 支持跳转官网管理账号、套餐、设备和完整用量
+- 支持退出登录和撤销当前设备授权
+- 官方能力不可用时保留本地自有配置，不删除 API Key、模型或知识库
+
+官方服务与自有配置互相独立。PetDock 不会在官方服务故障、额度耗尽或套餐不可用时静默切换到用户自己的 API Key，避免产生未预期的第三方费用。
+
+未登录官方服务且未配置在线模型时，助手自动使用离线 Mock 后端，方便体验界面和验证本地流程；Mock 后端不提供真实模型推理。
+
+## 服务模式
+
+| 模式 | 适用场景 | 凭据与数据边界 |
+| --- | --- | --- |
+| 官方服务 | 希望登录后直接使用 PetDock 提供的 AI 能力 | 需要 PetDock 账号和有效套餐；只向官方数据面发送完成当前请求所需的内容 |
+| 自有配置 | 已有 OpenAI-compatible、Embedding 或搜索服务 | API Key 由 Electron `safeStorage` 加密保存在当前 Windows 用户目录 |
+
+Agent 编排、会话历史、长期记忆、知识库、Skill、Artifact、本地工具和网页正文读取继续在用户设备上运行。只有被启用的在线能力会收到完成请求所需的数据。
 
 ## 运行方式
 
@@ -50,7 +72,9 @@ flowchart LR
     UI["Electron Renderer<br/>桌宠与助手界面"] -->|"白名单 IPC"| Main["Electron Main<br/>窗口、密钥与权限边界"]
     Main -->|"启动令牌 + localhost"| Runtime["Python Runtime<br/>FastAPI + LangChain"]
     Runtime --> Local["本地数据<br/>SQLite / Chroma / 文件"]
-    Runtime --> Model["模型与 Embedding 服务"]
+    Runtime --> BYOK["自有模型与 Embedding 服务"]
+    Runtime -->|"短期 Runtime Token"| Managed["PetDock 官方 AI 数据面"]
+    Main -->|"系统浏览器登录"| Account["PetDock 账号与控制面"]
     Main --> Web["搜索与受控系统操作"]
 ```
 
@@ -58,6 +82,7 @@ flowchart LR
 - Electron Main 管理密钥、IPC、文件对话框和系统操作，并重新校验工具风险。
 - Python Runtime 负责任务编排、模型适配、记忆、检索和文档处理。
 - Runtime 仅监听随机本机端口，并通过启动令牌鉴权。
+- 官方 Access Token、Refresh Token、Runtime Token 和内部设备标识不会下发到 Renderer。
 
 更完整的进程边界和数据流参见 [AI 助手架构](docs/architecture/AI_ASSISTANT_ARCHITECTURE.md)。
 
@@ -89,16 +114,17 @@ npm.cmd run dev
 
 启动后双击桌宠打开助手。点击输入框旁的设置按钮，可以配置主模型、视觉模型、Embedding 和联网搜索。
 
-主模型需要填写模型名称、API Key，以及可选的 OpenAI-compatible Base URL。API Key 使用 Electron `safeStorage` 加密保存在当前系统用户目录，不会写入仓库或回填到 Renderer。
+需要使用官方服务时，在设置中选择“官方服务”并通过系统浏览器登录；需要接入自己的服务时，切换到“自有配置”，填写模型名称、API Key，以及可选的 OpenAI-compatible Base URL。API Key 不会写入仓库或回填到 Renderer。
 
 ## 能力配置
 
-| 能力 | 默认行为 | 可选配置 |
+| 能力 | 自有配置 | 官方服务 |
 | --- | --- | --- |
-| 主模型 | 无密钥时使用 Mock 后端 | OpenAI-compatible API |
-| 图片理解 | 默认沿用主模型配置 | 独立视觉模型和凭据 |
-| Embedding | 离线 Hash 基线 | 白名单 ONNX 本地模型或在线 API |
-| 联网搜索 | 默认关闭 | Brave Search 或火山引擎豆包搜索 |
+| Chat | OpenAI-compatible API；无密钥时使用 Mock 后端 | `chat-standard`，按套餐授权和额度启用 |
+| 图片理解 | 沿用主模型或使用独立视觉模型 | 独立开关，按图片 Token 计量 |
+| Embedding | 离线 Hash、白名单 ONNX 本地模型或在线 API | 官方中文 Embedding 服务 |
+| 联网搜索 | Brave Search 或火山引擎豆包搜索 | 官方搜索候选服务；网页正文仍由本机受控读取 |
+| Rerank | Weighted RRF 与本地评分 | 官方 Rerank 服务，不可用时保留本地检索链路 |
 
 图片附件只有在视觉能力主动探测通过后才会启用。切换 Embedding Provider 会重新加载知识库索引；在线 Embedding 会把待向量化的文本发送给所选服务。
 
@@ -202,11 +228,36 @@ assets/pets/<pet-id>/
 
 PetDock 会处理模型密钥、本地文件和可能触发系统操作的工具调用。提交安全问题前请阅读 [安全策略](SECURITY.md)，不要在公开 Issue 中披露有效密钥、个人数据或可直接利用的漏洞细节。
 
-在线模型、Embedding、视觉和搜索服务只在用户主动配置后使用。相关数据范围见 [隐私说明](PRIVACY.md) 和 [第三方在线服务说明](THIRD_PARTY_SERVICES.md)。
+- 自有服务密钥由 `safeStorage` 加密保存，Renderer 无法读取原始值。
+- 官方登录使用系统浏览器、PKCE 和只监听 `127.0.0.1` 随机端口的一次性回调。
+- Refresh Token 加密保存在本机；短期 Access Token 和 Runtime Token 只存在于受控进程边界。
+- 本地文件和知识库目录必须由用户主动选择，官方服务不会扫描用户磁盘。
+- 打开应用、文件或目录等操作会经过权限检查和用户确认。
+
+在线模型、Embedding、视觉和搜索服务只在用户主动启用后使用。相关数据范围见 [隐私说明](PRIVACY.md) 和 [第三方在线服务说明](THIRD_PARTY_SERVICES.md)。
+
+## 下载
+
+Windows 安装包和便携版发布在 [GitHub Releases](https://github.com/xrrii/desktop-pet/releases)：
+
+- `PetDock Setup <version>.exe`：安装版，支持选择安装目录
+- `PetDock Portable <version>.exe`：便携版，无需安装
+
+当前仅支持 Windows 10/11。首次启动后，双击桌宠即可打开 AI 助手。
+
+## 已知限制
+
+- 项目仍处于早期开发阶段，界面、配置格式和扩展协议可能继续调整
+- 暂不支持 macOS 和 Linux
+- 扫描版 PDF 暂不提供 OCR
+- Skill 中的第三方脚本和依赖不会被直接执行
+- 暂不支持受控 Python 执行及复杂 Office/PDF 文件修改
+- 大型知识库首次建立索引可能需要较长时间
+- 官方服务需要可用的 PetDock 账号、套餐和网络连接，各项能力可能由服务端独立关闭
 
 ## Roadmap
 
-本地 Runtime、BYOK、官方账号、Managed Chat、Managed Web Search 和 Managed Vision 已完成。Managed Embedding 正在接入服务器本地 `bge-base-zh-v1.5`（不调用外部向量 API）；生产流量仍由各能力白名单和独立开关控制。开发基线见 [Phase 4 多能力开发方案](docs/features/MANAGED_SERVICE_PHASE4_CAPABILITIES.md)。
+本地 Runtime、BYOK、官方账号与设备、Managed Chat、Embedding、Vision、Web Search 和 Rerank 已完成，Phase 4 已通过整体验收。下一阶段聚焦正式收费、配额可靠性、成本控制和运维能力；生产流量仍由套餐授权、账号偏好、Feature Flag 和各能力独立开关共同控制。开发基线见 [官方托管服务进度与交接](docs/roadmap/MANAGED_SERVICE_PROGRESS.md)。
 
 ## 许可证
 
