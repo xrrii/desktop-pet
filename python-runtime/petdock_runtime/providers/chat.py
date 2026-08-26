@@ -22,6 +22,10 @@ from .selector import ChatSource
 
 LOGGER = logging.getLogger("petdock.providers.chat")
 ChatPurpose = Literal["agent", "memory"]
+# 能力校验可能发现 Runtime Token 携带了旧权益版本；每个逻辑请求最多刷新一次。
+# 权益版本更新或旧设备映射导致的 Runtime 认证错误，都先交给 Main 尝试恢复。
+# 恢复失败时仍会返回服务端原始稳定错误，不会掩盖真实设备撤销。
+_SESSION_REFRESH_ERROR_CODES = {"token_expired", "capability_not_entitled", "device_revoked"}
 
 
 class AgentChatModel(Protocol):
@@ -228,7 +232,7 @@ class ManagedChatModel:
         self._output_started[task_id] = False
         request_id = str(uuid.uuid4())
         attempt_id = str(uuid.uuid4())
-        retried_auth = False
+        retried_session_refresh = False
         expected_sequence = 1
         terminal = False
         saw_usage = False
@@ -257,8 +261,15 @@ class ManagedChatModel:
                 async with self._client.stream("POST", self._url, headers=headers, json=payload) as response:
                     if response.status_code != 200:
                         error = await _managed_error(response)
-                        if error.code == "token_expired" and not retried_auth and not self._output_started.get(task_id, False):
-                            retried_auth = True
+                        if error.code in _SESSION_REFRESH_ERROR_CODES and not retried_session_refresh \
+                                and not self._output_started.get(task_id, False):
+                            retried_session_refresh = True
+                            LOGGER.info(
+                                "Managed Chat 检测到可能过期的权益快照，准备刷新 Runtime Session，taskId=%s requestId=%s errorCode=%s",
+                                task_id,
+                                request_id,
+                                error.code,
+                            )
                             await self._auth_refresh.prepare(task_id, request_id)
                             yield ManagedAuthRefreshRequired(task_id, trace_id, request_id)
                             try:

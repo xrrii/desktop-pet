@@ -165,7 +165,76 @@ describe('ManagedControlPlaneClient', () => {
     })
     expect(String(fetcher.mock.calls[0][0])).toContain('/api/v1/usage/summary')
   })
+
+  it('查询和整体更新五项官方能力偏好', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(capabilityPayload()), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(capabilityPayload()), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }))
+    const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher)
+
+    await expect(client.getManagedCapabilityPreferences('synthetic-access-token')).resolves.toMatchObject({
+      subscriptionActive: true,
+      plan: 'pro',
+      effective: { chat: true, web_search: true }
+    })
+    await client.updateManagedCapabilityPreferences('synthetic-access-token', {
+      chat: true,
+      embedding: false,
+      vision: false,
+      web_search: true,
+      rerank: false
+    })
+
+    expect(fetcher.mock.calls[1][1]).toMatchObject({
+      method: 'PUT',
+      body: JSON.stringify({
+        chat: true,
+        embedding: false,
+        vision: false,
+        webSearch: true,
+        rerank: false
+      })
+    })
+  })
+
+  it('拒绝缺少任一能力的偏好响应', async () => {
+    const payload = capabilityPayload()
+    delete (payload.effective as Record<string, unknown>).rerank
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    }))
+    const client = new ManagedControlPlaneClient(POLICY, '0.2.0', fetcher)
+
+    await expect(client.getManagedCapabilityPreferences('synthetic-access-token'))
+      .rejects.toMatchObject({ code: 'internal_error' })
+  })
 })
+
+/** 返回完整的五项能力偏好响应。 */
+function capabilityPayload(): Record<string, unknown> {
+  const values = {
+    chat: true,
+    embedding: false,
+    vision: false,
+    web_search: true,
+    rerank: false
+  }
+  return {
+    version: 1,
+    subscriptionActive: true,
+    plan: 'pro',
+    preferences: { ...values },
+    entitled: { ...values },
+    effective: { ...values }
+  }
+}
 
 /** 返回不含敏感字段的合成设备响应。 */
 function devicePayload(): Record<string, unknown> {

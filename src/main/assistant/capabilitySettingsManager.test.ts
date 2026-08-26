@@ -53,6 +53,7 @@ describe('CapabilitySettingsManager', () => {
     const persisted = await readFile(settingsPath(), 'utf8')
     expect(JSON.parse(persisted)).toEqual({
       version: 1,
+      serviceMode: 'byok',
       capabilities: {
         chat: 'byok',
         embedding: 'local',
@@ -215,6 +216,7 @@ describe('CapabilitySettingsManager', () => {
 
     manager.setServiceMode('managed')
     const managed = manager.snapshot()
+    expect(manager.getServiceMode()).toBe('managed')
     expect(managed.capabilities.chat.selectedSource).toBe('managed')
     expect(managed.capabilities.web_search.selectedSource).toBe('managed')
     expect(managed.capabilities.embedding.selectedSource).toBe('local')
@@ -223,9 +225,59 @@ describe('CapabilitySettingsManager', () => {
 
     manager.setServiceMode('byok')
     const byok = manager.snapshot()
+    expect(manager.getServiceMode()).toBe('byok')
     expect(byok.capabilities.chat.selectedSource).toBe('byok')
     expect(byok.capabilities.web_search.selectedSource).toBe('byok')
     expect(byok.capabilities.vision.selectedSource).toBe('byok')
+  })
+
+  it('服务器无套餐时关闭 Managed 来源但保留可用 BYOK 配置', () => {
+    state = configuredState()
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.setServiceModeSelection('managed')
+    manager.setSelectedSource('chat', 'managed')
+    manager.setSelectedSource('embedding', 'managed')
+    manager.setSelectedSource('vision', 'managed')
+    manager.setSelectedSource('web_search', 'managed')
+    manager.setSelectedSource('rerank', 'managed')
+
+    const result = manager.applyManagedCapabilities({
+      version: 1,
+      subscriptionActive: false,
+      plan: null,
+      preferences: { chat: false, embedding: false, vision: false, web_search: false, rerank: false },
+      entitled: { chat: false, embedding: false, vision: false, web_search: false, rerank: false },
+      effective: { chat: false, embedding: false, vision: false, web_search: false, rerank: false }
+    })
+    const snapshot = manager.snapshot()
+
+    expect(result).toEqual({ changed: true, embeddingChanged: true })
+    expect(snapshot.capabilities.chat.selectedSource).toBe('byok')
+    expect(snapshot.capabilities.embedding.selectedSource).toBe('local')
+    expect(snapshot.capabilities.vision.selectedSource).toBe('byok')
+    expect(snapshot.capabilities.web_search.selectedSource).toBe('byok')
+    expect(snapshot.capabilities.rerank.selectedSource).toBe('disabled')
+    expect(manager.getServiceMode()).toBe('managed')
+  })
+
+  it('服务器同步不会覆盖用户已经选择的非 Managed 来源', () => {
+    state = configuredState()
+    const manager = new CapabilitySettingsManager(() => state)
+    manager.setSelectedSource('chat', 'disabled')
+    manager.setSelectedSource('embedding', 'byok')
+
+    const result = manager.applyManagedCapabilities({
+      version: 1,
+      subscriptionActive: false,
+      plan: null,
+      preferences: { chat: false, embedding: false, vision: false, web_search: false, rerank: false },
+      entitled: { chat: false, embedding: false, vision: false, web_search: false, rerank: false },
+      effective: { chat: false, embedding: false, vision: false, web_search: false, rerank: false }
+    })
+
+    expect(result.changed).toBe(false)
+    expect(manager.snapshot().capabilities.chat.selectedSource).toBe('disabled')
+    expect(manager.snapshot().capabilities.embedding.selectedSource).toBe('byok')
   })
 
   it('配置损坏时按当前脱敏状态重新迁移', async () => {

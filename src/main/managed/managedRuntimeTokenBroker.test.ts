@@ -172,6 +172,36 @@ describe('ManagedRuntimeTokenBroker', () => {
     expect(transport.clearManagedSession).not.toHaveBeenCalled()
     broker.dispose()
   })
+
+  it('任务刷新会等待设备恢复完成后再返回成功', async () => {
+    const createRuntimeSession = vi.fn()
+      .mockRejectedValueOnce(new ManagedControlPlaneError(403, 'device_revoked', false))
+      .mockResolvedValueOnce(lease('9e60cf9e-1283-4c95-a193-ef0218c5cf0f'))
+      .mockResolvedValueOnce(lease('a1f4a1b4-5e11-4c34-8b2f-cf8e8fcb3d21'))
+    const broker = new ManagedRuntimeTokenBroker({
+      createRuntimeSession,
+      revokeRuntimeSession: vi.fn()
+    } as unknown as ManagedControlPlaneClient, new ManagedRuntimeSessionBridge())
+    const context = {
+      deviceId: 'a01715d2-42e3-4abe-a348-708dda38ab0d',
+      getAccessToken: async () => 'synthetic-oauth-access-token'
+    }
+    let releaseRecovery: (() => void) | null = null
+    const recoveryGate = new Promise<void>((resolve) => { releaseRecovery = resolve })
+    broker.setTerminalErrorListener(async () => {
+      await recoveryGate
+      await broker.activate(context)
+    })
+
+    await expect(broker.activate(context)).rejects.toMatchObject({ code: 'device_revoked' })
+    const refreshPromise = broker.refreshForTask()
+    if (!releaseRecovery) throw new Error('恢复任务未初始化。')
+    const release: () => void = releaseRecovery
+    release()
+    await expect(refreshPromise).resolves.toBeUndefined()
+    expect(createRuntimeSession).toHaveBeenCalledTimes(3)
+    broker.dispose()
+  })
 })
 
 function lease(sessionId: string): ManagedRuntimeSessionLease {

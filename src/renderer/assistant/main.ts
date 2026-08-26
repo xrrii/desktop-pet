@@ -810,6 +810,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (!chat || !embedding || !webSearch || !vision || !rerank) return
     const mode = selectedServiceMode()
     const managedSelected = mode === 'managed'
+    const subscriptionUnavailable = managedAuthStatus?.state === 'authenticated' &&
+      managedAuthStatus.managedSubscriptionActive === false
     serviceModeManaged.setAttribute('aria-pressed', String(managedSelected))
     serviceModeByok.setAttribute('aria-pressed', String(!managedSelected))
     managedSettingsPanel.hidden = !managedSelected
@@ -823,19 +825,19 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       disabled: '已关闭',
       not_configured: '尚未完成配置'
     }
-    chatSourceStatus.textContent = labels[chat.status] || '状态未知'
-    managedWebSearchStatus.textContent = labels[webSearch.status] || '状态未知'
-    managedEmbeddingStatus.textContent = labels[embedding.status] || '状态未知'
-    managedVisionStatus.textContent = labels[vision.status] || '状态未知'
-    managedRerankStatus.textContent = labels[rerank.status] || '状态未知'
+    chatSourceStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[chat.status] || '状态未知'
+    managedWebSearchStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[webSearch.status] || '状态未知'
+    managedEmbeddingStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[embedding.status] || '状态未知'
+    managedVisionStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[vision.status] || '状态未知'
+    managedRerankStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[rerank.status] || '状态未知'
     managedEmbeddingEnabled.checked = embedding.selectedSource === 'managed'
-    managedEmbeddingEnabled.disabled = modelBusy || !managedSelected
+    managedEmbeddingEnabled.disabled = modelBusy || !managedSelected || subscriptionUnavailable
     managedVisionEnabled.checked = vision.selectedSource === 'managed'
-    managedVisionEnabled.disabled = modelBusy || !managedSelected
+    managedVisionEnabled.disabled = modelBusy || !managedSelected || subscriptionUnavailable
     managedRerankEnabled.checked = rerank.selectedSource === 'managed'
-    managedRerankEnabled.disabled = modelBusy || !managedSelected
+    managedRerankEnabled.disabled = modelBusy || !managedSelected || subscriptionUnavailable
     serviceModeStatus.textContent = managedSelected
-      ? '账号、额度和官方能力'
+      ? subscriptionUnavailable ? '当前账号尚未开通套餐' : '账号、额度和官方能力'
       : '使用本机保存的模型与搜索配置'
     if (managedSelected) {
       modelConfiguredStatus.textContent = '官方 Chat 不需要本地模型配置'
@@ -869,6 +871,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       managedUsage = await window.desktopPet.getManagedUsageSummary()
       if (!managedUsage) {
         clearManagedUsageDisplay()
+        managedUsageStatus.textContent = '当前账号尚未开通套餐或暂无可用额度。'
         return
       }
       if (
@@ -1008,6 +1011,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     renderModelBusyState()
     try {
       capabilitySettings = await window.desktopPet.setAssistantServiceMode(mode)
+      if (managedAuthStatus) {
+        managedAuthStatus = { ...managedAuthStatus, managedServiceSelected: mode === 'managed' }
+      }
       renderServiceMode()
       clearError()
       if (mode === 'managed') void loadManagedUsageSummary()
@@ -1020,8 +1026,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
   }
 
-  /** 以 Chat 来源作为设置页主模式；旧版 disabled 与 BYOK 一并归入自有配置视图。 */
+  /** 登录后以服务器偏好决定标签页；实际能力来源只负责 Runtime 是否运行。 */
   function selectedServiceMode(): AssistantServiceMode {
+    if (typeof managedAuthStatus?.managedServiceSelected === 'boolean') {
+      return managedAuthStatus.managedServiceSelected ? 'managed' : 'byok'
+    }
     return capabilitySettings?.capabilities.chat.selectedSource === 'managed' ? 'managed' : 'byok'
   }
 
@@ -1730,9 +1739,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     modelApiKey.disabled = modelBusy
     serviceModeManaged.disabled = modelBusy
     serviceModeByok.disabled = modelBusy
-    managedUsageRefresh.disabled = modelBusy || managedUsageBusy
-    managedEmbeddingEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed'
-    managedVisionEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed'
+    const subscriptionUnavailable = managedAuthStatus?.state === 'authenticated' &&
+      managedAuthStatus.managedSubscriptionActive === false
+    managedUsageRefresh.disabled = modelBusy || managedUsageBusy || subscriptionUnavailable
+    managedEmbeddingEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
+    managedVisionEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
+    managedRerankEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
   }
 
   /** 保存主模型设置；Runtime 重启期间短暂显示启动状态。 */

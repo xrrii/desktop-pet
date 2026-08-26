@@ -15,7 +15,10 @@ import type {
   AssistantWebSettingsSnapshot
 } from '../../shared/assistant'
 import { logError, logInfo } from '../logger'
-import type { ManagedRuntimeSessionErrorCode } from '../../shared/managed'
+import type {
+  ManagedCapabilityPreferencesSnapshot,
+  ManagedRuntimeSessionErrorCode
+} from '../../shared/managed'
 
 /** 现有 Provider 管理器向能力来源计算提供的脱敏状态。 */
 export interface CapabilityConfigurationState {
@@ -61,6 +64,7 @@ export interface CapabilityConfigurationState {
 
 interface SelectedCapabilitySettings {
   version: 1
+  serviceMode: AssistantServiceMode
   capabilities: {
     chat: AssistantChatSelectedSource
     embedding: AssistantEmbeddingSelectedSource
@@ -71,6 +75,12 @@ interface SelectedCapabilitySettings {
 }
 
 export type CapabilitySettingsBackup = SelectedCapabilitySettings
+
+/** 应用服务端能力状态后的变更摘要，供 Runtime 决定是否重启和重建索引。 */
+export interface ManagedCapabilityApplyResult {
+  changed: boolean
+  embeddingChanged: boolean
+}
 
 type AssistantRerankSelectedSource = 'managed' | 'disabled'
 
@@ -105,12 +115,62 @@ export class CapabilitySettingsManager {
   /** 原子更新 Chat 与 Web Search；离开官方模式时也停止 Managed Vision。 */
   setServiceMode(mode: AssistantServiceMode): void {
     const selected = this.loadOrMigrate(this.getState())
+    selected.serviceMode = mode
     selected.capabilities.chat = mode
     selected.capabilities.web_search = mode
     if (mode === 'byok' && selected.capabilities.vision === 'managed') {
       selected.capabilities.vision = 'byok'
     }
     this.save(selected)
+  }
+
+  /** 返回独立持久化的设置页服务标签，不以当前有效能力来源反推。 */
+  getServiceMode(): AssistantServiceMode {
+    return this.loadOrMigrate(this.getState()).serviceMode
+  }
+
+  /** 只更新设置页服务标签；能力来源由服务器有效状态或完整模式切换另行处理。 */
+  setServiceModeSelection(mode: AssistantServiceMode): void {
+    const selected = this.loadOrMigrate(this.getState())
+    selected.serviceMode = mode
+    this.save(selected)
+  }
+
+  /**
+   * 应用服务端计算后的官方能力状态。
+   * 有效能力切到 Managed；失效能力仅在当前来源为 Managed 时回退，保留全部 BYOK 配置。
+   */
+  applyManagedCapabilities(snapshot: ManagedCapabilityPreferencesSnapshot): ManagedCapabilityApplyResult {
+    const state = this.getState()
+    const selected = this.loadOrMigrate(state)
+    const previous = cloneSelection(selected)
+
+    // 有活动套餐时服务器偏好可以跨设备同步主模式；无套餐的全关状态
+    // 只影响能力开关，不得把用户当前查看的官方服务标签切回 BYOK。
+    if (snapshot.subscriptionActive) {
+      selected.serviceMode = snapshot.preferences.chat ? 'managed' : 'byok'
+    }
+
+    for (const capability of ['chat', 'embedding', 'vision', 'web_search', 'rerank'] as const) {
+      if (snapshot.effective[capability]) {
+        selected.capabilities[capability] = 'managed' as never
+      } else if (selected.capabilities[capability] === 'managed') {
+        selected.capabilities[capability] = fallbackSource(capability, state) as never
+      }
+    }
+
+    const changed = JSON.stringify(previous) !== JSON.stringify(selected)
+    if (changed) {
+      this.save(selected)
+      logInfo('服务器官方能力状态已应用到桌面端', {
+        subscriptionActive: snapshot.subscriptionActive,
+        enabledCount: Object.values(snapshot.effective).filter(Boolean).length
+      })
+    }
+    return {
+      changed,
+      embeddingChanged: previous.capabilities.embedding !== selected.capabilities.embedding
+    }
   }
 
   /** 捕获来源选择，供 Provider 切换失败时恢复。 */
@@ -130,6 +190,7 @@ export class CapabilitySettingsManager {
     }
     const migrated: SelectedCapabilitySettings = {
       version: 1,
+      serviceMode: 'byok',
       capabilities: {
         // 历史版本未配置 Key 时仍使用 Mock 兼容运行，因此选择保留为 BYOK。
         chat: 'byok',
@@ -157,7 +218,19 @@ export class CapabilitySettingsManager {
     try {
       const value = JSON.parse(readFileSync(path, 'utf8')) as unknown
       if (isSelectedSettings(value)) {
-        return value
+        const selected = value as Omit<SelectedCapabilitySettings, 'serviceMode'> & {
+          serviceMode?: AssistantServiceMode
+        }
+        if (selected.serviceMode) {
+          return selected as SelectedCapabilitySettings
+        }
+        const migrated: SelectedCapabilitySettings = {
+          ...selected,
+          serviceMode: selected.capabilities.chat === 'managed' ? 'managed' : 'byok'
+        }
+        this.save(migrated)
+        logInfo('assistant service mode selection migrated', { serviceMode: migrated.serviceMode })
+        return migrated
       }
       throw new TypeError('能力来源配置结构无效。')
     } catch (error) {
@@ -331,6 +404,7 @@ function isSelectedSettings(value: unknown): value is SelectedCapabilitySettings
   const root = value as Record<string, unknown>
   const capabilities = root.capabilities
   if (root.version !== 1 || !capabilities || typeof capabilities !== 'object') return false
+  if (root.serviceMode !== undefined && root.serviceMode !== 'managed' && root.serviceMode !== 'byok') return false
   const current = capabilities as Record<string, unknown>
   return Object.entries({
     chat: ['byok', 'managed', 'disabled'],
@@ -344,4 +418,23 @@ function isSelectedSettings(value: unknown): value is SelectedCapabilitySettings
 function cloneSelection(value: SelectedCapabilitySettings): SelectedCapabilitySettings {
   /** 复制小型配置对象，避免回滚快照被后续修改污染。 */
   return JSON.parse(JSON.stringify(value)) as SelectedCapabilitySettings
+}
+
+/** 根据现有本地配置选择官方能力失效后的安全来源，不修改或删除任何凭据。 */
+function fallbackSource(
+  capability: keyof SelectedCapabilitySettings['capabilities'],
+  state: CapabilityConfigurationState
+): SelectedCapabilitySettings['capabilities'][typeof capability] {
+  switch (capability) {
+    case 'chat':
+      return 'byok'
+    case 'embedding':
+      return 'local'
+    case 'vision':
+      return isVisionConfigured(state) ? 'byok' : 'disabled'
+    case 'web_search':
+      return state.webSearch.enabled && state.webSearch.configured ? 'byok' : 'disabled'
+    case 'rerank':
+      return 'disabled'
+  }
 }

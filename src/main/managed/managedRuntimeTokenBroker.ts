@@ -55,7 +55,8 @@ export class ManagedRuntimeTokenBroker {
   private readonly now: () => number
   private readonly random: () => number
   private statusListener: (status: ManagedRuntimeTokenStatus) => void
-  private terminalErrorListener: (error: ManagedControlPlaneError) => void = () => undefined
+  private terminalErrorListener: (error: ManagedControlPlaneError) => void | Promise<void> = () => undefined
+  private terminalRecovery: Promise<void> | null = null
 
   constructor(
     private readonly controlPlaneClient: ManagedControlPlaneClient,
@@ -74,7 +75,7 @@ export class ManagedRuntimeTokenBroker {
   }
 
   /** 注册设备撤销和认证终止的 Main 回调，其他错误只在 Broker 内收敛。 */
-  setTerminalErrorListener(listener: (error: ManagedControlPlaneError) => void): void {
+  setTerminalErrorListener(listener: (error: ManagedControlPlaneError) => void | Promise<void>): void {
     this.terminalErrorListener = listener
   }
 
@@ -162,7 +163,28 @@ export class ManagedRuntimeTokenBroker {
     if (!this.context) {
       throw new ManagedControlPlaneError(401, 'authentication_required', false)
     }
-    await this.ensureSession(true)
+    const pendingRecovery = this.terminalRecovery
+    if (pendingRecovery) {
+      await pendingRecovery.catch(() => undefined)
+      if (this.context && this.lease && this.remainingLifetime(this.lease) > 0) {
+        return
+      }
+    }
+    try {
+      await this.ensureSession(true)
+    } catch (error) {
+      // 设备撤销可能只是本地设备映射与 OAuth 绑定暂时不同步。
+      // 等待 AuthManager 的恢复任务，成功后让本次请求继续使用新 Lease，
+      // 避免 Runtime 抢先收到 device_revoked 并把错误展示给用户。
+      const recovery = this.terminalRecovery
+      if (isTerminalBrokerError(error) && recovery) {
+        await recovery.catch(() => undefined)
+        if (this.context && this.lease && this.remainingLifetime(this.lease) > 0) {
+          return
+        }
+      }
+      throw error
+    }
   }
 
   /** 保证存在剩余有效期超过三分钟的 Lease；并发调用复用同一个签发任务。 */
@@ -321,8 +343,19 @@ export class ManagedRuntimeTokenBroker {
   /** 将设备撤销或认证终止通知给拥有完整会话的 AuthManager。 */
   private handleTerminalError(error: unknown): void {
     if (error instanceof ManagedControlPlaneError && isTerminalBrokerError(error)) {
-      void this.clearRuntimeLeaseOnly()
-      this.terminalErrorListener(error)
+      if (this.terminalRecovery) {
+        return
+      }
+      const recovery = (async () => {
+        await this.clearRuntimeLeaseOnly()
+        await this.terminalErrorListener(error)
+      })()
+      const trackedRecovery = recovery.finally(() => {
+        if (this.terminalRecovery === trackedRecovery) {
+          this.terminalRecovery = null
+        }
+      })
+      this.terminalRecovery = trackedRecovery
     }
   }
 

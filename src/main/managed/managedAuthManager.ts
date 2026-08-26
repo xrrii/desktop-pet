@@ -4,6 +4,9 @@ import type {
   ManagedAuthErrorCode,
   ManagedAuthState,
   ManagedAuthStatus,
+  ManagedCapabilityName,
+  ManagedCapabilityPreferencesSnapshot,
+  ManagedCapabilityStateMap,
   ManagedUsageSummary
 } from '../../shared/managed'
 import { ManagedFeatureFlags } from './managedFeatureFlags'
@@ -34,6 +37,8 @@ const DEFAULT_STATUS: ManagedAuthStatus = {
   managedVisionEnabled: false,
   managedWebSearchEnabled: false,
   managedRerankEnabled: false,
+  managedServiceSelected: false,
+  managedSubscriptionActive: null,
   minimumClientVersion: null,
   errorCode: null,
   sessionSyncState: 'idle',
@@ -60,6 +65,8 @@ export class ManagedAuthManager {
   private refreshToken: string | null = null
   private pendingTokenSet: ManagedTokenSet | null = null
   private sessionSnapshot: ManagedAccountSessionSnapshot | null = null
+  private capabilityPreferences: ManagedCapabilityPreferencesSnapshot | null = null
+  private activeCapabilityUpdate: Promise<ManagedCapabilityPreferencesSnapshot> | null = null
   private activeTerminalCleanup: Promise<void> | null = null
 
   private readonly featureFlags: ManagedFeatureFlags
@@ -86,6 +93,10 @@ export class ManagedAuthManager {
       openExternal?: (url: string) => Promise<void>
       onStatusChange?: (status: ManagedAuthStatus) => void
       onRuntimeSessionReady?: () => void | Promise<void>
+      onCapabilityPreferencesSync?: (
+        snapshot: ManagedCapabilityPreferencesSnapshot
+      ) => void | Promise<void>
+      isManagedServiceSelected?: () => boolean
     } = {}
   ) {
     this.serverClock = dependencies.serverClock || new ManagedServerClock()
@@ -110,6 +121,11 @@ export class ManagedAuthManager {
     this.openExternal = dependencies.openExternal || ((url) => shell.openExternal(url))
     this.onStatusChange = dependencies.onStatusChange || (() => undefined)
     this.onRuntimeSessionReady = dependencies.onRuntimeSessionReady || (() => undefined)
+    this.onCapabilityPreferencesSync = dependencies.onCapabilityPreferencesSync || (() => undefined)
+    this.isManagedServiceSelected = dependencies.isManagedServiceSelected || null
+    if (this.isManagedServiceSelected) {
+      this.status.managedServiceSelected = this.isManagedServiceSelected()
+    }
     this.runtimeTokenBroker = dependencies.runtimeTokenBroker || null
     this.runtimeTokenBroker?.setStatusListener((runtimeStatus) => {
       this.setStatus({
@@ -125,6 +141,10 @@ export class ManagedAuthManager {
   private readonly openExternal: (url: string) => Promise<void>
   private readonly onStatusChange: (status: ManagedAuthStatus) => void
   private readonly onRuntimeSessionReady: () => void | Promise<void>
+  private readonly onCapabilityPreferencesSync: (
+    snapshot: ManagedCapabilityPreferencesSnapshot
+  ) => void | Promise<void>
+  private readonly isManagedServiceSelected: (() => boolean) | null
 
   /** 获取只包含登录状态和稳定错误分类的快照。 */
   getStatus(): ManagedAuthStatus {
@@ -151,7 +171,13 @@ export class ManagedAuthManager {
   }
 
   /** 读取当前账号的真实 Chat 用量摘要，响应只保留公共额度字段。 */
-  async getUsageSummary(): Promise<ManagedUsageSummary> {
+  async getUsageSummary(): Promise<ManagedUsageSummary | null> {
+    if (this.capabilityPreferences && !this.capabilityPreferences.subscriptionActive) {
+      return null
+    }
+    if (this.capabilityPreferences && !hasEffectiveManagedCapability(this.capabilityPreferences)) {
+      return null
+    }
     let accessToken = await this.ensureAccessTokenForRuntime(false)
     if (!accessToken) {
       throw new ManagedControlPlaneError(401, 'authentication_required', false)
@@ -159,11 +185,50 @@ export class ManagedAuthManager {
     try {
       return await this.controlPlaneClient.getUsageSummary(accessToken)
     } catch (error) {
+      if (error instanceof ManagedControlPlaneError && error.code === 'capability_not_entitled') {
+        return null
+      }
       if (!isAccessTokenRetryable(error)) throw error
       accessToken = await this.ensureAccessTokenForRuntime(true)
       if (!accessToken) throw new ManagedControlPlaneError(401, 'authentication_required', false)
-      return this.controlPlaneClient.getUsageSummary(accessToken)
+      try {
+        return await this.controlPlaneClient.getUsageSummary(accessToken)
+      } catch (error) {
+        if (error instanceof ManagedControlPlaneError && error.code === 'capability_not_entitled') {
+          return null
+        }
+        throw error
+      }
     }
+  }
+
+  /** 返回某项官方能力的服务端最终有效状态，未同步时安全地视为关闭。 */
+  isManagedCapabilityEffective(capability: ManagedCapabilityName): boolean {
+    return this.capabilityPreferences?.effective[capability] === true
+  }
+
+  /** 返回当前服务端偏好的防御性副本，供 Main 组合下一次整体更新。 */
+  getCapabilityPreferences(): ManagedCapabilityPreferencesSnapshot | null {
+    return this.capabilityPreferences ? cloneCapabilitySnapshot(this.capabilityPreferences) : null
+  }
+
+  /**
+   * 整体更新服务器偏好并同步桌面端；本地应用失败时恢复服务器上一版偏好。
+   * 并发切换复用同一任务，避免多个设置控件互相覆盖。
+   */
+  updateCapabilityPreferences(
+    preferences: ManagedCapabilityStateMap
+  ): Promise<ManagedCapabilityPreferencesSnapshot> {
+    if (this.activeCapabilityUpdate) {
+      return this.activeCapabilityUpdate.then(() => this.updateCapabilityPreferences(preferences))
+    }
+    const task = this.runCapabilityPreferenceUpdate(preferences).finally(() => {
+      if (this.activeCapabilityUpdate === task) {
+        this.activeCapabilityUpdate = null
+      }
+    })
+    this.activeCapabilityUpdate = task
+    return task
   }
 
   /** 登录前刷新服务端开关，供 Renderer 决定是否展示官方登录入口。 */
@@ -303,10 +368,14 @@ export class ManagedAuthManager {
     this.refreshToken = null
     this.pendingTokenSet = null
     this.sessionSnapshot = null
+    this.capabilityPreferences = null
+    this.activeCapabilityUpdate = null
     this.status = {
       ...this.status,
       account: null,
       device: null,
+      managedServiceSelected: false,
+      managedSubscriptionActive: null,
       sessionSyncState: 'idle'
     }
   }
@@ -318,7 +387,11 @@ export class ManagedAuthManager {
 
   /** 执行 Feature Flag、Discovery、浏览器授权、回调校验和 Token Exchange。 */
   private async runLogin(): Promise<ManagedAuthStatus> {
-    this.setStatus({ state: 'preparing', errorCode: null })
+    this.setStatus({
+      state: 'preparing',
+      errorCode: null,
+      managedServiceSelected: this.currentLocalServiceSelection()
+    })
     const features = await this.featureFlags.refresh()
     if (this.cancelRequested) {
       this.setStatus({ state: 'cancelled', errorCode: 'oauth_cancelled' })
@@ -347,8 +420,13 @@ export class ManagedAuthManager {
       this.setStatus({ state: 'waiting_callback', errorCode: null })
       await this.openExternal(preparation.authorizationUrl.href)
       const callbackUrl = await callbackPromise
+      logInfo('managed OAuth callback received', {
+        result: callbackUrl.searchParams.has('code') ? 'code' : 'error'
+      })
       this.setStatus({ state: 'exchanging_code', errorCode: null })
+      logInfo('managed OAuth token exchange started')
       const tokenSet = await preparation.exchange(callbackUrl)
+      logInfo('managed OAuth token exchange succeeded')
       await this.persistTokenSet(tokenSet, 'token_exchange')
       if (this.disposed) {
         return this.getStatus()
@@ -366,7 +444,10 @@ export class ManagedAuthManager {
       this.accessTokenExpiresAt = null
       this.refreshToken = null
       this.setStatus({ state: mapped.state, errorCode: mapped.errorCode })
-      logError('managed OAuth login failed', { errorCode: mapped.errorCode })
+      logError('managed OAuth login failed', {
+        errorCode: mapped.errorCode,
+        stage: error instanceof ManagedOidcClientError ? error.stage : 'unknown'
+      })
       return this.getStatus()
     } finally {
       this.loopback?.dispose()
@@ -375,6 +456,7 @@ export class ManagedAuthManager {
 
   /** 从版本化密文恢复 Refresh Token，并在成功轮换和落盘后建立 Main 内存会话。 */
   private async runSessionRestore(): Promise<ManagedAuthStatus> {
+    this.setStatus({ managedServiceSelected: this.currentLocalServiceSelection() })
     if (this.pendingTokenSet) {
       return this.persistPendingSession()
     }
@@ -539,12 +621,15 @@ export class ManagedAuthManager {
     try {
       const snapshot = await this.synchronizeAccountSession(expectedSubject, retryExpiredAccessToken)
       this.sessionSnapshot = snapshot
+      const capabilityPreferences = await this.getCapabilityPreferencesWithAccessTokenRetry()
+      this.capabilityPreferences = capabilityPreferences
+      this.applyEffectiveCapabilityStatus(capabilityPreferences)
       this.setStatus({
         sessionSyncState: 'ready',
         account: snapshot.account,
         device: toManagedDeviceStatus(snapshot.device)
       })
-      if (this.runtimeTokenBroker) {
+      if (this.runtimeTokenBroker && hasEffectiveManagedCapability(capabilityPreferences)) {
         const runtimeReady = await this.runtimeTokenBroker.activate({
           deviceId: snapshot.device.id,
           getAccessToken: (forceRefresh) => this.ensureAccessTokenForRuntime(forceRefresh)
@@ -554,7 +639,11 @@ export class ManagedAuthManager {
           // 登录前启动的旧 Hash 索引在这里自动按当前 Provider 签名重建。
           await this.onRuntimeSessionReady()
         }
+      } else {
+        await this.runtimeTokenBroker?.clear()
       }
+      await this.onCapabilityPreferencesSync(cloneCapabilitySnapshot(capabilityPreferences))
+      this.applyManagedServiceSelection(capabilityPreferences)
       return null
     } catch (error) {
       if (isControlPlaneDeviceRevoked(error)) {
@@ -670,11 +759,13 @@ export class ManagedAuthManager {
     this.refreshToken = null
     this.pendingTokenSet = null
     this.sessionSnapshot = null
+    this.capabilityPreferences = null
     await this.tokenStore.clear()
     this.status = {
       ...this.status,
       account: null,
-      device: null
+      device: null,
+      managedSubscriptionActive: null
     }
   }
 
@@ -765,18 +856,141 @@ export class ManagedAuthManager {
     return this.accessToken
   }
 
+  /** 使用当前 Access Token 查询服务端能力状态，Token 过期时仅轮换并重试一次。 */
+  private async getCapabilityPreferencesWithAccessTokenRetry(): Promise<ManagedCapabilityPreferencesSnapshot> {
+    if (!this.accessToken) {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    try {
+      return await this.controlPlaneClient.getManagedCapabilityPreferences(this.accessToken)
+    } catch (error) {
+      if (!isAccessTokenRetryable(error)) throw error
+      await this.refreshAccessTokenForSession()
+      if (!this.accessToken) throw error
+      return this.controlPlaneClient.getManagedCapabilityPreferences(this.accessToken)
+    }
+  }
+
+  /** 执行一次整体偏好写入，随后重建 Runtime Lease 并通知能力管理器。 */
+  private async runCapabilityPreferenceUpdate(
+    preferences: ManagedCapabilityStateMap
+  ): Promise<ManagedCapabilityPreferencesSnapshot> {
+    if (!this.accessToken || this.status.state !== 'authenticated') {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    const previous = this.capabilityPreferences
+      ? cloneCapabilitySnapshot(this.capabilityPreferences)
+      : await this.getCapabilityPreferencesWithAccessTokenRetry()
+    const updated = await this.putCapabilityPreferencesWithAccessTokenRetry(preferences)
+    try {
+      await this.applyCapabilityPreferences(updated)
+      return cloneCapabilitySnapshot(updated)
+    } catch (error) {
+      logError('桌面端应用官方能力偏好失败，开始回滚服务端状态', {
+        enabledCount: Object.values(updated.effective).filter(Boolean).length
+      })
+      try {
+        const rolledBack = await this.putCapabilityPreferencesWithAccessTokenRetry(previous.preferences)
+        await this.applyCapabilityPreferences(rolledBack)
+      } catch (rollbackError) {
+        logError('官方能力偏好回滚失败', {
+          errorCode: rollbackError instanceof ManagedControlPlaneError
+            ? rollbackError.code
+            : 'local_apply_failed'
+        })
+      }
+      throw error
+    }
+  }
+
+  /** 使用当前 Access Token 写入服务端能力偏好，Token 过期时仅轮换并重试一次。 */
+  private async putCapabilityPreferencesWithAccessTokenRetry(
+    preferences: ManagedCapabilityStateMap
+  ): Promise<ManagedCapabilityPreferencesSnapshot> {
+    if (!this.accessToken) {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    try {
+      return await this.controlPlaneClient.updateManagedCapabilityPreferences(this.accessToken, preferences)
+    } catch (error) {
+      if (!isAccessTokenRetryable(error)) throw error
+      await this.refreshAccessTokenForSession()
+      if (!this.accessToken) throw error
+      return this.controlPlaneClient.updateManagedCapabilityPreferences(this.accessToken, preferences)
+    }
+  }
+
+  /** 更新内存状态、Runtime Lease 与本地能力来源，确保三者使用同一服务端快照。 */
+  private async applyCapabilityPreferences(snapshot: ManagedCapabilityPreferencesSnapshot): Promise<void> {
+    this.capabilityPreferences = cloneCapabilitySnapshot(snapshot)
+    this.applyEffectiveCapabilityStatus(snapshot)
+    await this.runtimeTokenBroker?.clear()
+    if (this.runtimeTokenBroker && hasEffectiveManagedCapability(snapshot) && this.sessionSnapshot) {
+      await this.runtimeTokenBroker.activate({
+        deviceId: this.sessionSnapshot.device.id,
+        getAccessToken: (forceRefresh) => this.ensureAccessTokenForRuntime(forceRefresh)
+      })
+    }
+    await this.onCapabilityPreferencesSync(cloneCapabilitySnapshot(snapshot))
+    this.applyManagedServiceSelection(snapshot)
+    // 本地来源已经完成同步，再发布一次脱敏状态让 Renderer 重新读取能力快照。
+    this.setStatus({})
+  }
+
+  /** 将最终有效状态反映到现有脱敏状态字段，供 Renderer 和能力解析器即时刷新。 */
+  private applyEffectiveCapabilityStatus(snapshot: ManagedCapabilityPreferencesSnapshot): void {
+    this.setStatus({
+      managedChatEnabled: snapshot.effective.chat,
+      managedEmbeddingEnabled: snapshot.effective.embedding,
+      managedVisionEnabled: snapshot.effective.vision,
+      managedWebSearchEnabled: snapshot.effective.web_search,
+      managedRerankEnabled: snapshot.effective.rerank,
+      managedServiceSelected: this.resolveManagedServiceSelection(snapshot),
+      managedSubscriptionActive: snapshot.subscriptionActive
+    })
+  }
+
+  /** 发布独立服务标签选择；生产环境读取本地持久化结果，测试替身回退到服务器偏好。 */
+  private applyManagedServiceSelection(snapshot: ManagedCapabilityPreferencesSnapshot): void {
+    this.setStatus({
+      managedServiceSelected: this.resolveManagedServiceSelection(snapshot)
+    })
+  }
+
+  /** 有套餐时服从跨设备服务器偏好；无套餐时保留本机独立标签选择。 */
+  private resolveManagedServiceSelection(snapshot: ManagedCapabilityPreferencesSnapshot): boolean {
+    if (snapshot.subscriptionActive || !this.isManagedServiceSelected) {
+      return snapshot.preferences.chat
+    }
+    return this.isManagedServiceSelected()
+  }
+
+  /** 读取本机持久化标签选择；没有注入读取器时保留当前脱敏状态。 */
+  private currentLocalServiceSelection(): boolean {
+    return this.isManagedServiceSelected
+      ? this.isManagedServiceSelected()
+      : this.status.managedServiceSelected === true
+  }
+
   /** Runtime 发现设备或认证已终止时，串行清理 Main、Runtime 和设备映射。 */
-  private handleRuntimeTerminalError(error: ManagedControlPlaneError): void {
+  private handleRuntimeTerminalError(error: ManagedControlPlaneError): Promise<void> {
     if (
       this.disposed ||
       !['device_revoked', 'authentication_required', 'token_expired'].includes(error.code || '') ||
       this.activeTerminalCleanup
     ) {
-      return
+      return this.activeTerminalCleanup || Promise.resolve()
     }
     const snapshot = this.sessionSnapshot
     const deviceRevoked = error.code === 'device_revoked'
     const task = (async () => {
+      // Runtime Session 的设备错误可能来自旧设备映射或 OAuth 绑定不同步。
+      // 先用仍然有效的桌面会话重新同步设备并签发 Lease，避免额度变更后的
+      // 首次请求被误判为整台设备已撤销。只有恢复链路再次失败才清理登录态。
+      if (deviceRevoked && await this.tryRecoverRuntimeSession(snapshot)) {
+        logInfo('managed Runtime Session 已通过设备同步恢复')
+        return
+      }
       if (deviceRevoked && snapshot) {
         await this.deviceIdentityManager?.clear(snapshot.subject).catch(() => undefined)
       }
@@ -796,6 +1010,49 @@ export class ManagedAuthManager {
       }
     })
     this.activeTerminalCleanup = task
+    return task
+  }
+
+  /** 尝试复用当前 OAuth 会话恢复 Runtime；失败时由调用方执行终止性清理。 */
+  private async tryRecoverRuntimeSession(snapshot: ManagedAccountSessionSnapshot | null): Promise<boolean> {
+    if (!snapshot || !this.accountSessionManager || !this.runtimeTokenBroker || !this.accessToken) {
+      return false
+    }
+    try {
+      // 同步阶段允许一次 Access Token 轮换，覆盖管理员操作后恰好遇到过期 Token 的情况。
+      const recovered = await this.synchronizeAccountSession(snapshot.subject, true)
+      this.sessionSnapshot = recovered
+      const capabilityPreferences = await this.getCapabilityPreferencesWithAccessTokenRetry()
+      this.capabilityPreferences = capabilityPreferences
+      this.applyEffectiveCapabilityStatus(capabilityPreferences)
+      this.setStatus({
+        state: 'authenticated',
+        sessionSyncState: 'ready',
+        account: recovered.account,
+        device: toManagedDeviceStatus(recovered.device),
+        errorCode: null
+      })
+      if (!hasEffectiveManagedCapability(capabilityPreferences)) {
+        await this.runtimeTokenBroker.clear()
+        await this.onCapabilityPreferencesSync(cloneCapabilitySnapshot(capabilityPreferences))
+        this.applyManagedServiceSelection(capabilityPreferences)
+        return true
+      }
+      await this.runtimeTokenBroker.activate({
+        deviceId: recovered.device.id,
+        getAccessToken: (forceRefresh) => this.ensureAccessTokenForRuntime(forceRefresh)
+      })
+      await this.onRuntimeSessionReady()
+      await this.onCapabilityPreferencesSync(cloneCapabilitySnapshot(capabilityPreferences))
+      this.applyManagedServiceSelection(capabilityPreferences)
+      return true
+    } catch (recoveryError) {
+      const errorCode = recoveryError instanceof ManagedControlPlaneError
+        ? recoveryError.code || 'unknown'
+        : 'unknown'
+      logError('managed Runtime Session 设备同步恢复失败', { errorCode })
+      return false
+    }
   }
 
   /** 应用 Feature Flag 脱敏字段，不覆盖已经认证的状态。 */
@@ -819,11 +1076,31 @@ export class ManagedAuthManager {
       managedVisionEnabled: features.managedVisionEnabled,
       managedWebSearchEnabled: features.managedWebSearchEnabled,
       managedRerankEnabled: features.managedRerankEnabled,
+      managedServiceSelected: this.capabilityPreferences
+        ? this.resolveManagedServiceSelection(this.capabilityPreferences)
+        : this.currentLocalServiceSelection(),
       minimumClientVersion: features.minimumClientVersion,
       errorCode: preserveSessionState
         ? this.status.errorCode
         : features.managedLoginEnabled ? null : features.errorCode
     })
+  }
+}
+
+/** 判断服务端是否允许至少一项官方能力，决定是否需要保留 Runtime Lease。 */
+function hasEffectiveManagedCapability(snapshot: ManagedCapabilityPreferencesSnapshot): boolean {
+  return Object.values(snapshot.effective).some(Boolean)
+}
+
+/** 复制能力快照，避免回调或调用方修改认证管理器持有的权威状态。 */
+function cloneCapabilitySnapshot(
+  snapshot: ManagedCapabilityPreferencesSnapshot
+): ManagedCapabilityPreferencesSnapshot {
+  return {
+    ...snapshot,
+    preferences: { ...snapshot.preferences },
+    entitled: { ...snapshot.entitled },
+    effective: { ...snapshot.effective }
   }
 }
 

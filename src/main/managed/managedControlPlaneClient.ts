@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { ManagedEndpointPolicy } from './managedOAuthTypes'
 import { ManagedServerClock } from './managedServerClock'
-import type { ManagedUsageSummary } from '../../shared/managed'
+import type {
+  ManagedCapabilityPreferencesSnapshot,
+  ManagedCapabilityStateMap,
+  ManagedUsageSummary
+} from '../../shared/managed'
 
 /** 控制面业务错误的稳定分类，禁止携带响应正文。 */
 export type ManagedControlPlaneErrorCode =
@@ -133,11 +137,39 @@ export class ManagedControlPlaneClient {
     return requireUsageSummary(payload)
   }
 
+  /** 查询当前账号保存的官方能力偏好及服务端计算后的有效状态。 */
+  async getManagedCapabilityPreferences(accessToken: string): Promise<ManagedCapabilityPreferencesSnapshot> {
+    const payload = await this.request<unknown>('/api/v1/account/capabilities', {
+      method: 'GET',
+      accessToken
+    })
+    return requireManagedCapabilityPreferences(payload)
+  }
+
+  /** 整体更新五项官方能力偏好，避免部分写入产生状态歧义。 */
+  async updateManagedCapabilityPreferences(
+    accessToken: string,
+    preferences: ManagedCapabilityStateMap
+  ): Promise<ManagedCapabilityPreferencesSnapshot> {
+    const payload = await this.request<unknown>('/api/v1/account/capabilities', {
+      method: 'PUT',
+      accessToken,
+      body: {
+        chat: preferences.chat,
+        embedding: preferences.embedding,
+        vision: preferences.vision,
+        webSearch: preferences.web_search,
+        rerank: preferences.rerank
+      }
+    })
+    return requireManagedCapabilityPreferences(payload)
+  }
+
   /** 发送一个不记录凭据的控制面请求。 */
   private async request<T>(
     resourcePath: string,
     options: {
-      method: 'GET' | 'POST' | 'DELETE'
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE'
       accessToken: string
       body?: unknown
       expectBody?: boolean
@@ -188,6 +220,50 @@ export class ManagedControlPlaneClient {
       envelope.retryAfterSeconds
     )
   }
+}
+
+/** 严格校验官方能力偏好快照，拒绝缺项、未知套餐类型或非布尔状态。 */
+function requireManagedCapabilityPreferences(value: unknown): ManagedCapabilityPreferencesSnapshot {
+  if (!value || typeof value !== 'object') {
+    throw new ManagedControlPlaneError(200, 'internal_error', false)
+  }
+  const root = value as Record<string, unknown>
+  const rootFields = ['version', 'subscriptionActive', 'plan', 'preferences', 'entitled', 'effective']
+  if (
+    Object.keys(root).length !== rootFields.length ||
+    rootFields.some((field) => !(field in root)) ||
+    root.version !== 1 ||
+    typeof root.subscriptionActive !== 'boolean' ||
+    !(root.plan === null || (
+      typeof root.plan === 'string' && root.plan.length >= 1 && root.plan.length <= 64
+    ))
+  ) {
+    throw new ManagedControlPlaneError(200, 'internal_error', false)
+  }
+  return {
+    version: 1,
+    subscriptionActive: root.subscriptionActive,
+    plan: root.plan,
+    preferences: requireManagedCapabilityMap(root.preferences),
+    entitled: requireManagedCapabilityMap(root.entitled),
+    effective: requireManagedCapabilityMap(root.effective)
+  }
+}
+
+/** 校验五项能力映射必须完整且只能包含布尔值。 */
+function requireManagedCapabilityMap(value: unknown): ManagedCapabilityStateMap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ManagedControlPlaneError(200, 'internal_error', false)
+  }
+  const source = value as Record<string, unknown>
+  const names = ['chat', 'embedding', 'vision', 'web_search', 'rerank'] as const
+  if (
+    Object.keys(source).length !== names.length ||
+    names.some((name) => typeof source[name] !== 'boolean')
+  ) {
+    throw new ManagedControlPlaneError(200, 'internal_error', false)
+  }
+  return Object.fromEntries(names.map((name) => [name, source[name]])) as ManagedCapabilityStateMap
 }
 
 /** 严格校验用量摘要，拒绝未知结构和负数，避免 Renderer 展示伪造或不完整数据。 */

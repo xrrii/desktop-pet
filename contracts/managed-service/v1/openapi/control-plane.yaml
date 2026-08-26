@@ -99,6 +99,45 @@ paths:
                 $ref: '#/components/schemas/EntitlementSnapshot'
         '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/runtime-sessions:
+  /api/v1/account/capabilities:
+    get:
+      operationId: getManagedCapabilityPreferences
+      summary: 获取当前账号的官方能力偏好与最终有效状态
+      tags: [Entitlement]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 服务器权威能力状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedCapabilityPreferences'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      operationId: updateManagedCapabilityPreferences
+      summary: 整体更新当前账号的五项官方能力偏好
+      tags: [Entitlement]
+      parameters:
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagedCapabilityPreferenceUpdateRequest'
+      responses:
+        '200':
+          description: 更新后的服务器权威能力状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedCapabilityPreferences'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/runtime-sessions:
     post:
       operationId: createRuntimeSession
       summary: 为当前设备签发短期 Runtime Token
@@ -284,6 +323,38 @@ components:
         - $ref: '#/components/schemas/InactiveEntitlementSnapshot'
         - $ref: '#/components/schemas/SubscriptionEntitlementSnapshot'
         - $ref: '#/components/schemas/PayAsYouGoEntitlementSnapshot'
+    FeatureFlagSnapshot:
+    ManagedCapabilityPreferenceUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [chat, embedding, vision, webSearch, rerank]
+      properties:
+        chat: { type: boolean }
+        embedding: { type: boolean }
+        vision: { type: boolean }
+        webSearch: { type: boolean }
+        rerank: { type: boolean }
+    ManagedCapabilityStateMap:
+      type: object
+      additionalProperties: false
+      required: [chat, embedding, vision, web_search, rerank]
+      properties:
+        chat: { type: boolean }
+        embedding: { type: boolean }
+        vision: { type: boolean }
+        web_search: { type: boolean }
+        rerank: { type: boolean }
+    ManagedCapabilityPreferences:
+      type: object
+      additionalProperties: false
+      required: [version, subscriptionActive, plan, preferences, entitled, effective]
+      properties:
+        version: { type: integer, const: 1 }
+        subscriptionActive: { type: boolean }
+        plan: { type: [string, 'null'], maxLength: 64 }
+        preferences: { $ref: '#/components/schemas/ManagedCapabilityStateMap' }
+        entitled: { $ref: '#/components/schemas/ManagedCapabilityStateMap' }
+        effective: { $ref: '#/components/schemas/ManagedCapabilityStateMap' }
     FeatureFlagSnapshot:
       type: object
       additionalProperties: false

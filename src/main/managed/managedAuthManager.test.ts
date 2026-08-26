@@ -6,6 +6,10 @@ import { ManagedControlPlaneError } from './managedControlPlaneClient'
 import type { ManagedFeatureSnapshot } from './managedFeatureFlags'
 import type { ManagedRuntimeTokenBroker } from './managedRuntimeTokenBroker'
 import type {
+  ManagedAuthStatus,
+  ManagedCapabilityPreferencesSnapshot
+} from '../../shared/managed'
+import type {
   ManagedAuthorizationPreparation,
   ManagedEndpointPolicy,
   ManagedOAuthClient,
@@ -330,6 +334,7 @@ describe('ManagedAuthManager', () => {
       tokenStore,
       oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
       accountSessionManager: sessionManager.value,
+      controlPlaneClient: managedControlPlaneClientDouble(),
       runtimeTokenBroker: runtimeBroker.value
     })
 
@@ -346,6 +351,7 @@ describe('ManagedAuthManager', () => {
     await expect(manager.logout()).resolves.toMatchObject({
       state: 'disabled',
       sessionSyncState: 'idle',
+      managedServiceSelected: true,
       account: null,
       device: null
     })
@@ -371,7 +377,8 @@ describe('ManagedAuthManager', () => {
     const manager = new ManagedAuthManager(policy, '0.2.0', {
       tokenStore,
       oauthClient: oauthClientWithRefresh(refresh),
-      accountSessionManager: sessionManager.value
+      accountSessionManager: sessionManager.value,
+      controlPlaneClient: managedControlPlaneClientDouble()
     })
 
     await expect(manager.restoreSession()).resolves.toMatchObject({ state: 'authenticated', sessionSyncState: 'ready' })
@@ -404,7 +411,8 @@ describe('ManagedAuthManager', () => {
     const manager = new ManagedAuthManager(policy, '0.2.0', {
       tokenStore,
       oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
-      accountSessionManager: sessionManager.value
+      accountSessionManager: sessionManager.value,
+      controlPlaneClient: managedControlPlaneClientDouble()
     })
     await manager.restoreSession()
 
@@ -419,6 +427,140 @@ describe('ManagedAuthManager', () => {
       'a01715d2-42e3-4abe-a348-708dda38ab0d'
     )
     expect(tokenStore.clearCount).toBe(1)
+  })
+
+  it('Runtime 刷新遇到设备撤销时先同步设备，恢复成功则保持登录', async () => {
+    const tokenStore = new FakeTokenStore()
+    tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }
+    const sessionManager = managedSessionManagerDouble()
+    const runtimeBroker = runtimeTokenBrokerDouble()
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      tokenStore,
+      oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
+      accountSessionManager: sessionManager.value,
+      controlPlaneClient: managedControlPlaneClientDouble(),
+      runtimeTokenBroker: runtimeBroker.value
+    })
+
+    await expect(manager.restoreSession()).resolves.toMatchObject({
+      state: 'authenticated',
+      sessionSyncState: 'ready'
+    })
+    const terminalError = runtimeBroker.terminalErrorListener
+    if (!terminalError) throw new Error('Runtime 终止监听器未注册。')
+    terminalError(new ManagedControlPlaneError(403, 'device_revoked', false))
+    await vi.waitFor(() => expect(runtimeBroker.activate).toHaveBeenCalledTimes(2))
+
+    expect(sessionManager.synchronize).toHaveBeenCalledTimes(2)
+    expect(tokenStore.clearCount).toBe(0)
+    expect(manager.getStatus()).toMatchObject({
+      state: 'authenticated',
+      sessionSyncState: 'ready',
+      errorCode: null
+    })
+  })
+
+  it('账号无套餐时同步全部关闭且不创建 Runtime Session', async () => {
+    const tokenStore = new FakeTokenStore()
+    tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }
+    const runtimeBroker = runtimeTokenBrokerDouble()
+    const onCapabilityPreferencesSync = vi.fn().mockResolvedValue(undefined)
+    const unavailableRequested = managedCapabilitySnapshot(false)
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      tokenStore,
+      oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
+      accountSessionManager: managedSessionManagerDouble().value,
+      controlPlaneClient: managedControlPlaneClientDouble(unavailableRequested),
+      runtimeTokenBroker: runtimeBroker.value,
+      onCapabilityPreferencesSync,
+      isManagedServiceSelected: () => true
+    })
+
+    await expect(manager.restoreSession()).resolves.toMatchObject({
+      state: 'authenticated',
+      runtimeSessionState: 'idle',
+      managedChatEnabled: false,
+      managedEmbeddingEnabled: false,
+      managedVisionEnabled: false,
+      managedWebSearchEnabled: false,
+      managedRerankEnabled: false,
+      managedServiceSelected: true,
+      managedSubscriptionActive: false
+    })
+    expect(runtimeBroker.activate).not.toHaveBeenCalled()
+    expect(runtimeBroker.clear).toHaveBeenCalledOnce()
+    expect(onCapabilityPreferencesSync).toHaveBeenCalledWith(unavailableRequested)
+    await expect(manager.getUsageSummary()).resolves.toBeNull()
+  })
+
+  it('登录准备和同步阶段始终保留本机官方服务标签选择', async () => {
+    const statuses: ManagedAuthStatus[] = []
+    const oauthClient: ManagedOAuthClient = {
+      async prepare(): Promise<ManagedAuthorizationPreparation> {
+        return {
+          authorizationUrl: new URL('http://127.0.0.1:18080/oauth2/authorize?state=selection-state'),
+          state: 'selection-state',
+          async exchange(): Promise<ManagedTokenSet> {
+            throw new Error('取消登录后不应交换 Token。')
+          }
+        }
+      },
+      async refresh(): Promise<ManagedTokenSet> {
+        throw new Error('本测试不应刷新 Token。')
+      }
+    }
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      featureFlags: new FakeFeatureFlags() as never,
+      oauthClient,
+      tokenStore: new FakeTokenStore(),
+      isManagedServiceSelected: () => true,
+      onStatusChange: (status) => statuses.push(status),
+      openExternal: async () => undefined
+    })
+
+    const login = manager.login()
+    await vi.waitFor(() => expect(statuses.some((status) => status.state === 'waiting_callback')).toBe(true))
+    manager.cancel()
+    await login
+
+    expect(statuses
+      .filter((status) => ['preparing', 'waiting_callback'].includes(status.state))
+      .every((status: ManagedAuthStatus) => status.managedServiceSelected === true))
+      .toBe(true)
+  })
+
+  it('服务端写入成功但本地应用失败时回滚上一版偏好', async () => {
+    const tokenStore = new FakeTokenStore()
+    tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }
+    const initial = managedCapabilitySnapshot(true)
+    const disabled = managedCapabilitySnapshot(false)
+    const update = vi.fn()
+      .mockResolvedValueOnce(disabled)
+      .mockResolvedValueOnce(initial)
+    const controlPlaneClient = {
+      getManagedCapabilityPreferences: vi.fn(async () => initial),
+      updateManagedCapabilityPreferences: update
+    } as never
+    const onCapabilityPreferencesSync = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('合成本地应用失败'))
+      .mockResolvedValueOnce(undefined)
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      tokenStore,
+      oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
+      accountSessionManager: managedSessionManagerDouble().value,
+      controlPlaneClient,
+      runtimeTokenBroker: runtimeTokenBrokerDouble().value,
+      onCapabilityPreferencesSync
+    })
+    await manager.restoreSession()
+
+    await expect(manager.updateCapabilityPreferences(disabled.preferences))
+      .rejects.toThrow('合成本地应用失败')
+
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(update.mock.calls[1][1]).toEqual(initial.preferences)
+    expect(manager.getCapabilityPreferences()).toEqual(initial)
   })
 
   it('UserInfo 或设备请求遇到 token_expired 时只轮换一次并重试同步', async () => {
@@ -459,6 +601,7 @@ describe('ManagedAuthManager', () => {
       oauthClient,
       tokenStore,
       accountSessionManager: sessionManager.value,
+      controlPlaneClient: managedControlPlaneClientDouble(),
       openExternal: async (url) => {
         const authorization = new URL(url)
         const redirect = authorization.searchParams.get('redirect_uri')
@@ -472,6 +615,35 @@ describe('ManagedAuthManager', () => {
     expect(tokenStore.saved).toEqual(['refresh-token', 'rotated-refresh-token'])
   })
 })
+
+/** 构造返回完整五项能力状态的控制面替身，避免会话测试访问真实网络。 */
+function managedControlPlaneClientDouble(
+  snapshot: ManagedCapabilityPreferencesSnapshot = managedCapabilitySnapshot(true)
+) {
+  return {
+    getManagedCapabilityPreferences: vi.fn(async () => snapshot),
+    updateManagedCapabilityPreferences: vi.fn(async () => snapshot)
+  } as never
+}
+
+/** 构造全开或全关的服务端权威能力快照。 */
+function managedCapabilitySnapshot(enabled: boolean): ManagedCapabilityPreferencesSnapshot {
+  const values = {
+    chat: enabled,
+    embedding: enabled,
+    vision: enabled,
+    web_search: enabled,
+    rerank: enabled
+  }
+  return {
+    version: 1,
+    subscriptionActive: enabled,
+    plan: enabled ? 'pro' : null,
+    preferences: { ...values },
+    entitled: { ...values },
+    effective: { ...values }
+  }
+}
 
 /** 构造只支持刷新路径的 OAuth 测试替身。 */
 function oauthClientWithRefresh(
@@ -531,14 +703,21 @@ function runtimeTokenBrokerDouble() {
   const activate = vi.fn().mockResolvedValue(undefined)
   const clear = vi.fn().mockResolvedValue(undefined)
   const dispose = vi.fn()
+  let terminalErrorListener: ((error: ManagedControlPlaneError) => void) | null = null
   const setStatusListener = vi.fn((listener: (status: {
     state: 'idle'
     errorCode: null
   }) => void) => listener({ state: 'idle', errorCode: null }))
+  const setTerminalErrorListener = vi.fn((listener: (error: ManagedControlPlaneError) => void) => {
+    terminalErrorListener = listener
+  })
   return {
-    value: { activate, clear, dispose, setStatusListener } as unknown as ManagedRuntimeTokenBroker,
+    value: { activate, clear, dispose, setStatusListener, setTerminalErrorListener } as unknown as ManagedRuntimeTokenBroker,
     activate,
     clear,
-    dispose
+    dispose,
+    get terminalErrorListener() {
+      return terminalErrorListener
+    }
   }
 }

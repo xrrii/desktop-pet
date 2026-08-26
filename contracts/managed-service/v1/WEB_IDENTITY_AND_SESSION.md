@@ -35,6 +35,9 @@
 - `PUT /api/v1/web/account/password`
 - `DELETE /api/v1/web/devices/{deviceId}`
 - `DELETE /api/v1/web/devices`
+- `PUT /api/v1/web/admin/capabilities/users`
+- `PUT /api/v1/web/admin/subscriptions`
+- `PUT /api/v1/web/admin/credits`
 
 缺失、格式不合法、过期或不匹配统一返回 `csrf_invalid`。服务端不得接受查询参数、JSON 字段或自定义 Cookie 中的 CSRF 值代替 Header。CORS 只允许必要的 `GET`、`POST`、`PATCH`、`PUT`、`DELETE` 方法和 `Content-Type`、`X-PetDock-Request-Id`、`X-PetDock-CSRF` 请求头，并固定 `Access-Control-Allow-Credentials: true`。
 

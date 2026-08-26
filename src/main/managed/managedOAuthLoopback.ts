@@ -4,6 +4,118 @@ import { logInfo } from '../logger'
 const CALLBACK_PATH = '/oauth/callback'
 const CALLBACK_HOST = '127.0.0.1'
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1_000
+const CALLBACK_PAGE_NONCE = 'petdock-oauth-callback'
+const CALLBACK_SUCCESS_PAGE = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PetDock 登录成功</title>
+    <style nonce="${CALLBACK_PAGE_NONCE}">
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+        background: #f5f7f9;
+        color: #182027;
+      }
+      * { box-sizing: border-box; }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #f5f7f9;
+      }
+      main {
+        width: min(100%, 420px);
+        text-align: center;
+      }
+      .status-icon {
+        width: 52px;
+        height: 52px;
+        margin: 0 auto 20px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: #16794f;
+        color: #ffffff;
+      }
+      .status-icon svg { width: 26px; height: 26px; }
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.35;
+        font-weight: 650;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 12px 0 24px;
+        color: #5d6871;
+        font-size: 15px;
+        line-height: 1.7;
+      }
+      button {
+        min-height: 42px;
+        padding: 0 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid #ccd3d8;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #26323a;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover { border-color: #98a4ac; background: #eef2f4; }
+      button:focus-visible { outline: 3px solid rgba(22, 121, 79, 0.25); outline-offset: 2px; }
+      button svg { width: 17px; height: 17px; }
+      @media (prefers-color-scheme: dark) {
+        :root, body { background: #171b1e; color: #f1f4f5; }
+        p { color: #aeb8be; }
+        button { border-color: #465159; background: #242a2e; color: #f1f4f5; }
+        button:hover { border-color: #64717a; background: #2d353a; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="status-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m5 12 4 4L19 6"></path>
+        </svg>
+      </div>
+      <h1>登录成功</h1>
+      <p id="callback-message">正在关闭此页面并返回 PetDock...</p>
+      <button id="close-button" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"></path>
+        </svg>
+        关闭此页面
+      </button>
+    </main>
+    <script nonce="${CALLBACK_PAGE_NONCE}">
+      const message = document.getElementById('callback-message')
+      const closeButton = document.getElementById('close-button')
+
+      // 系统浏览器可能禁止脚本关闭外部应用打开的标签页，此时保留手动关闭入口。
+      const closeCallbackPage = () => {
+        window.close()
+        window.setTimeout(() => {
+          if (!window.closed) {
+            message.textContent = '浏览器未允许自动关闭，请关闭此页面返回 PetDock。'
+          }
+        }, 300)
+      }
+
+      closeButton.addEventListener('click', closeCallbackPage)
+      window.setTimeout(closeCallbackPage, 250)
+    </script>
+  </body>
+</html>`
 
 /** Loopback 生命周期错误，Main 会将其映射为稳定错误码。 */
 export class ManagedOAuthLoopbackError extends Error {
@@ -134,7 +246,10 @@ export class ManagedOAuthLoopbackSession {
       return
     }
     this.consumed = true
-    writeResponse(response, 200, 'PetDock 登录回调已接收，可以返回应用。')
+    logInfo('managed OAuth loopback callback accepted', {
+      result: callbackUrl.searchParams.has('code') ? 'code' : 'error'
+    })
+    writeSuccessResponse(response)
     this.finish(null, callbackUrl)
   }
 
@@ -169,4 +284,18 @@ function writeResponse(response: ServerResponse, status: number, message: string
   response.setHeader('Content-Type', 'text/plain; charset=utf-8')
   response.setHeader('Cache-Control', 'no-store')
   response.end(message)
+}
+
+/** 写入带自动关闭行为的成功页；被浏览器拦截时保留手动关闭入口。 */
+function writeSuccessResponse(response: ServerResponse): void {
+  response.statusCode = 200
+  response.setHeader('Content-Type', 'text/html; charset=utf-8')
+  response.setHeader('Cache-Control', 'no-store')
+  response.setHeader(
+    'Content-Security-Policy',
+    `default-src 'none'; style-src 'nonce-${CALLBACK_PAGE_NONCE}'; script-src 'nonce-${CALLBACK_PAGE_NONCE}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+  )
+  response.setHeader('Referrer-Policy', 'no-referrer')
+  response.setHeader('X-Content-Type-Options', 'nosniff')
+  response.end(CALLBACK_SUCCESS_PAGE)
 }

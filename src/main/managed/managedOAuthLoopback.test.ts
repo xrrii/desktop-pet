@@ -7,8 +7,11 @@ describe('ManagedOAuthLoopbackSession', () => {
     expect(session.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/)
     session.setExpectedState('state-1')
 
-    const callback = fetch(`${session.redirectUri}?code=code-1&state=state-1`)
-    await expect(callback).resolves.toMatchObject({ status: 200 })
+    const response = await fetch(`${session.redirectUri}?code=code-1&state=state-1`)
+    expect(response).toMatchObject({ status: 200 })
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'")
+    await expect(response.text()).resolves.toContain('window.setTimeout(closeCallbackPage, 250)')
     await expect(session.waitForCallback()).resolves.toMatchObject({
       pathname: '/oauth/callback'
     })

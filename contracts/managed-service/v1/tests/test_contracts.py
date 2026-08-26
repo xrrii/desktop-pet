@@ -321,6 +321,20 @@ def test_control_plane_feature_flag_contract_is_present() -> None:
     assert schema["properties"]["version"]["const"] == 1
 
 
+def test_control_plane_managed_capability_preferences_are_complete() -> None:
+    """冻结账号级官方能力偏好的整体写入和五项固定响应。"""
+    document = _read_yaml(OPENAPI_ROOT / "control-plane.yaml")
+    path = document["paths"]["/api/v1/account/capabilities"]
+    assert path["get"]["operationId"] == "getManagedCapabilityPreferences"
+    assert path["put"]["operationId"] == "updateManagedCapabilityPreferences"
+    request = document["components"]["schemas"]["ManagedCapabilityPreferenceUpdateRequest"]
+    assert request["additionalProperties"] is False
+    assert set(request["required"]) == {"chat", "embedding", "vision", "webSearch", "rerank"}
+    state = document["components"]["schemas"]["ManagedCapabilityStateMap"]
+    assert state["additionalProperties"] is False
+    assert set(state["required"]) == {"chat", "embedding", "vision", "web_search", "rerank"}
+
+
 def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
     """确保官网契约使用独立 Session/CSRF 边界，并不混用桌面 Bearer API。"""
     document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
@@ -332,12 +346,16 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
         "/api/v1/web/auth/logout",
         "/api/v1/web/profile",
         "/api/v1/web/account/password",
-        "/api/v1/web/entitlements",
-        "/api/v1/web/usage/summary",
+            "/api/v1/web/entitlements",
+            "/api/v1/web/usage/summary",
+            "/api/v1/web/usage/history",
             "/api/v1/web/devices",
             "/api/v1/web/devices/{deviceId}",
             "/api/v1/web/admin/web-search/users",
             "/api/v1/web/admin/capabilities/users",
+            "/api/v1/web/admin/plans",
+            "/api/v1/web/admin/subscriptions",
+            "/api/v1/web/admin/credits",
         }
     security_scheme = document["components"]["securitySchemes"]["webSession"]
     assert security_scheme["type"] == "apiKey"
@@ -646,3 +664,18 @@ def test_p4_00_web_summary_supports_real_capability_breakdown() -> None:
     example = _read_json(EXAMPLE_ROOT / "web-usage-summary.json")
     assert set(example) >= {"chat", "embedding", "vision", "web_search", "rerank"}
     assert example["vision"]["unit"] == "tokens"
+
+
+def test_p5_web_usage_history_is_daily_and_minimal() -> None:
+    """冻结按日历史只返回真实能力数字，不开放正文或内部字段。"""
+    web = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    operation = web["paths"]["/api/v1/web/usage/history"]["get"]
+    assert operation["operationId"] == "getWebUsageHistory"
+    assert operation["security"] == [{"webSession": []}]
+    history = web["components"]["schemas"]["WebUsageHistory"]
+    assert history["required"] == ["version", "periodStart", "periodEnd", "granularity", "items"]
+    assert history["properties"]["granularity"]["enum"] == ["day"]
+    item = web["components"]["schemas"]["WebUsageHistoryItem"]
+    assert set(item["properties"]) == {"date", "chat", "embedding", "vision", "web_search", "rerank"}
+    assert "prompt" not in item["properties"]
+    assert "provider" not in item["properties"]

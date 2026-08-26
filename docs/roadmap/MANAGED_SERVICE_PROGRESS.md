@@ -529,3 +529,15 @@ Phase 2/3 已确认 PostgreSQL 17、Redis 8.0、Flyway、Spring Authorization Se
 - Managed Service v1 权威源提交为 `18c68c3c97479716a535fd9bcb1a293d1e26dedd`；新增 Managed Chat 可选开关、Phase 3 Chat/工具预算、内部预占与终态协议、Web Usage Summary、SSE 固定序列、请求指纹、幂等冲突和稳定错误码。
 - Cloud 与 Desktop 53 个受控文件 SHA-256 逐一一致；Cloud pytest 22 项、TypeScript 固定样例 1 项、Spring/Jackson 固定样例 1 项、Desktop 契约 21 项全部通过。
 - Desktop 新开关消费保持兼容：`managed_chat_enabled` 缺失或类型错误时只关闭 Chat，不影响既有官方登录；Desktop 165 项 Vitest 和类型检查通过。P3-00 标记为 `Done`，下一工作项为 Cloud `P3-01`。
+
+### 2026-08-26（Web Usage History 契约同步）
+
+- Cloud 权威 Web 契约新增按 UTC 日 Usage History；Desktop 消费快照已同步，53 个受控契约文件逐一 SHA-256 比对通过。
+- Desktop 本轮不新增业务代码；Web 趋势图继续通过 Web Session 控制面展示，保持 Desktop Token 与 Provider Secret 不出现在官网边界。
+
+### 2026-08-26（账号级官方能力状态同步）
+
+- Cloud 新增账号级五能力偏好、套餐授权与 Feature Flag 交集接口；Runtime Claims 同步过滤用户关闭的能力，Chat 继续作为整个官方模式总开关。
+- Desktop 在登录和会话恢复时读取服务器权威状态，无套餐或无有效能力时不创建 Runtime Session；套餐恢复后按服务器保留偏好重新启用。
+- 设置页切换官方能力时先整体写回服务器，再同步本地来源；本地应用失败会恢复服务器上一版偏好，BYOK 凭据和非 Managed 来源始终保留。
+- 无套餐或 `capability_not_entitled` 的用量读取转为空状态，不再把预期业务状态作为 Renderer 异常展示。

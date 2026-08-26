@@ -27,7 +27,12 @@ import type {
   MemoryItemKind,
   AssistantPermissionResolution
 } from '../shared/assistant'
-import type { ManagedPortalTarget, ManagedUsageSummaryResult } from '../shared/managed'
+import type {
+  ManagedCapabilityName,
+  ManagedCapabilityStateMap,
+  ManagedPortalTarget,
+  ManagedUsageSummaryResult
+} from '../shared/managed'
 import type { CreatePetInput, PetSpritesheetSelection } from '../shared/pet'
 import { AssistantManager } from './assistant/assistantManager'
 import { writeArtifactAtomically } from './assistant/artifactFileWriter'
@@ -124,7 +129,7 @@ assistantManager = new AssistantManager(
     getManagedWebSearchState: () => {
       const status = managedAuthManager?.getStatus()
       return {
-        enabled: status?.managedWebSearchEnabled === true,
+        enabled: managedAuthManager?.isManagedCapabilityEffective('web_search') === true,
         authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
         runtimeReady: status?.runtimeSessionState === 'ready',
         errorCode: status?.runtimeSessionErrorCode || null
@@ -133,7 +138,7 @@ assistantManager = new AssistantManager(
     getManagedVisionState: () => {
       const status = managedAuthManager?.getStatus()
       return {
-        enabled: status?.managedVisionEnabled === true,
+        enabled: managedAuthManager?.isManagedCapabilityEffective('vision') === true,
         authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
         runtimeReady: status?.runtimeSessionState === 'ready',
         errorCode: status?.runtimeSessionErrorCode || null
@@ -142,7 +147,7 @@ assistantManager = new AssistantManager(
     getManagedEmbeddingState: () => {
       const status = managedAuthManager?.getStatus()
       return {
-        enabled: status?.managedEmbeddingEnabled === true,
+        enabled: managedAuthManager?.isManagedCapabilityEffective('embedding') === true,
         authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
         runtimeReady: status?.runtimeSessionState === 'ready',
         errorCode: status?.runtimeSessionErrorCode || null
@@ -151,7 +156,7 @@ assistantManager = new AssistantManager(
     getManagedRerankState: () => {
       const status = managedAuthManager?.getStatus()
       return {
-        enabled: status?.managedRerankEnabled === true,
+        enabled: managedAuthManager?.isManagedCapabilityEffective('rerank') === true,
         authenticated: status?.state === 'authenticated' && status.sessionSyncState === 'ready',
         runtimeReady: status?.runtimeSessionState === 'ready',
         errorCode: status?.runtimeSessionErrorCode || null
@@ -162,7 +167,7 @@ assistantManager = new AssistantManager(
     ).toString().replace(/\/$/, ''),
     managedWebSearch: {
       selected: () => assistantManager?.getCapabilitySettings().capabilities.web_search.selectedSource === 'managed',
-      enabled: () => managedAuthManager?.getStatus().managedWebSearchEnabled === true,
+      enabled: () => managedAuthManager?.isManagedCapabilityEffective('web_search') === true,
       getToken: () => managedRuntimeTokenBroker.getToken(),
       endpoint: () => managedEndpointPolicy.aiDataPlaneBaseUrl || managedEndpointPolicy.controlPlaneBaseUrl,
       clientVersion: () => app.getVersion()
@@ -187,6 +192,10 @@ managedAuthManager = new ManagedAuthManager(managedEndpointPolicy, app.getVersio
       logError('Managed Runtime Session 就绪后的知识库重建失败', error)
     }
   },
+  onCapabilityPreferencesSync: async (snapshot) => {
+    await assistantManager.synchronizeManagedCapabilities(snapshot)
+  },
+  isManagedServiceSelected: () => assistantManager.getServiceModeSelection() === 'managed',
   onStatusChange: (status) => petWindow?.webContents.send('managed:status-changed', status)
 })
 
@@ -583,6 +592,10 @@ function registerIpc(): void {
     if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Chat 来源无效。')
     }
+    if (managedAuthManager.getStatus().state === 'authenticated') {
+      await updateManagedCapabilityPreference('chat', source === 'managed')
+      if (source === 'managed') return assistantManager.getCapabilitySettings()
+    }
     return assistantManager.setChatSource(source)
   })
   ipcMain.handle('assistant:set-service-mode', async (event, mode: unknown) => {
@@ -590,33 +603,64 @@ function registerIpc(): void {
     if (mode !== 'byok' && mode !== 'managed') {
       throw new TypeError('助手服务模式无效。')
     }
+    if (managedAuthManager.getStatus().state === 'authenticated') {
+      const previousMode = assistantManager.getServiceModeSelection()
+      const current = requireManagedCapabilityPreferences()
+      const preferences: ManagedCapabilityStateMap = mode === 'byok'
+        ? disabledManagedCapabilityPreferences()
+        : { ...current, chat: true, web_search: true }
+      assistantManager.setServiceModeSelection(mode)
+      try {
+        await managedAuthManager.updateCapabilityPreferences(preferences)
+      } catch (error) {
+        assistantManager.setServiceModeSelection(previousMode)
+        throw error
+      }
+      if (mode === 'managed') return assistantManager.getCapabilitySettings()
+    }
     return assistantManager.setServiceMode(mode as AssistantServiceMode)
   })
-  ipcMain.handle('assistant:set-web-search-source', (event, source: unknown) => {
+  ipcMain.handle('assistant:set-web-search-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Web Search 来源无效。')
     }
+    if (managedAuthManager.getStatus().state === 'authenticated') {
+      await updateManagedCapabilityPreference('web_search', source === 'managed')
+      if (source === 'managed') return assistantManager.getCapabilitySettings()
+    }
     return assistantManager.setWebSearchSource(source)
   })
-  ipcMain.handle('assistant:set-vision-source', (event, source: unknown) => {
+  ipcMain.handle('assistant:set-vision-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Vision 来源无效。')
     }
+    if (managedAuthManager.getStatus().state === 'authenticated') {
+      await updateManagedCapabilityPreference('vision', source === 'managed')
+      if (source === 'managed') return assistantManager.getCapabilitySettings()
+    }
     return assistantManager.setVisionSource(source)
   })
-  ipcMain.handle('assistant:set-embedding-source', (event, source: unknown) => {
+  ipcMain.handle('assistant:set-embedding-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'managed' && source !== 'local' && source !== 'byok') {
       throw new TypeError('Embedding 来源无效。')
     }
+    if (managedAuthManager.getStatus().state === 'authenticated') {
+      await updateManagedCapabilityPreference('embedding', source === 'managed')
+      if (source === 'managed') return assistantManager.getCapabilitySettings()
+    }
     return assistantManager.setEmbeddingSource(source)
   })
-  ipcMain.handle('assistant:set-rerank-source', (event, source: unknown) => {
+  ipcMain.handle('assistant:set-rerank-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Rerank 来源无效。')
+    }
+    if (managedAuthManager.getStatus().state === 'authenticated') {
+      await updateManagedCapabilityPreference('rerank', source === 'managed')
+      if (source === 'managed') return assistantManager.getCapabilitySettings()
     }
     return assistantManager.setRerankSource(source)
   })
@@ -994,6 +1038,38 @@ function refreshManagedPortalStatus(): Promise<void> {
   })()
   activeManagedPortalRefresh = task
   return task
+}
+
+/** 更新单项服务端能力偏好；整体提交可避免多设备并发时遗漏其他能力。 */
+async function updateManagedCapabilityPreference(
+  capability: ManagedCapabilityName,
+  enabled: boolean
+): Promise<void> {
+  const preferences = requireManagedCapabilityPreferences()
+  await managedAuthManager.updateCapabilityPreferences({
+    ...preferences,
+    [capability]: enabled
+  })
+}
+
+/** 读取已登录账号的服务端偏好；认证完成却没有快照属于同步错误。 */
+function requireManagedCapabilityPreferences(): ManagedCapabilityStateMap {
+  const snapshot = managedAuthManager.getCapabilityPreferences()
+  if (!snapshot) {
+    throw new ManagedControlPlaneError(null, 'internal_error', false)
+  }
+  return { ...snapshot.preferences }
+}
+
+/** 创建全部关闭的官方能力偏好，切换 BYOK 模式时一次性写回服务器。 */
+function disabledManagedCapabilityPreferences(): ManagedCapabilityStateMap {
+  return {
+    chat: false,
+    embedding: false,
+    vision: false,
+    web_search: false,
+    rerank: false
+  }
 }
 
 function requirePetSender(event: IpcMainInvokeEvent | IpcMainEvent): BrowserWindow {

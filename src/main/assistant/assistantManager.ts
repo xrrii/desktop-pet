@@ -43,7 +43,10 @@ import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess, type AssistantRuntimeLifecycle } from './runtimeProcess'
 import type { AssistantRuntimeClient } from './runtimeClient'
 import type { ManagedAuthRefreshRequiredEvent } from '../managed/managedRuntimeAuthRefreshHandler'
-import type { ManagedRuntimeSessionErrorCode } from '../../shared/managed'
+import type {
+  ManagedCapabilityPreferencesSnapshot,
+  ManagedRuntimeSessionErrorCode
+} from '../../shared/managed'
 import { EmbeddingModelManager } from './embeddingModelManager'
 import { AssistantToolHost, webToolErrorMessage } from './toolHost'
 import type { ToolPolicyResult } from './toolPolicy'
@@ -231,6 +234,46 @@ export class AssistantManager {
   /** 返回 Main 计算后的版本化能力来源快照。 */
   getCapabilitySettings(): AssistantCapabilitySettingsSnapshot {
     return this.capabilitySettings.snapshot()
+  }
+
+  /** 返回设置页独立保存的服务标签选择。 */
+  getServiceModeSelection(): AssistantServiceMode {
+    return this.capabilitySettings.getServiceMode()
+  }
+
+  /** 只保存服务标签选择，不启动尚未获得服务器授权的能力。 */
+  setServiceModeSelection(mode: AssistantServiceMode): void {
+    this.capabilitySettings.setServiceModeSelection(mode)
+  }
+
+  /** 应用服务器权威能力状态，并按变化范围重启 Runtime 或重建向量索引。 */
+  async synchronizeManagedCapabilities(
+    snapshot: ManagedCapabilityPreferencesSnapshot
+  ): Promise<AssistantCapabilitySettingsSnapshot> {
+    const backup = this.capabilitySettings.captureConfiguration()
+    const result = this.capabilitySettings.applyManagedCapabilities(snapshot)
+    if (!result.changed) {
+      return this.capabilitySettings.snapshot()
+    }
+    await this.cancelAll()
+    try {
+      const client = await this.runtime.restart()
+      if (result.embeddingChanged) {
+        await client.reindexAllKnowledge()
+      }
+      logInfo('助手已同步服务器官方能力状态', {
+        subscriptionActive: snapshot.subscriptionActive,
+        enabledCount: Object.values(snapshot.effective).filter(Boolean).length,
+        embeddingChanged: result.embeddingChanged
+      })
+      return this.capabilitySettings.snapshot()
+    } catch (error) {
+      this.capabilitySettings.restoreConfiguration(backup)
+      await this.runtime.restart().catch((rollbackError: unknown) => {
+        logError('服务器能力状态本地回滚失败', rollbackError)
+      })
+      throw error
+    }
   }
 
   /** 设置 Chat 来源并重启 Runtime；Managed 不可用时保留选择，不自动改回 BYOK。 */

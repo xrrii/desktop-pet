@@ -66,6 +66,22 @@ export interface ManagedUsageSummary {
 /** 额度读取在登出竞态中可能没有结果；null 表示当前没有可用登录会话。 */
 export type ManagedUsageSummaryResult = ManagedUsageSummary | null
 
+/** 服务端统一管理的官方能力名称。 */
+export type ManagedCapabilityName = 'chat' | 'embedding' | 'vision' | 'web_search' | 'rerank'
+
+/** 五项官方能力的布尔状态映射。 */
+export type ManagedCapabilityStateMap = Record<ManagedCapabilityName, boolean>
+
+/** 当前账号的官方能力偏好、套餐授权与最终有效状态。 */
+export interface ManagedCapabilityPreferencesSnapshot {
+  version: 1
+  subscriptionActive: boolean
+  plan: string | null
+  preferences: ManagedCapabilityStateMap
+  entitled: ManagedCapabilityStateMap
+  effective: ManagedCapabilityStateMap
+}
+
 /** Renderer 可见的稳定登录错误分类。 */
 export type ManagedAuthErrorCode =
   | 'managed_login_disabled'
@@ -131,6 +147,10 @@ export interface ManagedAuthStatus {
   managedVisionEnabled?: boolean
   managedWebSearchEnabled?: boolean
   managedRerankEnabled?: boolean
+  /** 当前账号是否选择官方服务模式；与套餐是否可用相互独立。 */
+  managedServiceSelected?: boolean
+  /** 当前账号是否有活动套餐；null 表示尚未完成账号能力同步。 */
+  managedSubscriptionActive?: boolean | null
   minimumClientVersion: string | null
   errorCode: ManagedAuthErrorCode | null
   sessionSyncState: ManagedSessionSyncState

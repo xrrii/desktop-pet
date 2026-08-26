@@ -252,6 +252,32 @@ paths:
           $ref: '#/components/responses/CapabilityNotEntitled'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/web/usage/history:
+    get:
+      tags: [Web Usage]
+      summary: 获取当前免费 Beta 周期的按日用量历史
+      description: 只读取当前账号已结算的 Usage Event；按 UTC 日聚合，不返回请求正文、Provider 或设备明细。未开通时返回稳定错误。
+      operationId: getWebUsageHistory
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 当前周期按日用量历史
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebUsageHistory'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CapabilityNotEntitled'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/web/admin/capabilities/users:
     get:
       tags: [Web Admin]
@@ -315,6 +341,103 @@ paths:
       responses:
         '200':
           description: 更新后的用户授权摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCapabilityUser'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+
+  /api/v1/web/admin/plans:
+    get:
+      tags: [Web Admin]
+      summary: 查询可分配套餐
+      description: 仅管理员可访问；只返回 active 套餐及其能力额度，不返回内部计费字段。
+      operationId: listAdminPlans
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 可分配套餐列表
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminPlan'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+  /api/v1/web/admin/subscriptions:
+    put:
+      tags: [Web Admin]
+      summary: 给用户分配套餐
+      description: 仅管理员可访问；分配会替换当前活动订阅并重置套餐能力剩余额度，同时递增统一授权版本。
+      operationId: assignAdminSubscription
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+        - name: username
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Username'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminSubscriptionUpdateRequest'
+      responses:
+        '200':
+          description: 分配后的用户套餐
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSubscription'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+  /api/v1/web/admin/credits:
+    put:
+      tags: [Web Admin]
+      summary: 给用户增加能力额度
+      description: 仅管理员可访问；在当前剩余额度上增加指定数量，并递增用户全部授权版本。
+      operationId: addAdminCredits
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+        - name: username
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Username'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreditRequest'
+      responses:
+        '200':
+          description: 增额后的用户能力授权
           content:
             application/json:
               schema:
@@ -644,7 +767,19 @@ components:
           maximum: 2000000000
     AdminManagedCapability:
       type: string
-      enum: [embedding, web_search, vision, rerank]
+      enum: [chat, embedding, web_search, vision, rerank]
+    AdminCreditRequest:
+      type: object
+      additionalProperties: false
+      required: [capability, amount]
+      properties:
+        capability:
+          $ref: '#/components/schemas/AdminManagedCapability'
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2000000000
     AdminCapabilityUpdateRequest:
       type: object
       additionalProperties: false
@@ -688,6 +823,71 @@ components:
           format: date-time
         planSupportsCapability:
           type: boolean
+    AdminPlanCapability:
+      type: object
+      additionalProperties: false
+      required: [capability, monthlyLimit, unit]
+      properties:
+        capability:
+          $ref: '#/components/schemas/AdminManagedCapability'
+        monthlyLimit:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 2000000000
+        unit:
+          type: string
+          enum: [requests, tokens]
+    AdminPlan:
+      type: object
+      additionalProperties: false
+      required: [code, displayName, capabilities]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 64
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPlanCapability'
+    AdminSubscriptionUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [planCode, periodEnd]
+      properties:
+        planCode:
+          type: string
+          minLength: 1
+          maxLength: 64
+        periodEnd:
+          type: string
+          format: date-time
+    AdminSubscription:
+      type: object
+      additionalProperties: false
+      required: [username, planCode, planDisplayName, periodStart, periodEnd, entitlementVersion]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        planCode:
+          type: string
+        planDisplayName:
+          type: string
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        entitlementVersion:
+          type: integer
+          format: int64
+          minimum: 1
     AdminWebSearchUser:
       type: object
       additionalProperties: false
@@ -846,6 +1046,56 @@ components:
         unit:
           type: string
           enum: [tokens, requests]
+    WebUsageHistory:
+      type: object
+      additionalProperties: false
+      required: [version, periodStart, periodEnd, granularity, items]
+      properties:
+        version:
+          type: integer
+          const: 1
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        granularity:
+          type: string
+          enum: [day]
+        items:
+          type: array
+          maxItems: 366
+          items:
+            $ref: '#/components/schemas/WebUsageHistoryItem'
+    WebUsageHistoryItem:
+      type: object
+      additionalProperties: false
+      required: [date]
+      properties:
+        date:
+          type: string
+          format: date
+        chat:
+          type: integer
+          format: int64
+          minimum: 0
+        embedding:
+          type: integer
+          format: int64
+          minimum: 0
+        vision:
+          type: integer
+          format: int64
+          minimum: 0
+        web_search:
+          type: integer
+          format: int64
+          minimum: 0
+        rerank:
+          type: integer
+          format: int64
+          minimum: 0
     Username:
       type: string
       minLength: 3

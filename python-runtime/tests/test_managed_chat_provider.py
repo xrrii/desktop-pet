@@ -109,6 +109,116 @@ def test_managed_provider_refreshes_once_before_output() -> None:
     assert calls[0].headers["X-PetDock-Attempt-Id"] != calls[1].headers["X-PetDock-Attempt-Id"]
 
 
+def test_managed_provider_refreshes_after_entitlement_change_before_quota_error() -> None:
+    """管理员变更额度后，控制面返回 token_expired 时自动刷新并重试一次。"""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(401, json={"error": {"code": "token_expired", "retryable": True}})
+        return _sse(request.headers, [
+            {"type": "delta", "sequence": 1, "text": "额度已更新"},
+            {"type": "usage", "sequence": 2, "inputUnits": 1, "outputUnits": 1},
+            {"type": "completed", "sequence": 3, "finishReason": "stop"},
+        ])
+
+    async def scenario() -> tuple[ManagedAuthRefreshRequired, list[str]]:
+        coordinator = ManagedAuthRefreshCoordinator()
+        model = ManagedChatModel(
+            "https://ai.petdock.site",
+            "0.2.0",
+            "00000000-0000-4000-8000-000000000001",
+            _session(),
+            coordinator,
+            transport=httpx.MockTransport(handler),
+        )
+        model.set_request_context("00000000-0000-4000-8000-000000000002")
+        iterator = model.astream([])
+        event = await anext(iterator)
+        assert isinstance(event, ManagedAuthRefreshRequired)
+        assert await coordinator.submit(event.task_id, event.request_id, ManagedAuthResultValue("refreshed", None))
+        first = await anext(iterator)
+        rest = [chunk async for chunk in iterator]
+        await model.close()
+        return event, [first.content, *[chunk.content for chunk in rest]]
+
+    event, text = asyncio.run(scenario())
+    assert text == ["额度已更新"]
+    assert len(calls) == 2
+    assert calls[0].headers["X-PetDock-Request-Id"] == calls[1].headers["X-PetDock-Request-Id"]
+    assert calls[0].headers["X-PetDock-Attempt-Id"] != calls[1].headers["X-PetDock-Attempt-Id"]
+
+
+def test_managed_provider_refreshes_when_gateway_reports_device_revoked() -> None:
+    """网关返回 device_revoked 时先请求 Main 恢复，成功后重试原请求。"""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(401, json={"error": {"code": "device_revoked", "retryable": False}})
+        return _sse(request.headers, [
+            {"type": "delta", "sequence": 1, "text": "设备会话已恢复"},
+            {"type": "usage", "sequence": 2, "inputUnits": 1, "outputUnits": 1},
+            {"type": "completed", "sequence": 3, "finishReason": "stop"},
+        ])
+
+    async def scenario() -> list[str]:
+        coordinator = ManagedAuthRefreshCoordinator()
+        model = ManagedChatModel(
+            "https://ai.petdock.site",
+            "0.2.0",
+            "00000000-0000-4000-8000-000000000001",
+            _session(),
+            coordinator,
+            transport=httpx.MockTransport(handler),
+        )
+        model.set_request_context("00000000-0000-4000-8000-000000000002")
+        iterator = model.astream([])
+        event = await anext(iterator)
+        assert isinstance(event, ManagedAuthRefreshRequired)
+        assert await coordinator.submit(event.task_id, event.request_id, ManagedAuthResultValue("refreshed", None))
+        chunks = [chunk async for chunk in iterator]
+        await model.close()
+        return [chunk.content for chunk in chunks]
+
+    assert asyncio.run(scenario()) == ["设备会话已恢复"]
+    assert len(calls) == 2
+    assert calls[0].headers["X-PetDock-Request-Id"] == calls[1].headers["X-PetDock-Request-Id"]
+    assert calls[0].headers["X-PetDock-Attempt-Id"] != calls[1].headers["X-PetDock-Attempt-Id"]
+
+
+def test_managed_provider_does_not_refresh_for_real_quota_exhaustion() -> None:
+    """真实额度耗尽保持原错误，不因无效刷新反复创建 Runtime Session。"""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(429, json={"error": {"code": "quota_exhausted", "retryable": False}})
+
+    async def scenario() -> None:
+        model = ManagedChatModel(
+            "https://ai.petdock.site",
+            "0.2.0",
+            "00000000-0000-4000-8000-000000000001",
+            _session(),
+            ManagedAuthRefreshCoordinator(),
+            transport=httpx.MockTransport(handler),
+        )
+        model.set_request_context("00000000-0000-4000-8000-000000000002")
+        try:
+            [chunk async for chunk in model.astream([])]
+        except ManagedProviderError as error:
+            assert error.code == "quota_exhausted"
+        else:
+            raise AssertionError("真实额度耗尽不应被自动重试")
+        await model.close()
+
+    asyncio.run(scenario())
+    assert len(calls) == 1
+
+
 def test_managed_provider_rejects_sequence_and_maps_transport_error() -> None:
     """序号异常和网络异常都映射为稳定错误，不传播响应正文。"""
     def handler(request: httpx.Request) -> httpx.Response:

@@ -42,7 +42,7 @@ describe('ManagedAccountSessionManager', () => {
     expect(dependencies.controlPlane.registerDevice).not.toHaveBeenCalled()
   })
 
-  it('只有明确 device_not_found 才使用稳定 UUID 注册当前设备', async () => {
+  it('当前设备缺失或撤销时使用稳定 UUID 注册当前设备', async () => {
     const dependencies = createDependencies()
     dependencies.controlPlane.getCurrentDevice.mockRejectedValue(
       new ManagedControlPlaneError(404, 'device_not_found', false)
@@ -60,6 +60,25 @@ describe('ManagedAccountSessionManager', () => {
         platform: 'windows'
       }
     )
+  })
+
+  it('查询当前设备返回 device_revoked 时换新 UUID 注册并保持会话', async () => {
+    const dependencies = createDependencies()
+    dependencies.controlPlane.getCurrentDevice.mockRejectedValue(
+      new ManagedControlPlaneError(401, 'device_revoked', false)
+    )
+    dependencies.identity.getOrCreate
+      .mockResolvedValueOnce('a01715d2-42e3-4abe-a348-708dda38ab0d')
+      .mockResolvedValueOnce('b12726e3-53f4-4bff-b459-819eeb49bc1e')
+    dependencies.controlPlane.registerDevice
+      .mockRejectedValueOnce(new ManagedControlPlaneError(401, 'device_revoked', false))
+      .mockResolvedValueOnce({ ...devicePayload(), id: 'b12726e3-53f4-4bff-b459-819eeb49bc1e' })
+    const manager = createManager(dependencies)
+
+    await expect(manager.synchronize('synthetic-access-token')).resolves.toMatchObject({
+      device: { id: 'b12726e3-53f4-4bff-b459-819eeb49bc1e', status: 'active' }
+    })
+    expect(dependencies.identity.clear).toHaveBeenCalledWith('opaque-subject')
   })
 
   it('注册阶段 device_revoked 时清除旧映射并使用新 UUID 重试一次', async () => {

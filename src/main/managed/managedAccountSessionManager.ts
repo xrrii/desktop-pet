@@ -35,7 +35,9 @@ export class ManagedAccountSessionManager {
       device = await this.controlPlaneClient.getCurrentDevice(accessToken)
       await this.deviceIdentityManager.remember(userInfo.sub, device.id)
     } catch (error) {
-      if (!isDeviceNotFound(error)) {
+      // 当前绑定设备被撤销时，尝试清理旧本地标识并注册新设备；
+      // 若 OAuth 授权也已被服务端撤销，注册会继续失败并交由上层要求重新登录。
+      if (!isDeviceNotFound(error) && !isDeviceRevoked(error)) {
         throw error
       }
       device = await this.registerDeviceWithRecovery(accessToken, userInfo.sub)
@@ -129,4 +131,9 @@ function toManagedDeviceSnapshot(device: ManagedControlPlaneDevice): ManagedDevi
 /** 只有明确的 device_not_found 才允许触发首次注册。 */
 function isDeviceNotFound(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && (error as { code?: unknown }).code === 'device_not_found')
+}
+
+/** 识别服务端明确返回的设备撤销错误。 */
+function isDeviceRevoked(error: unknown): boolean {
+  return error instanceof ManagedControlPlaneError && error.code === 'device_revoked'
 }
