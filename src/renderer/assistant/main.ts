@@ -949,6 +949,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     managedUsageWebSearch.textContent = '-'
     managedUsageEmbedding.textContent = '-'
     managedUsageVision.textContent = '-'
+    managedUsageRerank.textContent = '-'
     managedUsageStatus.textContent = managedAuthStatus?.state === 'authenticated'
       ? ''
       : '登录后可查看额度。'

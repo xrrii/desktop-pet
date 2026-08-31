@@ -358,6 +358,8 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
             "/api/v1/web/admin/plans",
             "/api/v1/web/admin/subscriptions",
             "/api/v1/web/admin/credits",
+            "/api/v1/web/admin/users",
+            "/api/v1/web/admin/trial/quota",
         }
     security_scheme = document["components"]["securitySchemes"]["webSession"]
     assert security_scheme["type"] == "apiKey"
@@ -464,8 +466,8 @@ def test_web_trial_offer_is_limited_and_one_time() -> None:
     assert "终身只能领取一次" in claim_path["description"]
     assert "北京时间" in claim_path["description"]
     assert offer["properties"]["durationDays"]["const"] == 7
-    assert offer["properties"]["dailyLimit"]["const"] == 10
-    assert offer["properties"]["remainingToday"]["maximum"] == 10
+    assert offer["properties"]["dailyLimit"]["minimum"] == 10
+    assert offer["properties"]["remainingToday"]["maximum"] == 2_147_483_647
     assert set(offer["properties"]["status"]["enum"]) == {
         "available", "already_claimed", "active_subscription", "daily_exhausted", "unavailable"
     }
@@ -494,6 +496,27 @@ def test_web_trial_offer_is_limited_and_one_time() -> None:
         "trial_daily_limit_reached",
         "trial_unavailable",
     }
+
+
+def test_admin_user_management_is_paginated_and_trial_quota_only_increases() -> None:
+    """冻结管理员分页、账号删除不返还库存和今日试用正增量语义。"""
+    document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    users = document["paths"]["/api/v1/web/admin/capabilities/users"]["get"]
+    deletion = document["paths"]["/api/v1/web/admin/users"]["delete"]
+    quota = document["paths"]["/api/v1/web/admin/trial/quota"]
+
+    assert users["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/AdminCapabilityUserPage"
+    )
+    assert deletion["operationId"] == "deleteAdminUser"
+    assert "不返还" in deletion["description"]
+    assert quota["get"]["operationId"] == "getAdminTrialQuota"
+    assert quota["post"]["operationId"] == "increaseAdminTrialQuota"
+    amount = document["components"]["schemas"]["AdminTrialQuotaIncreaseRequest"]["properties"]["amount"]
+    assert amount["minimum"] == 1
+    catalog = _read_json(CONTRACT_ROOT / "error-codes" / "error-codes.json")
+    admin_required = next(item for item in catalog["errors"] if item["code"] == "admin_required")
+    assert admin_required["httpStatus"] == 403
 
 
 def test_p3_00_chat_scope_and_feature_flag_are_frozen() -> None:

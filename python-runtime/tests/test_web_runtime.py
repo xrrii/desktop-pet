@@ -11,6 +11,7 @@ from petdock_runtime.knowledge.store import KnowledgeStore
 from petdock_runtime.memory.store import MemoryStore
 from petdock_runtime.protocol import AssistantRequest, ToolResultRequest
 from petdock_runtime.agent.service import AssistantService
+from petdock_runtime.providers.chat import ManagedProviderError
 from petdock_runtime.rag.vector_store import ChromaVectorStore
 from petdock_runtime.skills.registry import SkillRegistry
 from petdock_runtime.skills.store import SkillStore
@@ -221,6 +222,89 @@ def test_managed_output_limit_is_continued_and_persisted_once(tmp_path: Path) ->
     assert asyncio.run(scenario()) == ["前半段", "后半段"]
     assert model.calls == 2
     assert memory.conversation_messages(request.conversationId)[-1]["content"] == "前半段后半段"
+    asyncio.run(knowledge.close())
+    memory.close()
+    skills.close()
+
+
+def test_managed_failure_preserves_sources_referenced_by_partial_answer(tmp_path: Path) -> None:
+    """Managed 在部分回答后失败时仍发送已引用网页来源，再发送稳定错误。"""
+    memory = MemoryStore(str(tmp_path / "memory.db"))
+    knowledge = KnowledgeService(
+        KnowledgeStore(str(tmp_path / "knowledge.db")),
+        ChromaVectorStore(str(tmp_path / "chroma"), LocalHashEmbedding()),
+    )
+    skills = SkillRegistry(
+        str(tmp_path / "skills" / "packages"),
+        SkillStore(str(tmp_path / "skills.db")),
+    )
+
+    class FailingManagedModel:
+        """先请求搜索，再模拟结算失败前已经流出带引用的部分回答。"""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def astream(self, messages):
+            del messages
+            self.calls += 1
+            if self.calls == 1:
+                yield SimpleNamespace(
+                    content="",
+                    tool_call_chunks=[{
+                        "index": 0,
+                        "id": "call-search-failure",
+                        "name": "search_web",
+                        "args": '{"query":"北流天气","maxResults":1}',
+                    }],
+                )
+                return
+            yield SimpleNamespace(content="北流今天有暴雨。[网页1]", tool_call_chunks=[])
+            raise ManagedProviderError("internal_error")
+
+    backend = LangChainBackend(FailingManagedModel(), memory, knowledge, skills)
+    request = AssistantRequest(
+        protocolVersion=1,
+        taskId="web-partial-failure",
+        conversationId="web-partial-failure-conversation",
+        input="广西北流今天天气怎么样",
+        source="assistant-window",
+        context={
+            "activePetId": "pet",
+            "locale": "zh-CN",
+            "timezone": "Asia/Shanghai",
+            "webSearchEnabled": True,
+            "webSearchProvider": "volcengine",
+        },
+    )
+
+    async def scenario() -> list[dict[str, object]]:
+        service = AssistantService(backend)
+        service.start(request)
+        events: list[dict[str, object]] = []
+        async for event in service.events(request.taskId):
+            events.append(event)
+            if event["type"] == "tool_call":
+                call = event["payload"]
+                assert service.submit_tool_result(ToolResultRequest(
+                    protocolVersion=1,
+                    taskId=request.taskId,
+                    toolCallId=call["id"],
+                    decision="approved",
+                    result={
+                        "type": "search_web",
+                        "results": [_source(1, "北流天气", "https://example.com/weather")],
+                    },
+                ))
+        return events
+
+    events = asyncio.run(scenario())
+    event_types = [event["type"] for event in events]
+    assert event_types[-4:] == ["message_delta", "web_sources", "error", "done"]
+    web_event = next(event for event in events if event["type"] == "web_sources")
+    assert web_event["payload"]["sources"][0]["citationIndex"] == 1
+    assert next(event for event in events if event["type"] == "error")["payload"]["code"] == "internal_error"
+
     asyncio.run(knowledge.close())
     memory.close()
     skills.close()

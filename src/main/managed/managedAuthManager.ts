@@ -172,10 +172,16 @@ export class ManagedAuthManager {
 
   /** 读取当前账号的真实 Chat 用量摘要，响应只保留公共额度字段。 */
   async getUsageSummary(): Promise<ManagedUsageSummary | null> {
-    if (this.capabilityPreferences && !this.capabilityPreferences.subscriptionActive) {
+    // 领取试用或管理员调整套餐发生在官网时，本地内存快照可能已经过期；
+    // 每次刷新额度先读取一次服务端权威快照，再决定是否可以访问用量接口。
+    if (this.status.state !== 'authenticated' || !this.accessToken) {
+      throw new ManagedControlPlaneError(401, 'authentication_required', false)
+    }
+    const capabilityPreferences = await this.refreshCapabilityPreferences()
+    if (!capabilityPreferences.subscriptionActive) {
       return null
     }
-    if (this.capabilityPreferences && !hasEffectiveManagedCapability(this.capabilityPreferences)) {
+    if (!hasEffectiveManagedCapability(capabilityPreferences)) {
       return null
     }
     let accessToken = await this.ensureAccessTokenForRuntime(false)
@@ -200,6 +206,18 @@ export class ManagedAuthManager {
         throw error
       }
     }
+  }
+
+  /** 拉取并应用服务端最新能力快照，确保官网领取套餐后桌面端可立即生效。 */
+  private async refreshCapabilityPreferences(): Promise<ManagedCapabilityPreferencesSnapshot> {
+    const snapshot = await this.getCapabilityPreferencesWithAccessTokenRetry()
+    const current = this.capabilityPreferences
+    if (!current || JSON.stringify(current) !== JSON.stringify(snapshot)) {
+      await this.applyCapabilityPreferences(snapshot)
+    } else {
+      this.applyEffectiveCapabilityStatus(snapshot)
+    }
+    return snapshot
   }
 
   /** 返回某项官方能力的服务端最终有效状态，未同步时安全地视为关闭。 */
@@ -765,6 +783,11 @@ export class ManagedAuthManager {
       ...this.status,
       account: null,
       device: null,
+      managedChatEnabled: false,
+      managedEmbeddingEnabled: false,
+      managedVisionEnabled: false,
+      managedWebSearchEnabled: false,
+      managedRerankEnabled: false,
       managedSubscriptionActive: null
     }
   }

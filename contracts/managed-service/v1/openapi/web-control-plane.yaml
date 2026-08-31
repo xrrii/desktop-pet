@@ -252,7 +252,7 @@ paths:
     post:
       tags: [Web Service]
       summary: 领取 7 天试用套餐
-      description: 每个账号终身只能领取一次；北京时间每个自然日全站最多成功发放 10 份，且不会替换生效中的套餐。
+      description: 每个账号终身只能领取一次；北京时间每个自然日默认最多成功发放 10 份，管理员可只增加当日上限，且不会替换生效中的套餐。
       operationId: claimWebTrialOffer
       security:
         - webSession: []
@@ -350,6 +350,8 @@ paths:
           schema:
             type: string
             maxLength: 100
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
           description: 指定能力的用户授权摘要
@@ -359,9 +361,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AdminCapabilityUser'
+                $ref: '#/components/schemas/AdminCapabilityUserPage'
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -493,6 +493,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminCapabilityUser'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+  /api/v1/web/admin/users:
+    delete:
+      tags: [Web Admin]
+      summary: 删除用户账号及关联数据
+      description: 仅管理员可访问；删除用户的授权、设备、会话、用量、订阅和试用领取事实，但不返还已占用的每日试用份数，且禁止删除配置管理员账号。
+      operationId: deleteAdminUser
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+        - name: username
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Username'
+      responses:
+        '204':
+          description: 用户及关联数据已删除
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+  /api/v1/web/admin/trial/quota:
+    get:
+      tags: [Web Admin]
+      summary: 查询今日试用发放份数
+      description: 仅管理员可访问；按 Asia/Shanghai 返回当天上限、已领取数和剩余数。
+      operationId: getAdminTrialQuota
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 今日试用发放状态
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTrialQuota'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+    post:
+      tags: [Web Admin]
+      summary: 增加今日试用发放份数
+      description: 仅管理员可访问；只增加 Asia/Shanghai 当天的总上限，不调整已领取数，也不影响后续日期。
+      operationId: increaseAdminTrialQuota
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminTrialQuotaIncreaseRequest'
+      responses:
+        '200':
+          description: 增加后的今日试用发放状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTrialQuota'
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -767,7 +845,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
     AdminRequired:
-      description: 仅管理员账号可访问
+      description: 仅管理员账号可访问；稳定返回 admin_required
       content:
         application/json:
           schema:
@@ -795,11 +873,12 @@ components:
           const: 7
         dailyLimit:
           type: integer
-          const: 10
+          minimum: 10
+          maximum: 2147483647
         remainingToday:
           type: integer
           minimum: 0
-          maximum: 10
+          maximum: 2147483647
         resetsAt:
           type: string
           format: date-time
@@ -965,6 +1044,59 @@ components:
           format: date-time
         planSupportsCapability:
           type: boolean
+    AdminCapabilityUserPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/AdminCapabilityUser'
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 50
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    AdminTrialQuotaIncreaseRequest:
+      type: object
+      additionalProperties: false
+      required: [amount]
+      properties:
+        amount:
+          type: integer
+          minimum: 1
+          maximum: 2147483637
+    AdminTrialQuota:
+      type: object
+      additionalProperties: false
+      required: [claimDate, dailyLimit, claimedCount, remainingToday, resetsAt]
+      properties:
+        claimDate:
+          type: string
+          format: date
+        dailyLimit:
+          type: integer
+          minimum: 10
+          maximum: 2147483647
+        claimedCount:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        remainingToday:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        resetsAt:
+          type: string
+          format: date-time
     AdminPlanCapability:
       type: object
       additionalProperties: false

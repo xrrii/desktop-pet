@@ -352,6 +352,11 @@ describe('ManagedAuthManager', () => {
       state: 'disabled',
       sessionSyncState: 'idle',
       managedServiceSelected: true,
+      managedChatEnabled: false,
+      managedEmbeddingEnabled: false,
+      managedVisionEnabled: false,
+      managedWebSearchEnabled: false,
+      managedRerankEnabled: false,
       account: null,
       device: null
     })
@@ -491,6 +496,48 @@ describe('ManagedAuthManager', () => {
     expect(runtimeBroker.clear).toHaveBeenCalledOnce()
     expect(onCapabilityPreferencesSync).toHaveBeenCalledWith(unavailableRequested)
     await expect(manager.getUsageSummary()).resolves.toBeNull()
+  })
+
+  it('刷新额度时重新读取服务端能力快照，使官网领取的试用立即生效', async () => {
+    const tokenStore = new FakeTokenStore()
+    tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }
+    const runtimeBroker = runtimeTokenBrokerDouble()
+    const beforeClaim = managedCapabilitySnapshot(false)
+    const afterClaim = managedCapabilitySnapshot(true)
+    const controlPlaneClient = {
+      getManagedCapabilityPreferences: vi.fn()
+        .mockResolvedValueOnce(beforeClaim)
+        .mockResolvedValueOnce(afterClaim),
+      getUsageSummary: vi.fn().mockResolvedValue({
+        billingMode: 'subscription',
+        periodStart: '2026-08-31T00:00:00Z',
+        periodEnd: '2026-09-07T00:00:00Z',
+        capabilities: {
+          chat: { quotaMode: 'quota', used: 0, remaining: 100_000, unit: 'tokens' }
+        }
+      })
+    } as never
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      tokenStore,
+      oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
+      accountSessionManager: managedSessionManagerDouble().value,
+      controlPlaneClient,
+      runtimeTokenBroker: runtimeBroker.value
+    })
+
+    await expect(manager.restoreSession()).resolves.toMatchObject({
+      state: 'authenticated',
+      managedSubscriptionActive: false
+    })
+    await expect(manager.getUsageSummary()).resolves.toMatchObject({
+      capabilities: { chat: { remaining: 100_000 } }
+    })
+    expect(controlPlaneClient.getManagedCapabilityPreferences).toHaveBeenCalledTimes(2)
+    expect(runtimeBroker.activate).toHaveBeenCalledOnce()
+    expect(manager.getStatus()).toMatchObject({
+      managedSubscriptionActive: true,
+      managedChatEnabled: true
+    })
   })
 
   it('登录准备和同步阶段始终保留本机官方服务标签选择', async () => {

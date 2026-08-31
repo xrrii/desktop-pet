@@ -5,6 +5,7 @@
     { "code": "password_policy_violation", "httpStatus": 400, "retryable": false, "message": "密码不符合安全策略。" },
     { "code": "current_password_invalid", "httpStatus": 400, "retryable": false, "message": "当前密码不正确。" },
     { "code": "authentication_required", "httpStatus": 401, "retryable": false, "message": "请先登录 PetDock 官方服务。" },
+    { "code": "admin_required", "httpStatus": 403, "retryable": false, "message": "仅管理员账号可执行此操作。" },
     { "code": "invalid_credentials", "httpStatus": 401, "retryable": false, "message": "用户名或密码错误。" },
     { "code": "token_expired", "httpStatus": 401, "retryable": true, "retryCondition": "before_output_once", "message": "登录凭据已过期。" },
     { "code": "device_revoked", "httpStatus": 401, "retryable": false, "message": "当前设备授权已撤销。" },

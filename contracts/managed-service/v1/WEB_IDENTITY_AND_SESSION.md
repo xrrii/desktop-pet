@@ -145,7 +145,7 @@ DELETE /api/v1/web/devices
 
 - `GET /api/v1/web/trial` 返回当前账号的终身一次领取资格、7 天试用套餐固定能力以及北京时间当日剩余名额；响应使用 `Cache-Control: no-store`。
 - `POST /api/v1/web/trial/claim` 必须使用已认证 Web Session 和当前 Session 的 CSRF Header。领取不会替换生效中的套餐。
-- 每个账号终身只能领取一次；全站按 `Asia/Shanghai` 自然日最多成功发放 10 份，数据库在单一事务内原子提交库存、领取事实、订阅和 Entitlement。
+- 每个账号终身只能领取一次；全站按 `Asia/Shanghai` 自然日默认最多成功发放 10 份，管理员可只增加当天总上限；数据库在单一事务内原子提交库存、领取事实、订阅和 Entitlement。
 - 试用包含 Chat 100,000 tokens、Embedding 50,000 tokens、Rerank 50,000 tokens、Vision 100,000 tokens 和 Web Search 5 requests，有效期从成功领取时刻起计算 7 天。
 
 ## 8. OAuth 浏览器交互与后续工作项
@@ -157,7 +157,7 @@ DELETE /api/v1/web/devices
 - OAuth 页面固定为 `/oauth/login`、`/oauth/register` 和 `/oauth/consent`。登录或注册成功后只能访问 `GET /oauth/resume`，由服务端 SavedRequest 恢复已校验的本机 `/oauth2/authorize`；不得接受任意 `returnTo` 或完整外部 URL。
 - Desktop 显式重新登录使用标准 `prompt=login`，账号主机清理当前 Host-only Session 后重新显示登录页；登录成功后 `/oauth/resume` 消费该一次性提示再恢复授权请求。官网 `petdock.site` 的普通退出不替代该账号切换流程，也不撤销 Desktop Token。
 - Consent 只确认固定 `PetDock Desktop` Client 和本次请求的已登记权限，不展示具体设备。当前官方权限整体同意或整体拒绝；首次授权或权限扩大时展示，相同用户、Client 和权限集合的重复授权可以复用持久化 Consent。
-- 密码找回、邮箱验证、MFA、账号删除、按量模式启用、充值、订单和支付回调仍不属于当前实现；Phase 3 只冻结真实 Usage Summary 契约，服务端与页面实现须在后续工作项完成。
+- 密码找回、邮箱验证、MFA、用户自助账号删除、按量模式启用、充值、订单和支付回调仍不属于当前实现；管理员删除测试或无效用户属于受控后台能力。
 - Desktop `P2-11` 在 P2-W01~W04 完成后实施，使用系统浏览器打开官网管理入口，不共享 Cookie 或桌面 Token。
 
 ## 9. 兼容与回滚

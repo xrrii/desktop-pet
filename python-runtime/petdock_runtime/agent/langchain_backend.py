@@ -208,20 +208,37 @@ class LangChainBackend(AssistantBackend):
             set_context = getattr(self._model, "set_request_context", None)
             if callable(set_context):
                 set_context(request.taskId)
-            async for chunk in self._model.astream(messages):
-                if isinstance(chunk, ManagedAuthRefreshRequired):
-                    yield chunk
-                    continue
-                text = _content_to_text(chunk.content)
-                if text:
-                    chunks.append(text)
-                    yield text
-                for fragment in getattr(chunk, "tool_call_chunks", []) or []:
-                    index = int(fragment.get("index", 0))
-                    current = tool_fragments.setdefault(index, {"id": "", "name": "", "args": ""})
-                    current["id"] += str(fragment.get("id") or "")
-                    current["name"] += str(fragment.get("name") or "")
-                    current["args"] += str(fragment.get("args") or "")
+            try:
+                async for chunk in self._model.astream(messages):
+                    if isinstance(chunk, ManagedAuthRefreshRequired):
+                        yield chunk
+                        continue
+                    text = _content_to_text(chunk.content)
+                    if text:
+                        chunks.append(text)
+                        yield text
+                    for fragment in getattr(chunk, "tool_call_chunks", []) or []:
+                        index = int(fragment.get("index", 0))
+                        current = tool_fragments.setdefault(index, {"id": "", "name": "", "args": ""})
+                        current["id"] += str(fragment.get("id") or "")
+                        current["name"] += str(fragment.get("name") or "")
+                        current["args"] += str(fragment.get("args") or "")
+            except Exception:
+                # Managed 可能在已经输出正文后因用量结算失败终止；此时仍要把正文实际引用的
+                # 来源交给 Renderer，避免用户只看到 [网页N] 而没有可核验的来源标签。
+                partial_content = "".join([*output_parts, *chunks])
+                partial_web_sources = _referenced_web_sources(
+                    partial_content, self._web_sources.get(request.taskId, {})
+                )
+                if partial_web_sources:
+                    LOGGER.info(
+                        "Agent 流失败前保留已引用网页来源 taskId=%s sourceCount=%d outputChars=%d",
+                        request.taskId,
+                        len(partial_web_sources),
+                        len(partial_content),
+                    )
+                    yield WebSourcesContext(partial_web_sources)
+                raise
 
             assistant_content = "".join(chunks)
             if not tool_fragments:
