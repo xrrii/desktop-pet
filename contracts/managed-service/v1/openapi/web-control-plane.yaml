@@ -416,9 +416,9 @@ paths:
   /api/v1/web/admin/credits:
     put:
       tags: [Web Admin]
-      summary: 给用户增加能力额度
-      description: 仅管理员可访问；在当前剩余额度上增加指定数量，并递增用户全部授权版本。
-      operationId: addAdminCredits
+      summary: 调整用户能力额度
+      description: 仅管理员可访问；在当前剩余额度上增加或减少指定数量，正数增加、负数减少，并递增用户全部授权版本。
+      operationId: adjustAdminCredits
       security:
         - webSession: []
       parameters:
@@ -437,7 +437,7 @@ paths:
               $ref: '#/components/schemas/AdminCreditRequest'
       responses:
         '200':
-          description: 增额后的用户能力授权
+          description: 调整后的用户能力授权
           content:
             application/json:
               schema:
@@ -778,8 +778,11 @@ components:
         amount:
           type: integer
           format: int64
-          minimum: 1
+          description: 非零额度增量；正数增加，负数减少。
+          minimum: -2000000000
           maximum: 2000000000
+          not:
+            const: 0
     AdminCapabilityUpdateRequest:
       type: object
       additionalProperties: false

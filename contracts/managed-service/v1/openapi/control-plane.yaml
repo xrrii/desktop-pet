@@ -98,7 +98,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/EntitlementSnapshot'
         '401': { $ref: '#/components/responses/ErrorResponse' }
-  /api/v1/runtime-sessions:
   /api/v1/account/capabilities:
     get:
       operationId: getManagedCapabilityPreferences
@@ -323,7 +322,6 @@ components:
         - $ref: '#/components/schemas/InactiveEntitlementSnapshot'
         - $ref: '#/components/schemas/SubscriptionEntitlementSnapshot'
         - $ref: '#/components/schemas/PayAsYouGoEntitlementSnapshot'
-    FeatureFlagSnapshot:
     ManagedCapabilityPreferenceUpdateRequest:
       type: object
       additionalProperties: false

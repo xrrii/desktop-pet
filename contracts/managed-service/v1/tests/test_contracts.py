@@ -438,6 +438,18 @@ def test_p2_w03_device_and_billing_modes_are_frozen() -> None:
     assert "当前免费 Beta 只产生套餐模式快照" in register
 
 
+def test_admin_credit_adjustment_supports_increase_and_decrease() -> None:
+    """冻结管理员额度调整的正负增量范围，并禁止无意义的零增量。"""
+    web = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    operation = web["paths"]["/api/v1/web/admin/credits"]["put"]
+    amount = web["components"]["schemas"]["AdminCreditRequest"]["properties"]["amount"]
+
+    assert operation["operationId"] == "adjustAdminCredits"
+    assert amount["minimum"] == -2_000_000_000
+    assert amount["maximum"] == 2_000_000_000
+    assert amount["not"] == {"const": 0}
+
+
 def test_p3_00_chat_scope_and_feature_flag_are_frozen() -> None:
     """冻结 Phase 3 可公开操作、唯一逻辑模型和兼容 Feature Flag。"""
     ai = _read_yaml(OPENAPI_ROOT / "ai-data-plane.yaml")
