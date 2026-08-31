@@ -64,7 +64,7 @@ class RuntimeConfig:
         model = os.environ.get("PETDOCK_LLM_MODEL", "gpt-4o-mini").strip()
         base_url = os.environ.get("PETDOCK_LLM_BASE_URL", "").strip() or None
         managed_ai_base_url = os.environ.get("PETDOCK_AI_BASE_URL", "https://ai.petdock.site").strip().rstrip("/")
-        managed_client_version = os.environ.get("PETDOCK_CLIENT_VERSION", "0.2.0").strip()
+        managed_client_version = os.environ.get("PETDOCK_CLIENT_VERSION", "0.2.1").strip()
         managed_device_id = os.environ.get("PETDOCK_MANAGED_DEVICE_ID", "").strip() or str(uuid4())
         if not managed_ai_base_url.startswith(("http://", "https://")):
             raise ValueError("PETDOCK_AI_BASE_URL 必须是 HTTP(S) 地址。")

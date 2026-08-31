@@ -81,7 +81,7 @@ export class ManagedAuthManager {
 
   constructor(
     private readonly policy: ManagedEndpointPolicy = resolveManagedEndpointPolicy(),
-    private readonly clientVersion = '0.2.0',
+    private readonly clientVersion = '0.2.1',
     dependencies: {
       featureFlags?: ManagedFeatureFlags
       controlPlaneClient?: ManagedControlPlaneClient
