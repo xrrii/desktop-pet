@@ -1,5 +1,5 @@
 import './styles.css'
-import { initializeAssistant, traceAssistantLayout } from './assistant/main'
+import { initializeAssistant } from './assistant/main'
 import { PetAnimator, loadImage } from './pet/animation'
 import { attachDragController } from './pet/drag'
 import { loadPetManifest, loadPetSpritesheetUrl, type PetStateName } from './pet/petManifest'
@@ -52,7 +52,6 @@ async function bootstrap(): Promise<void> {
       onStateChange: (state) => animator?.setState(state),
       onClick: () => play('waving'),
       onDoubleClick: () => {
-        traceAssistantLayout('double-click', null)
         void window.desktopPet.openAssistant()
       },
       onContextMenu: () => {

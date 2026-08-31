@@ -19,7 +19,6 @@ import type {
   AssistantArtifactSaveResult,
   AssistantEmbeddingOnlineInput,
   AssistantModelSettingsInput,
-  AssistantLayoutTrace,
   AssistantWebSettingsInput,
   AssistantVisionSettingsInput,
   AssistantServiceMode,
@@ -237,18 +236,6 @@ function registerIpc(): void {
     if (Number.isInteger(revision)) {
       acknowledgePetWindowLayout(window, revision)
     }
-  })
-
-  ipcMain.on('assistant:layout-trace', (event: IpcMainEvent, trace: AssistantLayoutTrace) => {
-    const window = requirePetSender(event)
-    if (!isAssistantLayoutTrace(trace)) {
-      return
-    }
-    logInfo('assistant layout trace', {
-      ...trace,
-      windowBounds: window.getBounds(),
-      petPosition: getPetWindowPosition(window)
-    })
   })
 
   ipcMain.handle('pet:move-window', (event, x: number, y: number) => {
@@ -1239,24 +1226,6 @@ function requireEmbeddingModelId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-z0-9.-]{1,128}$/.test(value)) {
     throw new TypeError('Embedding model id is invalid.')
   }
-}
-
-function isAssistantLayoutTrace(value: unknown): value is AssistantLayoutTrace {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-  const trace = value as Partial<AssistantLayoutTrace>
-  const phases = new Set(['double-click', 'layout-applied', 'frame-1', 'frame-2'])
-  return (
-    typeof trace.phase === 'string' &&
-    phases.has(trace.phase) &&
-    (trace.revision === null || Number.isInteger(trace.revision)) &&
-    !!trace.viewport &&
-    Number.isFinite(trace.viewport.width) &&
-    Number.isFinite(trace.viewport.height) &&
-    !!trace.pet &&
-    [trace.pet.x, trace.pet.y, trace.pet.width, trace.pet.height].every(Number.isFinite)
-  )
 }
 
 function ensureSelectedPetIsAvailable(): void {

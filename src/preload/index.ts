@@ -20,7 +20,6 @@ import type {
   AssistantEmbeddingOnlineInput,
   AssistantEmbeddingSelectedSource,
   AssistantEmbeddingSnapshot,
-  AssistantLayoutTrace,
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
   AssistantMemorySnapshot,
@@ -249,8 +248,6 @@ const api = {
   closeAssistant: (): Promise<void> => ipcRenderer.invoke('assistant:close'),
   acknowledgeAssistantLayout: (revision: number): void =>
     ipcRenderer.send('assistant:layout-applied', revision),
-  traceAssistantLayout: (trace: AssistantLayoutTrace): void =>
-    ipcRenderer.send('assistant:layout-trace', trace),
   showContextMenu: (): Promise<void> => ipcRenderer.invoke('pet:show-context-menu'),
   quit: (): Promise<void> => ipcRenderer.invoke('app:quit'),
   onSetAction: (callback: (action: PetAction) => void): (() => void) => {

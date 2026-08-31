@@ -214,8 +214,6 @@ export class ManagedAuthManager {
     const current = this.capabilityPreferences
     if (!current || JSON.stringify(current) !== JSON.stringify(snapshot)) {
       await this.applyCapabilityPreferences(snapshot)
-    } else {
-      this.applyEffectiveCapabilityStatus(snapshot)
     }
     return snapshot
   }

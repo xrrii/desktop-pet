@@ -10,7 +10,6 @@ import type {
   AssistantEvent,
   AssistantKnowledgeLibrary,
   AssistantKnowledgeSnapshot,
-  AssistantLayoutTracePhase,
   AssistantMemorySnapshot,
   AssistantModelSettingsSnapshot,
   AssistantRuntimeStatus,
@@ -4183,8 +4182,6 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     document.documentElement.style.setProperty('--assistant-y', `${layout.panel.y}px`)
     document.documentElement.style.setProperty('--assistant-width', `${layout.panel.width}px`)
     document.documentElement.style.setProperty('--assistant-height', `${layout.panel.height}px`)
-    traceAssistantLayout('layout-applied', layout.revision)
-
     if (!layout.expanded) {
       if (memoryMode) {
         closeMemoryView()
@@ -4211,14 +4208,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     panel.hidden = false
     composer.classList.remove('is-closing')
     requestAnimationFrame(() => {
-      traceAssistantLayout('frame-1', layout.revision)
       composer.classList.add('is-open')
       input.focus()
       requestAnimationFrame(() => {
         if (latestLayoutRevision !== layout.revision || !layout.expanded) {
           return
         }
-        traceAssistantLayout('frame-2', layout.revision)
         window.desktopPet.acknowledgeAssistantLayout(layout.revision)
       })
     })
@@ -4284,22 +4279,6 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     errorBanner.hidden = true
     errorBanner.textContent = ''
   }
-}
-
-export function traceAssistantLayout(
-  phase: AssistantLayoutTracePhase,
-  revision: number | null
-): void {
-  const pet = document.querySelector('#pet-root')?.getBoundingClientRect()
-  if (!pet) {
-    return
-  }
-  window.desktopPet.traceAssistantLayout({
-    phase,
-    revision,
-    viewport: { width: window.innerWidth, height: window.innerHeight },
-    pet: { x: pet.x, y: pet.y, width: pet.width, height: pet.height }
-  })
 }
 
 function requireElement<T extends Element>(selector: string): T {

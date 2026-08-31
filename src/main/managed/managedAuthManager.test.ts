@@ -470,6 +470,7 @@ describe('ManagedAuthManager', () => {
     tokenStore.loadResult = { status: 'available', refreshToken: 'old-refresh-token' }
     const runtimeBroker = runtimeTokenBrokerDouble()
     const onCapabilityPreferencesSync = vi.fn().mockResolvedValue(undefined)
+    const statuses: ManagedAuthStatus[] = []
     const unavailableRequested = managedCapabilitySnapshot(false)
     const manager = new ManagedAuthManager(policy, '0.2.0', {
       tokenStore,
@@ -478,6 +479,7 @@ describe('ManagedAuthManager', () => {
       controlPlaneClient: managedControlPlaneClientDouble(unavailableRequested),
       runtimeTokenBroker: runtimeBroker.value,
       onCapabilityPreferencesSync,
+      onStatusChange: (status) => statuses.push(status),
       isManagedServiceSelected: () => true
     })
 
@@ -495,7 +497,9 @@ describe('ManagedAuthManager', () => {
     expect(runtimeBroker.activate).not.toHaveBeenCalled()
     expect(runtimeBroker.clear).toHaveBeenCalledOnce()
     expect(onCapabilityPreferencesSync).toHaveBeenCalledWith(unavailableRequested)
+    const statusCountBeforeUsageRefresh = statuses.length
     await expect(manager.getUsageSummary()).resolves.toBeNull()
+    expect(statuses).toHaveLength(statusCountBeforeUsageRefresh)
   })
 
   it('刷新额度时重新读取服务端能力快照，使官网领取的试用立即生效', async () => {
