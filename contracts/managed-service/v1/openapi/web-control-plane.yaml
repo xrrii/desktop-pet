@@ -226,6 +226,57 @@ paths:
                 $ref: './control-plane.yaml#/components/schemas/EntitlementSnapshot'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+  /api/v1/web/trial:
+    get:
+      tags: [Web Service]
+      summary: 查询当前账号的试用套餐资格
+      description: 返回 7 天试用套餐、账号终身一次领取资格以及北京时间当日剩余名额。
+      operationId: getWebTrialOffer
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: 当前账号可见的试用套餐状态
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebTrialOffer'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+  /api/v1/web/trial/claim:
+    post:
+      tags: [Web Service]
+      summary: 领取 7 天试用套餐
+      description: 每个账号终身只能领取一次；北京时间每个自然日全站最多成功发放 10 份，且不会替换生效中的套餐。
+      operationId: claimWebTrialOffer
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '201':
+          description: 试用套餐领取成功
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebTrialClaim'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/CsrfInvalid'
+        '409':
+          $ref: '#/components/responses/TrialClaimConflict'
+        '503':
+          $ref: '#/components/responses/TrialUnavailable'
   /api/v1/web/usage/summary:
     get:
       tags: [Web Usage]
@@ -703,6 +754,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
+    TrialClaimConflict:
+      description: 账号已经领取过、已有生效套餐或北京时间当日名额已领完
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    TrialUnavailable:
+      description: 试用套餐配置暂时不可用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
     AdminRequired:
       description: 仅管理员账号可访问
       content:
@@ -710,6 +773,82 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    WebTrialOffer:
+      type: object
+      additionalProperties: false
+      required: [version, status, planCode, displayName, durationDays, dailyLimit, remainingToday, resetsAt, capabilities]
+      properties:
+        version:
+          type: integer
+          const: 1
+        status:
+          type: string
+          enum: [available, already_claimed, active_subscription, daily_exhausted, unavailable]
+        planCode:
+          type: string
+          const: trial
+        displayName:
+          type: string
+          const: 7 天试用套餐
+        durationDays:
+          type: integer
+          const: 7
+        dailyLimit:
+          type: integer
+          const: 10
+        remainingToday:
+          type: integer
+          minimum: 0
+          maximum: 10
+        resetsAt:
+          type: string
+          format: date-time
+          description: 北京时间下一个自然日零点对应的绝对时间。
+        capabilities:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/WebTrialCapability'
+    WebTrialCapability:
+      type: object
+      additionalProperties: false
+      required: [capability, limit, unit]
+      properties:
+        capability:
+          type: string
+          enum: [chat, embedding, rerank, vision, web_search]
+        limit:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 2000000000
+        unit:
+          type: string
+          enum: [tokens, requests]
+    WebTrialClaim:
+      type: object
+      additionalProperties: false
+      required: [version, planCode, displayName, periodStart, periodEnd, entitlementVersion]
+      properties:
+        version:
+          type: integer
+          const: 1
+        planCode:
+          type: string
+          const: trial
+        displayName:
+          type: string
+          const: 7 天试用套餐
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        entitlementVersion:
+          type: integer
+          format: int64
+          minimum: 1
     WebSessionSnapshot:
       type: object
       additionalProperties: false

@@ -347,6 +347,8 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
         "/api/v1/web/profile",
         "/api/v1/web/account/password",
             "/api/v1/web/entitlements",
+            "/api/v1/web/trial",
+            "/api/v1/web/trial/claim",
             "/api/v1/web/usage/summary",
             "/api/v1/web/usage/history",
             "/api/v1/web/devices",
@@ -448,6 +450,50 @@ def test_admin_credit_adjustment_supports_increase_and_decrease() -> None:
     assert amount["minimum"] == -2_000_000_000
     assert amount["maximum"] == 2_000_000_000
     assert amount["not"] == {"const": 0}
+
+
+def test_web_trial_offer_is_limited_and_one_time() -> None:
+    """冻结 7 天试用的额度、北京时间每日库存和一次性领取边界。"""
+    document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    offer_path = document["paths"]["/api/v1/web/trial"]["get"]
+    claim_path = document["paths"]["/api/v1/web/trial/claim"]["post"]
+    offer = document["components"]["schemas"]["WebTrialOffer"]
+
+    assert offer_path["operationId"] == "getWebTrialOffer"
+    assert claim_path["operationId"] == "claimWebTrialOffer"
+    assert "终身只能领取一次" in claim_path["description"]
+    assert "北京时间" in claim_path["description"]
+    assert offer["properties"]["durationDays"]["const"] == 7
+    assert offer["properties"]["dailyLimit"]["const"] == 10
+    assert offer["properties"]["remainingToday"]["maximum"] == 10
+    assert set(offer["properties"]["status"]["enum"]) == {
+        "available", "already_claimed", "active_subscription", "daily_exhausted", "unavailable"
+    }
+    capability = document["components"]["schemas"]["WebTrialCapability"]
+    assert set(capability["properties"]["capability"]["enum"]) == {
+        "chat", "embedding", "rerank", "vision", "web_search"
+    }
+
+    register = (CONTRACT_ROOT / "DECISION_REGISTER.md").read_text(encoding="utf-8")
+    for configured in (
+        "Chat 100,000 tokens",
+        "Embedding 50,000 tokens",
+        "Rerank 50,000 tokens",
+        "Vision 100,000 tokens",
+        "Web Search 5 requests",
+    ):
+        assert configured in register
+
+    catalog = _read_json(CONTRACT_ROOT / "error-codes" / "error-codes.json")
+    trial_codes = {
+        item["code"] for item in catalog["errors"] if item["code"].startswith("trial_")
+    }
+    assert trial_codes == {
+        "trial_already_claimed",
+        "trial_active_subscription",
+        "trial_daily_limit_reached",
+        "trial_unavailable",
+    }
 
 
 def test_p3_00_chat_scope_and_feature_flag_are_frozen() -> None:

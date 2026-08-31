@@ -37,6 +37,8 @@
 - `DELETE /api/v1/web/devices`
 - `PUT /api/v1/web/admin/capabilities/users`
 - `PUT /api/v1/web/admin/subscriptions`
+- `GET /api/v1/web/trial`
+- `POST /api/v1/web/trial/claim`
 - `PUT /api/v1/web/admin/credits`（正数增加额度，负数减少额度）
 
 缺失、格式不合法、过期或不匹配统一返回 `csrf_invalid`。服务端不得接受查询参数、JSON 字段或自定义 Cookie 中的 CSRF 值代替 Header。CORS 只允许必要的 `GET`、`POST`、`PATCH`、`PUT`、`DELETE` 方法和 `Content-Type`、`X-PetDock-Request-Id`、`X-PetDock-CSRF` 请求头，并固定 `Access-Control-Allow-Credentials: true`。
@@ -138,6 +140,13 @@ DELETE /api/v1/web/devices
 - 响应只包含版本、当前周期起止时间以及 Chat 的已用、剩余和 `tokens` 单位，不返回 Provider、内部模型、价格、成本、请求明细或用户正文。
 - 摘要只读取 PostgreSQL 已提交的 Usage 事实。没有有效 Beta Entitlement 时返回 `capability_not_entitled`，事实源不可用时返回稳定服务错误，不以全零数据伪装成功。
 - Web 仍不得调用 FastAPI 数据面、内部配额接口或桌面 Bearer API，也不得持有 Runtime Token。
+
+### 7.5 官网试用套餐
+
+- `GET /api/v1/web/trial` 返回当前账号的终身一次领取资格、7 天试用套餐固定能力以及北京时间当日剩余名额；响应使用 `Cache-Control: no-store`。
+- `POST /api/v1/web/trial/claim` 必须使用已认证 Web Session 和当前 Session 的 CSRF Header。领取不会替换生效中的套餐。
+- 每个账号终身只能领取一次；全站按 `Asia/Shanghai` 自然日最多成功发放 10 份，数据库在单一事务内原子提交库存、领取事实、订阅和 Entitlement。
+- 试用包含 Chat 100,000 tokens、Embedding 50,000 tokens、Rerank 50,000 tokens、Vision 100,000 tokens 和 Web Search 5 requests，有效期从成功领取时刻起计算 7 天。
 
 ## 8. OAuth 浏览器交互与后续工作项
 
