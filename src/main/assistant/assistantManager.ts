@@ -223,11 +223,15 @@ export class AssistantManager {
   }
 
   async configureWebSettings(input: AssistantWebSettingsInput): Promise<AssistantWebSettingsSnapshot> {
+    // 官方来源独立于 BYOK 配置；删除或修改本地搜索密钥时不能覆盖 Managed 选择。
+    const selectedSource = this.capabilitySettings.snapshot().capabilities.web_search.selectedSource
     const snapshot = await this.webSettings.configure(input)
-    this.capabilitySettings.setSelectedSource(
-      'web_search',
-      snapshot.enabled && snapshot.configured ? 'byok' : 'disabled'
-    )
+    if (selectedSource !== 'managed') {
+      this.capabilitySettings.setSelectedSource(
+        'web_search',
+        snapshot.enabled && snapshot.configured ? 'byok' : 'disabled'
+      )
+    }
     return snapshot
   }
 
@@ -541,6 +545,15 @@ export class AssistantManager {
     const taskId = randomUUID()
     const skillId = input.skillId === undefined ? undefined : validateSkillId(input.skillId)
     const webSnapshot = this.webSettings.snapshot()
+    const webCapability = this.capabilitySettings.snapshot().capabilities.web_search
+    const webSearchEnabled = webCapability.status === 'available'
+    logInfo('assistant web search request capability', {
+      selectedSource: webCapability.selectedSource,
+      effectiveSource: webCapability.effectiveSource,
+      status: webCapability.status,
+      localByokConfigured: webSnapshot.configured,
+      enabled: webSearchEnabled
+    })
     const request: AssistantRequest = {
       protocolVersion: ASSISTANT_PROTOCOL_VERSION,
       taskId,
@@ -551,8 +564,10 @@ export class AssistantManager {
         activePetId: loadSettings().petId,
         locale: app.getLocale() || 'zh-CN',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-        webSearchEnabled: webSnapshot.enabled,
-        webSearchProvider: webSnapshot.enabled ? webSnapshot.provider : null
+        webSearchEnabled,
+        webSearchProvider: webSearchEnabled && webCapability.effectiveSource === 'byok'
+          ? webSnapshot.provider
+          : null
       },
       knowledgeLibraryIds,
       attachmentIds,

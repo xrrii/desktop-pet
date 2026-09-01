@@ -213,7 +213,12 @@ export class WebSearchService {
 
   async fetch(taskId: string, value: string): Promise<WebFetchToolResult> {
     const state = this.requireTask(taskId)
-    const { provider } = this.requireConfiguredProvider()
+    // Managed 搜索的网页正文由 Main 按统一网络策略抓取，不应依赖本地 BYOK Key。
+    const managedSelected = this.managed?.selected() === true
+    if (managedSelected && !this.managed?.enabled()) {
+      throw new Error('managed_web_search_disabled')
+    }
+    const provider = managedSelected ? null : this.requireConfiguredProvider().provider
     if (state.fetches >= FETCH_LIMIT_PER_TASK) {
       throw new Error('web_fetch_limit_reached')
     }
@@ -223,11 +228,8 @@ export class WebSearchService {
       throw new Error('web_url_not_authorized')
     }
     state.fetches += 1
-    const page = await this.withController(
-      state,
-      (signal) => provider.fetch
-        ? provider.fetch(canonicalUrl, signal)
-        : fetchWebPage(canonicalUrl, signal)
+    const page = await this.withController(state, (signal) =>
+      provider?.fetch ? provider.fetch(canonicalUrl, signal) : fetchWebPage(canonicalUrl, signal)
     )
     const finalUrl = canonicalizeWebUrl(page.finalUrl)
     source ??= createSource(

@@ -125,6 +125,28 @@ describe('WebSearchService', () => {
     expect(called).toBe(false)
   })
 
+  it('Managed 来源关闭时返回 Managed 错误，不读取 BYOK 搜索密钥', async () => {
+    const service = new WebSearchService({
+      snapshot: (): AssistantWebSettingsSnapshot => ({
+        enabled: false,
+        provider: 'volcengine',
+        configured: false,
+        configuredProviders: []
+      }),
+      apiKey: () => null
+    })
+    service.setManagedAccess({
+      selected: () => true,
+      enabled: () => false,
+      getToken: async () => ({ accessToken: 'runtime-token', deviceId: 'device-id' }),
+      endpoint: () => new URL('https://ai.example.test'),
+      clientVersion: () => '0.2.1'
+    })
+    service.beginTask('managed-fetch-task', '测试')
+    await expect(service.fetch('managed-fetch-task', 'https://example.com/page'))
+      .rejects.toThrow('managed_web_search_disabled')
+  })
+
   it('允许本地可控 Provider 提供正文并保持来源归属校验', async () => {
     const provider: WebSearchProvider = {
       search: async () => [{
