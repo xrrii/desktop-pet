@@ -594,7 +594,8 @@ function registerIpc(): void {
       const previousMode = assistantManager.getServiceModeSelection()
       const current = requireManagedCapabilityPreferences()
       const preferences: ManagedCapabilityStateMap = mode === 'byok'
-        ? disabledManagedCapabilityPreferences()
+        // 自有配置只接管 Chat 与联网搜索；其他官方能力开关属于独立偏好，必须保留。
+        ? { ...current, chat: false, web_search: false }
         : { ...current, chat: true, web_search: true }
       assistantManager.setServiceModeSelection(mode)
       try {
@@ -1046,17 +1047,6 @@ function requireManagedCapabilityPreferences(): ManagedCapabilityStateMap {
     throw new ManagedControlPlaneError(null, 'internal_error', false)
   }
   return { ...snapshot.preferences }
-}
-
-/** 创建全部关闭的官方能力偏好，切换 BYOK 模式时一次性写回服务器。 */
-function disabledManagedCapabilityPreferences(): ManagedCapabilityStateMap {
-  return {
-    chat: false,
-    embedding: false,
-    vision: false,
-    web_search: false,
-    rerank: false
-  }
 }
 
 function requirePetSender(event: IpcMainInvokeEvent | IpcMainEvent): BrowserWindow {

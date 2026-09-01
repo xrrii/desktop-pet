@@ -183,13 +183,13 @@ class LangChainBackend(AssistantBackend):
             not active_before_retrieval
             or "knowledge.read" in active_before_retrieval.activation.metadata.permissions
         )
-        sources = await retrieve_sources(
+        sources, degraded_to_hash, degraded_reason = await retrieve_sources(
             self._knowledge if skill_allows_knowledge else None,
             request,
             tool_result,
         )
-        if sources:
-            yield RetrievalContext(sources)
+        if sources or degraded_to_hash:
+            yield RetrievalContext(sources, degraded_to_hash, degraded_reason)
 
         messages: list[BaseMessage] = [
             SystemMessage(content=self._system_prompt(request, sources, attachment_dataset)),

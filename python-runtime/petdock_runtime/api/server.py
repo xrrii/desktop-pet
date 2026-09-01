@@ -94,6 +94,8 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
             request.expiresAt,
             request.capabilitySnapshotVersion,
         )
+        # 新的官方会话可能对应已恢复的额度，允许 Embedding 重新探测并触发必要的索引更新。
+        knowledge.reset_embedding_degradation()
         return Response(status_code=204)
 
     @app.delete("/v1/managed/session", status_code=204)

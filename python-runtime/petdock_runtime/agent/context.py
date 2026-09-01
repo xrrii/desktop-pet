@@ -37,7 +37,7 @@ async def retrieve_sources(
     knowledge: KnowledgeService | None,
     request: AssistantRequest,
     tool_result: ToolResultRequest | None,
-) -> list[RetrievalSource]:
+) -> tuple[list[RetrievalSource], bool, str | None]:
     """统一执行检索路由，只把最终准入来源交给聊天后端。"""
     plan = plan_retrieval(
         request.input,
@@ -52,9 +52,9 @@ async def retrieve_sources(
         len(plan.library_ids),
     )
     if knowledge is None or plan.route not in {"RETRIEVE", "BOTH"}:
-        return []
+        return [], False, None
     result = await knowledge.search_with_trace(plan.retrieval_query, list(plan.library_ids))
-    return result.sources
+    return result.sources, result.trace.degraded_to_hash, result.trace.degraded_reason
 
 
 def bind_attachments(

@@ -27,6 +27,8 @@ class RetrievalContext:
     """把检索来源作为独立事件交给 Service，避免 UI 从模型文本猜引用。"""
 
     sources: list[RetrievalSource]
+    degraded_to_hash: bool = False
+    degraded_reason: str | None = None
 
 
 @dataclass(frozen=True)

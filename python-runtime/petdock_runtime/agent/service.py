@@ -150,7 +150,11 @@ class AssistantService:
                     if isinstance(output, RetrievalContext):
                         await emit(
                             "retrieval_sources",
-                            {"sources": [source.public() for source in output.sources]},
+                            {
+                                "sources": [source.public() for source in output.sources],
+                                "degradedToHash": output.degraded_to_hash,
+                                "degradedReason": output.degraded_reason,
+                            },
                         )
                         continue
                     if isinstance(output, AttachmentContext):

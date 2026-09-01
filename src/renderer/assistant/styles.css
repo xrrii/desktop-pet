@@ -1212,6 +1212,15 @@ button:disabled {
   font-weight: 700;
 }
 
+.knowledge-degradation-notice {
+  margin: 0;
+  padding: 7px 9px;
+  border-top: 1px solid #e0e4e9;
+  color: #9a641b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .retrieval-source {
   display: grid;
   gap: 2px;
@@ -1349,6 +1358,11 @@ body[data-theme="glass"] .memory-empty,
 body[data-theme="glass"] .retrieval-source span,
 body[data-theme="glass"] .retrieval-source p {
   color: #aeb5ba;
+}
+
+body[data-theme="glass"] .knowledge-degradation-notice {
+  border-top-color: rgb(255 255 255 / 0.14);
+  color: #ffd275;
 }
 
 body[data-theme="glass"] .memory-clear {

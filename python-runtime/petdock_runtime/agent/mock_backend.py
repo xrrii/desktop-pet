@@ -149,7 +149,7 @@ class MockBackend(AssistantBackend):
                 skill_allows_knowledge = (
                     not skill_run or "knowledge.read" in skill_run.activation.metadata.permissions
                 )
-                sources = await retrieve_sources(
+                sources, degraded_to_hash, degraded_reason = await retrieve_sources(
                     self._knowledge if skill_allows_knowledge else None,
                     request,
                     tool_result,
@@ -166,8 +166,8 @@ class MockBackend(AssistantBackend):
                         response = "离线模式未从会话附件中找到与当前问题相关的片段。"
                     if request.input:
                         response += f"\n\n你的问题是：{request.input}"
-                elif sources:
-                    yield RetrievalContext(sources)
+                elif sources or degraded_to_hash:
+                    yield RetrievalContext(sources, degraded_to_hash, degraded_reason)
                     excerpts = "\n\n".join(
                         f"[{index}] {source.title}：{source.content[:360]}"
                         for index, source in enumerate(sources, start=1)

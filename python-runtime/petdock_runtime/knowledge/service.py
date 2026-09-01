@@ -97,6 +97,7 @@ class RetrievalTrace:
     rejection_counts: dict[str, int]
     rerank_source: str = "disabled"
     rerank_fallback_reason: str | None = None
+    degraded_reason: str | None = None
 
     def log_fields(self) -> dict[str, Any]:
         """转换为结构化日志字段。"""
@@ -114,6 +115,7 @@ class RetrievalTrace:
             "rejectionCounts": self.rejection_counts,
             "rerankSource": self.rerank_source,
             "rerankFallbackReason": self.rerank_fallback_reason,
+            "degradedReason": self.degraded_reason,
         }
 
 
@@ -166,6 +168,30 @@ class KnowledgeService:
         self.rerank = rerank
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._controls: dict[str, _IndexControl] = {}
+        self._degraded_libraries: set[str] = set()
+        self._degraded_lock = threading.RLock()
+
+    def reset_embedding_degradation(self) -> None:
+        """在官方会话或能力快照更新后清除本次 Runtime 的 Hash 降级标记。"""
+        with self._degraded_lock:
+            self._degraded_libraries.clear()
+        reset = getattr(self.vectors.embedding, "reset_degraded", None)
+        if callable(reset):
+            reset()
+
+    def _is_embedding_degraded(self, library_id: str | None) -> bool:
+        """判断指定知识库是否已因官方额度耗尽进入 Hash 降级。"""
+        if library_id is None:
+            return False
+        with self._degraded_lock:
+            return library_id in self._degraded_libraries
+
+    def _mark_embedding_degraded(self, library_id: str | None) -> None:
+        """记录知识库降级状态，避免同一 Runtime 重复请求官方向量。"""
+        if library_id is None:
+            return
+        with self._degraded_lock:
+            self._degraded_libraries.add(library_id)
 
     async def create_library(self, name: str, path: str) -> dict[str, Any]:
         """创建目录知识库，并立即启动首次索引。"""
@@ -284,13 +310,25 @@ class KnowledgeService:
                     and state["chunk_strategy_version"] == CHUNK_STRATEGY_VERSION
                 )
                 current_signature = self.vectors.descriptor.signature
+                fallback_signature = (
+                    self.fallback_vectors.descriptor.signature
+                    if self.fallback_vectors
+                    else None
+                )
                 if unchanged:
+                    embedding_ready = state["embedding_state"] == "ready" and (
+                        state["embedding_signature"] == current_signature
+                        or (
+                            self._is_embedding_degraded(library_id)
+                            and fallback_signature is not None
+                            and state["embedding_signature"] == fallback_signature
+                        )
+                    )
                     if (
-                        state["embedding_state"] != "ready"
-                        or state["embedding_signature"] != current_signature
+                        not embedding_ready
                     ):
                         records = self.store.document_chunks(str(state["id"]))
-                        written_signature = self._upsert_vectors(records)
+                        written_signature = self._upsert_vectors(records, library_id)
                         self.store.mark_document_ready(str(state["id"]), written_signature)
                     self.store.set_progress(library_id, "indexing", processed, len(files))
                     continue
@@ -338,7 +376,7 @@ class KnowledgeService:
                     parsed.title,
                 )
                 self._delete_vector_ids(old_ids)
-                written_signature = self._upsert_vectors(records)
+                written_signature = self._upsert_vectors(records, library_id)
                 self.store.mark_document_ready(document_id, written_signature)
                 self.store.set_progress(library_id, "indexing", processed, len(files))
 
@@ -358,14 +396,24 @@ class KnowledgeService:
             except Exception:
                 LOGGER.exception("知识库失败状态写入失败 library=%s", library_id)
 
-    def _upsert_vectors(self, records: list[dict[str, Any]]) -> str:
+    def _upsert_vectors(self, records: list[dict[str, Any]], library_id: str | None = None) -> str:
         """独立写入活动和 Hash 影子索引，主索引失败时允许降级完成。"""
         primary_error: Exception | None = None
-        try:
-            self.vectors.upsert(records)
-        except Exception as error:
-            primary_error = error
-            LOGGER.exception("活动向量索引写入失败，准备写入 Hash 影子索引")
+        if self._is_embedding_degraded(library_id):
+            LOGGER.debug("官方 Embedding 已熔断，直接写入 Hash 影子索引 library=%s", library_id)
+        else:
+            try:
+                self.vectors.upsert(records)
+            except Exception as error:
+                primary_error = error
+                if getattr(error, "code", None) == "managed_quota_exhausted":
+                    self._mark_embedding_degraded(library_id)
+                    LOGGER.warning(
+                        "官方 Embedding 额度已用尽，知识库切换 Hash 索引 library=%s",
+                        library_id,
+                    )
+                else:
+                    LOGGER.exception("活动向量索引写入失败，准备写入 Hash 影子索引")
 
         fallback_written = False
         if self.fallback_vectors:
@@ -375,7 +423,7 @@ class KnowledgeService:
             except Exception:
                 LOGGER.exception("Hash 影子向量索引写入失败")
 
-        if primary_error is None:
+        if primary_error is None and not self._is_embedding_degraded(library_id):
             return self.vectors.descriptor.signature
         if fallback_written and self.fallback_vectors:
             return self.fallback_vectors.descriptor.signature
@@ -402,18 +450,22 @@ class KnowledgeService:
             return self._empty_result(query, started_at)
 
         degraded_to_hash = False
+        degraded_reason: str | None = None
         try:
             vector_hits = self.vectors.search(query, ready_ids, VECTOR_CANDIDATES)
-        except Exception:
-            LOGGER.exception("活动向量检索失败，准备降级")
+        except Exception as error:
+            degraded_reason = getattr(error, "code", "provider_unavailable")
+            LOGGER.warning("活动向量检索失败，准备降级 reason=%s", degraded_reason)
             vector_hits = []
         active_descriptor = self.vectors.descriptor
         if not vector_hits and self.fallback_vectors:
             try:
-                vector_hits = self.fallback_vectors.search(query, ready_ids, VECTOR_CANDIDATES)
-                if vector_hits:
-                    active_descriptor = self.fallback_vectors.descriptor
+                fallback_hits = self.fallback_vectors.search(query, ready_ids, VECTOR_CANDIDATES)
+                if degraded_reason is not None or fallback_hits:
                     degraded_to_hash = True
+                vector_hits = fallback_hits
+                if degraded_to_hash:
+                    active_descriptor = self.fallback_vectors.descriptor
             except Exception:
                 LOGGER.exception("Hash 影子向量检索失败")
 
@@ -565,6 +617,7 @@ class KnowledgeService:
             rejection_counts=rejection_counts,
             rerank_source=rerank_source,
             rerank_fallback_reason=rerank_fallback_reason,
+            degraded_reason=degraded_reason if degraded_to_hash else None,
         )
         return RetrievalResult(sources, trace)
 

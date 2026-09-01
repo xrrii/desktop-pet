@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import base64
 import binascii
+import logging
+from threading import RLock
 import uuid
 from typing import Any
 
@@ -55,6 +57,25 @@ class ManagedEmbeddingProvider:
             final_min_similarity=0.62,
         )
         self._client = httpx.Client(timeout=httpx.Timeout(50.0, connect=10.0), follow_redirects=False)
+        self._state_lock = RLock()
+        self._quota_exhausted = False
+
+    def reset_degraded(self) -> None:
+        """在服务器能力快照或会话更新后允许重新探测官方额度。"""
+        with self._state_lock:
+            self._quota_exhausted = False
+
+    def _is_quota_exhausted(self) -> bool:
+        """读取当前 Runtime 是否已进入官方 Embedding 额度熔断状态。"""
+        with self._state_lock:
+            return self._quota_exhausted
+
+    def _mark_quota_exhausted(self) -> bool:
+        """标记额度耗尽并返回是否为首次标记，用于抑制重复告警。"""
+        with self._state_lock:
+            first = not self._quota_exhausted
+            self._quota_exhausted = True
+            return first
 
     def health_check(self) -> None:
         """通过最小文本请求验证认证、能力和模型维度。"""
@@ -78,6 +99,8 @@ class ManagedEmbeddingProvider:
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
         """执行一次不可自动重放的请求，避免重复扣费。"""
+        if self._is_quota_exhausted():
+            raise ManagedEmbeddingError("managed_quota_exhausted")
         lease = self._session.lease()
         if lease is None:
             raise ManagedEmbeddingError("managed_authentication_required")
@@ -103,7 +126,13 @@ class ManagedEmbeddingProvider:
         except httpx.HTTPError as error:
             raise ManagedEmbeddingError("embedding_provider_unavailable") from error
         if response.status_code != 200:
-            raise ManagedEmbeddingError(_response_error(response.content))
+            error_code = _response_error(response.content)
+            if error_code == "managed_quota_exhausted":
+                if self._mark_quota_exhausted():
+                    logging.getLogger("petdock.providers.managed_embedding").warning(
+                        "官方 Embedding 额度已用尽，本次 Runtime 后续请求将降级本地 Hash"
+                    )
+            raise ManagedEmbeddingError(error_code)
         try:
             body = response.json()
             if body.get("descriptorId") != "embedding-standard" or body.get("revision") != self.descriptor.revision:

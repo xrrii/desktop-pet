@@ -3031,7 +3031,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
 
     if (event.type === 'retrieval_sources') {
-      renderRetrievalSources(event.payload.sources)
+      renderRetrievalSources(event.payload)
       return
     }
 
@@ -3347,17 +3347,32 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   }
 
   /** 在当前助手消息下展示 Runtime 返回的可核查来源。 */
-  function renderRetrievalSources(sources: Extract<AssistantEvent, { type: 'retrieval_sources' }>['payload']['sources']): void {
+  function renderRetrievalSources(
+    payload: Extract<AssistantEvent, { type: 'retrieval_sources' }>['payload']
+  ): void {
     const article = activeAssistantMessage?.closest('article')
-    if (!article || sources.length === 0) {
+    const sources = payload.sources
+    const degradedToHash = payload.degradedToHash === true
+    if (!article || (sources.length === 0 && !degradedToHash)) {
       return
     }
     article.querySelector('.knowledge-sources')?.remove()
     const details = document.createElement('details')
     details.className = 'retrieval-sources knowledge-sources'
+    details.open = degradedToHash
     const summary = document.createElement('summary')
-    summary.textContent = `参考资料 ${sources.length}`
+    summary.textContent = degradedToHash
+      ? `参考资料 ${sources.length} · 已降级本地检索`
+      : `参考资料 ${sources.length}`
     details.append(summary)
+    if (degradedToHash) {
+      const notice = document.createElement('p')
+      notice.className = 'knowledge-degradation-notice'
+      notice.textContent = payload.degradedReason === 'managed_quota_exhausted'
+        ? '官方文本向量额度已用尽，当前使用本地检索，语义召回效果可能下降。'
+        : '官方文本向量暂不可用，当前使用本地检索。'
+      details.append(notice)
+    }
     sources.forEach((source, index) => {
       const item = document.createElement('div')
       item.className = 'retrieval-source'

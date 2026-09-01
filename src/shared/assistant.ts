@@ -609,6 +609,8 @@ export interface AssistantRetrievalSourcesEvent extends AssistantEventBase {
   type: 'retrieval_sources'
   payload: {
     sources: AssistantRetrievalSource[]
+    degradedToHash?: boolean
+    degradedReason?: string | null
   }
 }
 
