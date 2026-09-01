@@ -49,6 +49,14 @@ describe('ModelSettingsManager', () => {
     expect(manager.runtimeEnvironment().PETDOCK_LLM_API_KEY).toBe('')
   })
 
+  it('明确清除后不会继续把环境密钥报告为已配置', async () => {
+    process.env.PETDOCK_LLM_API_KEY = 'environment-secret'
+    const manager = new ModelSettingsManager()
+    await manager.configure({ baseUrl: 'https://api.example/v1', model: 'saved-model', clearApiKey: true })
+    expect(manager.snapshot().configuredKey).toBe(false)
+    expect(manager.runtimeEnvironment().PETDOCK_LLM_API_KEY).toBe('')
+  })
+
   it('保存非敏感字段时继承环境密钥，不会意外清除', async () => {
     process.env.PETDOCK_LLM_API_KEY = 'environment-secret'
     const manager = new ModelSettingsManager()

@@ -38,9 +38,12 @@ export class ModelSettingsManager {
     }
     return {
       ...profile,
+      // clear 模式明确屏蔽进程环境变量，必须与 Runtime 实际注入的空 Key 保持一致。
       configuredKey: profile.keyMode === 'override'
         ? this.readApiKey() !== null
-        : Boolean(process.env.PETDOCK_LLM_API_KEY?.trim()),
+        : profile.keyMode === 'clear'
+          ? false
+          : Boolean(process.env.PETDOCK_LLM_API_KEY?.trim()),
       source: 'saved'
     }
   }

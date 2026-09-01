@@ -93,6 +93,18 @@ describe('CapabilitySettingsManager', () => {
     })
   })
 
+  it('LangChain 后端没有 BYOK Key 时降级到 Mock，避免 Runtime 启动失败', () => {
+    state.chatBackend = 'langchain'
+    const manager = new CapabilitySettingsManager(() => state)
+
+    expect(manager.snapshot().capabilities.chat).toEqual({
+      selectedSource: 'byok',
+      effectiveSource: 'mock',
+      status: 'not_configured',
+      reason: 'byok_not_configured'
+    })
+  })
+
   it('Managed 不可用时保留选择且不自动使用现有 BYOK', () => {
     state = configuredState()
     const manager = new CapabilitySettingsManager(() => state)

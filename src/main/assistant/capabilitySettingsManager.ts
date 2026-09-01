@@ -266,7 +266,8 @@ function resolveSnapshot(
       : state.chatBackend === 'langchain'
         ? state.chat.configuredKey
           ? available('byok', 'byok')
-          : available('byok', 'byok', 'not_configured', 'byok_not_configured')
+          // 删除 BYOK Key 后仍允许打开自有配置页，先使用 Mock，待重新配置 Key 后再恢复在线后端。
+          : available('byok', 'mock', 'not_configured', 'byok_not_configured')
         : state.chat.configuredKey
           ? available('byok', 'byok')
           : available('byok', 'mock', 'not_configured', 'byok_not_configured')
