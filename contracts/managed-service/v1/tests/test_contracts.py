@@ -32,6 +32,27 @@ EXAMPLE_SCHEMAS = {
 }
 
 
+def test_site_analytics_is_minimal_anonymous_and_preserves_gaps() -> None:
+    """固定样例校验空数据、字段白名单及唯一无凭据采集例外。"""
+    document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    validator = Draft202012Validator(document, format_checker=FormatChecker())
+    for filename, schema in [("site-analytics-event.json", "SiteAnalyticsEvent"),
+                             ("site-analytics-unavailable.json", "AnalyticsOverview")]:
+        validator.evolve(schema=document["components"]["schemas"][schema]).validate(_read_json(EXAMPLE_ROOT / filename))
+    event = _read_json(EXAMPLE_ROOT / "site-analytics-event.json")
+    event_validator = validator.evolve(schema=document["components"]["schemas"]["SiteAnalyticsEvent"])
+    assert not event_validator.is_valid({**event, "url": "private"})
+    assert not event_validator.is_valid({**event, "targetKey": "home_hero"})
+    assert not event_validator.is_valid({**event, "eventType": "download_click", "pageKey": "share"})
+    operation = document["paths"]["/api/v1/web/analytics/events"]["post"]
+    assert operation["security"] == []
+    assert "CsrfToken" not in str(operation.get("parameters", []))
+    assert document["components"]["schemas"]["AdminUserDetail"]["properties"]["capabilities"]["minItems"] == 5
+    overview = _read_json(EXAMPLE_ROOT / "site-analytics-unavailable.json")
+    assert overview["today"]["counts"] is None
+    assert overview["collectionStartedAt"] is None
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     """读取 UTF-8 JSON 对象，避免测试对当前工作目录产生依赖。"""
     value = json.loads(path.read_text(encoding="utf-8"))
@@ -341,6 +362,9 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
     assert document["x-petdock-contract-version"] == 1
     assert set(document["paths"]) == {
         "/api/v1/web/session",
+        "/api/v1/web/analytics/events",
+        "/api/v1/web/admin/analytics/overview",
+        "/api/v1/web/admin/users/detail",
         "/api/v1/web/auth/register",
         "/api/v1/web/auth/login",
         "/api/v1/web/auth/logout",
@@ -376,7 +400,7 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
                 if isinstance(parameter, dict) and "$ref" in parameter
             }
             assert "#/components/parameters/RequestId" in references
-            if method.lower() in {"post", "put", "patch", "delete"}:
+            if method.lower() in {"post", "put", "patch", "delete"} and path != "/api/v1/web/analytics/events":
                 assert "#/components/parameters/CsrfToken" in references
     assert "desktopOAuth" not in document["components"]["securitySchemes"]
 

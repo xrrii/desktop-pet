@@ -73,6 +73,13 @@ test('Managed Service v1 固定样例兼容 TypeScript', async () => {
   assert.equal(settlement.inputUnits + settlement.outputUnits, 600)
   assert.equal(terminal.status, 'settled')
 
+  const analytics = await example<any>('site-analytics-unavailable.json')
+  assert.equal(analytics.timezone, 'Asia/Shanghai')
+  assert.equal(analytics.today.counts, null)
+  assert.equal(analytics.collectionStartedAt, null)
+  const siteEvent = await example<any>('site-analytics-event.json')
+  assert.deepEqual(Object.keys(siteEvent).sort(), ['eventId', 'eventType', 'pageKey', 'targetKey', 'visitorId'])
+  assert.equal(siteEvent.visitorId, null)
   const webUsage = await example<any>('web-usage-summary.json')
   assert.equal(webUsage.version, 1)
   assert.equal(webUsage.chat.unit, 'tokens')

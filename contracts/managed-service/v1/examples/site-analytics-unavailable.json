@@ -1,0 +1,20 @@
+{
+  "timezone": "Asia/Shanghai",
+  "generatedAt": "2026-09-07T04:00:00Z",
+  "availableFrom": "2026-08-08T16:00:00Z",
+  "collectionStartedAt": null,
+  "enabled": false,
+  "startDate": "2026-09-06",
+  "endDate": "2026-09-07",
+  "granularity": "day",
+  "today": { "start": "2026-09-06T16:00:00Z", "end": "2026-09-07T04:00:00Z", "coverage": "unavailable", "counts": null },
+  "yesterday": { "start": "2026-09-05T16:00:00Z", "end": "2026-09-06T04:00:00Z", "coverage": "unavailable", "counts": null },
+  "range": { "start": "2026-09-05T16:00:00Z", "end": "2026-09-07T04:00:00Z", "coverage": "unavailable", "counts": null },
+  "trend": [
+    { "start": "2026-09-05T16:00:00Z", "end": "2026-09-06T16:00:00Z", "coverage": "unavailable", "counts": null },
+    { "start": "2026-09-06T16:00:00Z", "end": "2026-09-07T16:00:00Z", "coverage": "unavailable", "counts": null }
+  ],
+  "pages": [],
+  "downloads": [],
+  "coverage": []
+}

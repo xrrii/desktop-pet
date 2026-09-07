@@ -160,7 +160,16 @@ DELETE /api/v1/web/devices
 - 密码找回、邮箱验证、MFA、用户自助账号删除、按量模式启用、充值、订单和支付回调仍不属于当前实现；管理员删除测试或无效用户属于受控后台能力。
 - Desktop `P2-11` 在 P2-W01~W04 完成后实施，使用系统浏览器打开官网管理入口，不共享 Cookie 或桌面 Token。
 
-## 9. 兼容与回滚
+## 9. 官网管理与匿名访问统计专项
+
+- 管理页为用户授权、访问统计、试用管理三个视图，所有管理查询要求管理员 Web Session；授权、额度、套餐、删除和试用写请求继续验证 CSRF。
+- `GET /api/v1/web/admin/users/detail?username=...` 返回指定活动用户的套餐和五项能力；用户列表状态筛选在数据库分页前完成。`preserveRemaining=true` 的授权切换保留锁定后的真实余额，包括零余额，旧客户端缺省仍沿用原更新语义。
+- 仅 `POST /api/v1/web/analytics/events` 为匿名无状态采集例外。不加载或创建 Session、不签发 Cookie、不要求 CSRF；浏览器使用 `credentials: omit` 和 `no-referrer`。此例外不扩展到其他写入端点。
+- 采集 CORS 单独精确校验 Origin，只允许 POST 和必要请求头，不返回 `Access-Control-Allow-Credentials`。正式来源固定为官网，账号主机没有采集别名。
+- 统计查询 `GET /api/v1/web/admin/analytics/overview` 仍执行管理员校验，使用 no-store、共同截止时间和数据库一致快照。关闭采集时可查历史；数据库失败返回 `analytics_unavailable`，不可返回全零成功响应。
+- 按北京时间查询最近 30 个自然日，单日按小时、多日按日。范围 UV 对整个范围去重；下载点击不计 PV/UV；昨日比较只截至昨日同一时刻。覆盖窗口、部分数据、未采集空值与真实零值必须分开。
+
+## 10. 兼容与回滚
 
 - P2-W03 只增加独立 Web API，并在尚未实现或发布的 Entitlement/Usage 响应上完成首次交付前模型校正；已实现的 P2-W01/P2-W02 字段、路径和认证语义不变。
 - 未登录时 Web API 不影响桌面 BYOK；关闭官网 Web Session 或官网 Feature Flag 不删除用户、设备、Refresh Token Family 或本地配置。

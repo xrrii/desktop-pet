@@ -329,6 +329,101 @@ paths:
           $ref: '#/components/responses/CapabilityNotEntitled'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/web/analytics/events:
+    post:
+      tags: [Web Analytics]
+      summary: 接收无登录凭据的官网访问事件
+      description: 仅首页和分享页；精确 Origin、2 KiB 请求体、独立限流，无 Session、Cookie 或 CSRF。事件 ID 幂等，数据保留最近 30 个北京时间自然日。
+      operationId: collectSiteAnalyticsEvent
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteAnalyticsEvent'
+      responses:
+        '204':
+          description: 事件已提交，或相同事件已经存在；不创建 Cookie
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '403':
+          description: 来源不在允许范围
+        '409':
+          description: idempotency_conflict，事件 ID 的内容发生冲突
+        '413':
+          description: 请求体超过 2 KiB
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: analytics_unavailable，采集关闭或暂时不可用
+  /api/v1/web/admin/analytics/overview:
+    get:
+      tags: [Web Admin]
+      summary: 查询北京时间官网访问概览
+      operationId: getAdminAnalyticsOverview
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: startDate
+          in: query
+          required: true
+          schema: {type: string, format: date}
+        - name: endDate
+          in: query
+          required: true
+          schema: {type: string, format: date}
+      responses:
+        '200':
+          description: 最多 30 个自然日，UV 全范围去重；未采集区间不填零
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsOverview'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
+        '503':
+          description: analytics_unavailable，查询暂时不可用
+  /api/v1/web/admin/users/detail:
+    get:
+      tags: [Web Admin]
+      summary: 查询用户套餐和五项能力详情
+      operationId: getAdminUserDetail
+      security:
+        - webSession: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: username
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Username'
+      responses:
+        '200':
+          description: 当前活动用户详情
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDetail'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AdminRequired'
   /api/v1/web/admin/capabilities/users:
     get:
       tags: [Web Admin]
@@ -338,6 +433,9 @@ paths:
       security:
         - webSession: []
       parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [all, enabled, disabled, unsupported], default: all}
         - $ref: '#/components/parameters/RequestId'
         - name: capability
           in: query
@@ -851,6 +949,121 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    SiteAnalyticsEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, eventType, pageKey, visitorId, targetKey]
+      properties:
+        eventId: {type: string, format: uuid}
+        eventType: {type: string, enum: [page_view, download_click]}
+        pageKey: {type: string, enum: [home, share]}
+        visitorId: {type: [string, 'null'], format: uuid}
+        targetKey:
+          type: [string, 'null']
+          enum: [home_hero, home_download, null]
+      description: UUID 必须为 v4；page_view 的 targetKey 为 null；download_click 仅允许 home 页及两个固定下载按钮。未知字段拒绝。
+      allOf:
+        - if:
+            properties:
+              eventType: {const: page_view}
+          then:
+            properties:
+              targetKey: {type: 'null'}
+          else:
+            properties:
+              pageKey: {const: home}
+              targetKey: {type: string, enum: [home_hero, home_download]}
+    AnalyticsCounts:
+      type: object
+      additionalProperties: false
+      required: [pv, uv, downloads, identifiedPv]
+      properties:
+        pv: {type: integer, format: int64, minimum: 0}
+        uv: {type: integer, format: int64, minimum: 0}
+        downloads: {type: integer, format: int64, minimum: 0}
+        identifiedPv: {type: integer, format: int64, minimum: 0}
+    AnalyticsBucket:
+      type: object
+      additionalProperties: false
+      required: [start, end, coverage, counts]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        coverage: {type: string, enum: [complete, partial, unavailable]}
+        counts:
+          oneOf:
+            - $ref: '#/components/schemas/AnalyticsCounts'
+            - type: 'null'
+    AnalyticsRank:
+      type: object
+      additionalProperties: false
+      required: [key, counts]
+      properties:
+        key: {type: string, enum: [home, share, home_hero, home_download]}
+        counts:
+          $ref: '#/components/schemas/AnalyticsCounts'
+    AnalyticsCoverage:
+      type: object
+      additionalProperties: false
+      required: [start, end]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+    AnalyticsOverview:
+      type: object
+      additionalProperties: false
+      required: [timezone, generatedAt, availableFrom, collectionStartedAt, enabled, startDate, endDate, granularity, today, yesterday, range, trend, pages, downloads, coverage]
+      properties:
+        timezone: {type: string, const: Asia/Shanghai}
+        generatedAt: {type: string, format: date-time}
+        availableFrom: {type: string, format: date-time}
+        collectionStartedAt: {type: [string, 'null'], format: date-time}
+        enabled: {type: boolean}
+        startDate: {type: string, format: date}
+        endDate: {type: string, format: date}
+        granularity: {type: string, enum: [hour, day]}
+        today:
+          $ref: '#/components/schemas/AnalyticsBucket'
+        yesterday:
+          $ref: '#/components/schemas/AnalyticsBucket'
+        range:
+          $ref: '#/components/schemas/AnalyticsBucket'
+        trend:
+          type: array
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/AnalyticsBucket'
+        pages:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/AnalyticsRank'
+        downloads:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/AnalyticsRank'
+        coverage:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsCoverage'
+    AdminUserDetail:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, planCode, planDisplayName, expiresAt, capabilities]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        displayName: {type: string}
+        planCode: {type: [string, 'null']}
+        planDisplayName: {type: [string, 'null']}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        capabilities:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/AdminCapabilityUser'
     WebTrialOffer:
       type: object
       additionalProperties: false
@@ -1006,6 +1219,10 @@ components:
       additionalProperties: false
       required: [capability, enabled, monthlyLimit]
       properties:
+        preserveRemaining:
+          type: boolean
+          default: false
+          description: 仅切换已有授权时保留锁定行中的余额，避免旧快照覆盖实际消耗；旧客户端省略时保持原行为。
         capability:
           $ref: '#/components/schemas/AdminManagedCapability'
         enabled:
@@ -1020,6 +1237,10 @@ components:
       additionalProperties: false
       required: [username, displayName, capability, enabled, remaining, unit, version, expiresAt, planSupportsCapability]
       properties:
+        planCode:
+          type: [string, 'null']
+        planDisplayName:
+          type: [string, 'null']
         username:
           $ref: '#/components/schemas/Username'
         displayName:

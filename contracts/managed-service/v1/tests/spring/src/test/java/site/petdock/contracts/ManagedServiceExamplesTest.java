@@ -70,6 +70,13 @@ class ManagedServiceExamplesTest {
         JsonNode settlement = read("usage-settlement-request.json");
         assertEquals(600, settlement.path("inputUnits").asInt() + settlement.path("outputUnits").asInt());
         assertEquals("settled", read("usage-terminal-response.json").path("status").asText());
+        JsonNode analytics = read("site-analytics-unavailable.json");
+        assertEquals("Asia/Shanghai", analytics.path("timezone").asText());
+        assertTrue(analytics.path("today").path("counts").isNull());
+        assertTrue(analytics.path("collectionStartedAt").isNull());
+        JsonNode siteEvent = read("site-analytics-event.json");
+        assertEquals(5, siteEvent.size());
+        assertTrue(siteEvent.path("visitorId").isNull());
         JsonNode webUsage = read("web-usage-summary.json");
         assertEquals("tokens", webUsage.path("chat").path("unit").asText());
         assertEquals(100000, webUsage.path("chat").path("used").asInt() + webUsage.path("chat").path("remaining").asInt());
