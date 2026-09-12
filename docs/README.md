@@ -42,12 +42,14 @@
 | [DEVELOPMENT.md](guides/DEVELOPMENT.md) | Active | 开发环境、代码规范、测试、构建和打包说明 |
 | [MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md](guides/MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md) | Active | Phase 2 PostgreSQL、Redis、SSH 隧道和备份部署步骤 |
 | [UI_STYLE_GUIDELINES.md](guides/UI_STYLE_GUIDELINES.md) | Active | Renderer 界面布局、组件和视觉风格约定 |
+| [多代理角色手册](guides/multi-agent/README.md) | Active | 三项目开发角色、文件归属、任务分派和独立验收规范 |
 
 ### 4.3 功能专项
 
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [CONVERSATION_RESOURCE_CAPABILITIES.md](features/CONVERSATION_RESOURCE_CAPABILITIES.md) | Active | 附件、Artifact、联网搜索、复杂输入和多文件能力 |
+| [Desktop SSO 与账号选择方案](plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md) | Draft | 复用官网登录态、账号选择、一次性身份衔接与三仓验收计划 |
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |
@@ -67,6 +69,7 @@
 
 | 任务 | 必读文档 |
 | --- | --- |
+| 使用子代理跨项目协作 | 多代理角色手册、共同约定、对应角色定义和任务单 |
 | 修改 Electron、Runtime 启动或打包 | 开发指南、AI 助手总体架构 |
 | 修改 Agent、工具协议或进程通信 | AI 助手总体架构、开发指南 |
 | 开发 BYOK 或官方托管服务 | 官方托管服务进度、双模式实施方案、AI 助手总体架构 |
