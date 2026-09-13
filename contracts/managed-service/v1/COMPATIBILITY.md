@@ -63,3 +63,7 @@
 - Web Usage Summary 保留必填 `chat` 字段，并以可选字段表达真实 Phase 4 能力；旧 Web 客户端忽略未知能力字段。
 - Vision 的请求体从 Base64 JSON 草案收紧为单张 `multipart/form-data` 安全派生图片；这属于 Phase 4 草案首次实现前校正，未发布旧客户端不受影响。
 - Embedding Descriptor Revision、维度、Tokenizer、Pooling、前后缀、Chunk 策略或阈值变化必须产生新 Signature；不同向量空间不得混写。
+
+## 2026-09 Desktop SSO 增量
+
+主动登录账号选择和跨主机一次性交接以 [Desktop SSO](DESKTOP_SSO.md) 为准。旧 prompt=login 继续兼容；官网和账号中心 Cookie 保持独立。

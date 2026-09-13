@@ -174,3 +174,7 @@ DELETE /api/v1/web/devices
 - P2-W03 只增加独立 Web API，并在尚未实现或发布的 Entitlement/Usage 响应上完成首次交付前模型校正；已实现的 P2-W01/P2-W02 字段、路径和认证语义不变。
 - 未登录时 Web API 不影响桌面 BYOK；关闭官网 Web Session 或官网 Feature Flag 不删除用户、设备、Refresh Token Family 或本地配置。
 - 业务实现发布前必须先通过契约测试、CSRF/Session 安全测试、MockMvc 和 Redis Session 集成测试；契约冻结不代表服务端功能已经完成。
+
+## 2026-09 Desktop SSO 增量
+
+主动登录账号选择和跨主机一次性交接以 [Desktop SSO](DESKTOP_SSO.md) 为准。旧 prompt=login 继续兼容；官网和账号中心 Cookie 保持独立。

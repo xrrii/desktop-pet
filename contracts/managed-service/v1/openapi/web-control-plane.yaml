@@ -811,6 +811,232 @@ paths:
           $ref: '#/components/responses/CsrfInvalid'
         '404':
           $ref: '#/components/responses/DeviceNotFound'
+  /api/v1/web/oauth/transactions/{transactionId}:
+    get:
+      tags:
+      - Web Session
+      summary: 获取桌面账号选择快照
+      operationId: getDesktopAccountSelection
+      description: 账号主机密码入口与官网确认入口分别保持 Host-only Session；完整交接边界见 DESKTOP_SSO.md。
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      - &id001
+        name: transactionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+      responses:
+        '200':
+          description: 成功，禁止缓存
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAccountSelection'
+        '400':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security: []
+  /api/v1/web/oauth/transactions/{transactionId}/confirm:
+    post:
+      tags:
+      - Web Session
+      summary: 确认复用展示的官网账号
+      operationId: confirmDesktopWebsiteAccount
+      description: 账号主机密码入口与官网确认入口分别保持 Host-only Session；完整交接边界见 DESKTOP_SSO.md。
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      - *id001
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: 成功，禁止缓存
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAccountHandoff'
+        '400':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - expectedUsername
+              properties:
+                expectedUsername:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+  /api/v1/web/oauth/password-login:
+    post:
+      servers:
+      - url: https://account.petdock.site
+        description: 仅账号主机接收目标事务密码认证
+      tags:
+      - Web Session
+      summary: 使用其他账号登录本次桌面授权
+      operationId: loginDesktopSelectedAccount
+      description: 账号主机密码入口与官网确认入口分别保持 Host-only Session；完整交接边界见 DESKTOP_SSO.md。
+      parameters:
+      - $ref: '#/components/parameters/RequestId'
+      - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: 成功，禁止缓存
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAccountResume'
+        '400':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: 统一错误响应；包含 oauth_selection_expired、oauth_selection_mismatch、oauth_sso_unavailable
+            等
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - transactionId
+              - username
+              - password
+              properties:
+                transactionId:
+                  type: string
+                  pattern: ^[A-Za-z0-9_-]{43}$
+                username:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                password:
+                  type: string
+                  minLength: 1
+                  maxLength: 1024
+      security: []
 components:
   securitySchemes:
     webSession:
@@ -949,6 +1175,42 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    DesktopAccountSelection:
+      type: object
+      required:
+      - transactionId
+      - expiresAt
+      - account
+      properties:
+        transactionId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        account:
+          anyOf:
+          - $ref: '#/components/schemas/WebProfile'
+          - type: 'null'
+    DesktopAccountHandoff:
+      type: object
+      required:
+      - transactionId
+      - actionUrl
+      - ticket
+      properties:
+        transactionId:
+          type: string
+        actionUrl:
+          type: string
+        ticket:
+          type: string
+    DesktopAccountResume:
+      type: object
+      required:
+      - resumeUrl
+      properties:
+        resumeUrl:
+          type: string
     SiteAnalyticsEvent:
       type: object
       additionalProperties: false

@@ -1,6 +1,9 @@
 {
   "version": 1,
   "errors": [
+    { "code": "oauth_selection_expired", "httpStatus": 410, "retryable": false, "message": "本次账号选择已过期，请从桌面重新登录。" },
+    { "code": "oauth_selection_mismatch", "httpStatus": 409, "retryable": false, "message": "账号或授权状态已变化，请重新选择。" },
+    { "code": "oauth_sso_unavailable", "httpStatus": 503, "retryable": true, "message": "账号衔接暂时不可用，请稍后重试。" },
     { "code": "invalid_request", "httpStatus": 400, "retryable": false, "message": "请求参数无效。" },
     { "code": "password_policy_violation", "httpStatus": 400, "retryable": false, "message": "密码不符合安全策略。" },
     { "code": "current_password_invalid", "httpStatus": 400, "retryable": false, "message": "当前密码不正确。" },

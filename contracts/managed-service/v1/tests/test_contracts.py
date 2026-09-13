@@ -361,6 +361,9 @@ def test_web_control_plane_session_csrf_and_scope_are_frozen() -> None:
     document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
     assert document["x-petdock-contract-version"] == 1
     assert set(document["paths"]) == {
+        "/api/v1/web/oauth/transactions/{transactionId}",
+        "/api/v1/web/oauth/transactions/{transactionId}/confirm",
+        "/api/v1/web/oauth/password-login",
         "/api/v1/web/session",
         "/api/v1/web/analytics/events",
         "/api/v1/web/admin/analytics/overview",
@@ -784,3 +787,22 @@ def test_p5_web_usage_history_is_daily_and_minimal() -> None:
     assert set(item["properties"]) == {"date", "chat", "embedding", "vision", "web_search", "rerank"}
     assert "prompt" not in item["properties"]
     assert "provider" not in item["properties"]
+
+
+def test_desktop_sso_handoff_is_session_bound_and_post_only() -> None:
+    """固定交接数据、主机与 CSRF 边界，避免新增入口误用官网 API 主机。"""
+    document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
+    handoff = _read_json(EXAMPLE_ROOT / "desktop-account-handoff.json")
+    validator = Draft202012Validator(document, format_checker=FormatChecker())
+    validator.evolve(schema=document["components"]["schemas"]["DesktopAccountHandoff"]).validate(handoff)
+    assert handoff["actionUrl"] == "https://account.petdock.site/oauth/sso/decision"
+    assert len(handoff["ticket"]) == len(handoff["transactionId"]) == 43
+    paths = document["paths"]
+    confirm = paths["/api/v1/web/oauth/transactions/{transactionId}/confirm"]["post"]
+    assert {"$ref": "#/components/parameters/CsrfToken"} in confirm["parameters"]
+    assert confirm["requestBody"]["content"]["application/json"]["schema"]["required"] == ["expectedUsername"]
+    password = paths["/api/v1/web/oauth/password-login"]["post"]
+    assert password["servers"][0]["url"] == "https://account.petdock.site"
+    assert password["security"] == []
+    assert {"$ref": "#/components/parameters/CsrfToken"} in password["parameters"]
+    assert "get" not in paths["/api/v1/web/oauth/transactions/{transactionId}/confirm"]

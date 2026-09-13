@@ -49,7 +49,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [CONVERSATION_RESOURCE_CAPABILITIES.md](features/CONVERSATION_RESOURCE_CAPABILITIES.md) | Active | 附件、Artifact、联网搜索、复杂输入和多文件能力 |
-| [Desktop SSO 与账号选择方案](plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md) | Draft | 复用官网登录态、账号选择、一次性身份衔接与三仓验收计划 |
+| [Desktop SSO 与账号选择方案](plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md) | Active | 复用官网登录态、独立账号选择、实施结果与三仓验收记录 |
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |

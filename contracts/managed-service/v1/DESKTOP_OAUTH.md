@@ -77,3 +77,7 @@ state=<high-entropy-random>
 - 本地或 shared-dev 完成门禁必须使用两个独立测试主机名和受信 HTTPS 证书，分别模拟 `api` 与 `account` 的 Host-only Cookie；同一 `127.0.0.1` 主机的不同端口不能证明 Cookie 隔离。
 - 日常开发继续使用本地、shared-dev、Testcontainers 和分离测试主机 HTTPS；正式域名只用于发布候选门禁，必须先完成入口网关、生产数据隔离、系统浏览器和打包版 Desktop 的来源 IP 白名单验收。
 - P2-W02 只有在真实 Spring Authorization Server、分离 Host Session、系统浏览器和 Desktop loopback/PKCE 跨端联调通过后才能标记为完成；Mock 测试不能替代该门禁。
+
+## 2026-09 Desktop SSO 增量
+
+主动登录账号选择和跨主机一次性交接以 [Desktop SSO](DESKTOP_SSO.md) 为准。旧 prompt=login 继续兼容；官网和账号中心 Cookie 保持独立。

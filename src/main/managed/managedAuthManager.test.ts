@@ -520,12 +520,12 @@ describe('ManagedAuthManager', () => {
           chat: { quotaMode: 'quota', used: 0, remaining: 100_000, unit: 'tokens' }
         }
       })
-    } as never
+    }
     const manager = new ManagedAuthManager(policy, '0.2.0', {
       tokenStore,
       oauthClient: oauthClientWithRefresh(async () => tokenSet('access-token', 'rotated-refresh-token')),
       accountSessionManager: managedSessionManagerDouble().value,
-      controlPlaneClient,
+      controlPlaneClient: controlPlaneClient as never,
       runtimeTokenBroker: runtimeBroker.value
     })
 

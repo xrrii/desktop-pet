@@ -122,3 +122,12 @@ test('Managed Service v1 固定样例兼容 TypeScript', async () => {
     assert.deepEqual(JSON.parse(JSON.stringify(value)), value)
   }
 })
+
+/** 交接只包含合成的一次性表单数据，不携带原 OAuth 参数或桌面 Token。 */
+test('Desktop SSO 固定交接样例兼容 TypeScript', async () => {
+  const handoff = await example<{ actionUrl: string; transactionId: string; ticket: string }>('desktop-account-handoff.json')
+  assert.equal(handoff.actionUrl, 'https://account.petdock.site/oauth/sso/decision')
+  assert.match(handoff.transactionId, /^[A-Za-z0-9_-]{43}$/)
+  assert.match(handoff.ticket, /^[A-Za-z0-9_-]{43}$/)
+  assert.deepEqual(Object.keys(handoff).sort(), ['actionUrl', 'ticket', 'transactionId'])
+})

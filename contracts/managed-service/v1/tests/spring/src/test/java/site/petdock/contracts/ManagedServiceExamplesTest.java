@@ -131,4 +131,13 @@ class ManagedServiceExamplesTest {
             assertEquals(value, mapper.readTree(mapper.writeValueAsBytes(value)));
         }
     }
+    /** 交接固定为账号主机表单数据，不包含官网 Cookie 或桌面 Token。 */
+    @Test
+    void desktopSsoHandoffIsCompatible() throws IOException {
+        JsonNode handoff = read("desktop-account-handoff.json");
+        assertEquals("https://account.petdock.site/oauth/sso/decision", handoff.path("actionUrl").asText());
+        assertTrue(handoff.path("transactionId").asText().matches("[A-Za-z0-9_-]{43}"));
+        assertTrue(handoff.path("ticket").asText().matches("[A-Za-z0-9_-]{43}"));
+        assertEquals(3, handoff.size());
+    }
 }
