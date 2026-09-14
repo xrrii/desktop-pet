@@ -12,7 +12,7 @@
 
 实施状态、验证事实、下一工作项和跨会话交接统一记录在 `docs/roadmap/MANAGED_SERVICE_PROGRESS.md`。本文档只维护冻结决策、阶段要求和验收定义，不记录易过期的日常进度。
 
-Phase 0 的现有 Provider 与模型消费者清单见 `docs/architecture/MANAGED_SERVICE_PROVIDER_INVENTORY.md`；Managed 开发前 BYOK 验证证据见 `docs/roadmap/MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md`。
+Phase 0 的现有 Provider 与模型消费者清单见 `docs/architecture/MANAGED_SERVICE_PROVIDER_INVENTORY.md`；Managed 开发前 BYOK 验证证据见 `docs/archive/2026-08/validation/MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md`。
 
 ## 2. 背景与目标
 

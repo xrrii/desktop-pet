@@ -4,7 +4,7 @@
 
 本目录按文档职责组织。开始开发前，先根据任务类型找到对应基线；当多份文档存在交叉时，总体架构和开发规范优先，功能专项负责补充领域细节。
 
-最后审阅日期：2026-08-24。
+最后审阅日期：2026-09-14。
 
 ## 2. 状态说明
 
@@ -49,7 +49,8 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [CONVERSATION_RESOURCE_CAPABILITIES.md](features/CONVERSATION_RESOURCE_CAPABILITIES.md) | Active | 附件、Artifact、联网搜索、复杂输入和多文件能力 |
-| [Desktop SSO 与账号选择方案](plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md) | Active | 复用官网登录态、独立账号选择、实施结果与三仓验收记录 |
+| [Desktop 登录、SSO 与官网管理入口](features/DESKTOP_SSO.md) | Active | 当前行为、上线状态来源与历史证据入口 |
+| [Nacos 配置中心与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) | Draft | 配置迁移、Provider 热切换、NSIS 自动更新、Jenkins 发布编排与待确认决策 |
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |
@@ -63,7 +64,9 @@
 | --- | --- | --- |
 | [AI_ASSISTANT_PROGRESS.md](roadmap/AI_ASSISTANT_PROGRESS.md) | Tracking | 已完成阶段、测试结果、遗留项和后续工作 |
 | [MANAGED_SERVICE_PROGRESS.md](roadmap/MANAGED_SERVICE_PROGRESS.md) | Tracking | 官方托管服务当前阶段、跨仓库边界、验证事实和跨会话交接入口 |
-| [MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md](roadmap/MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md) | Tracking | Managed 开发前的 BYOK、打包态 Runtime、C3/C5 和检索基线证据 |
+| [历史归档](archive/README.md) | Archived | 已结束计划、SSO 验收、BYOK 基线和旧进度全文 |
+
+当前工作入口：[Nacos 与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md)。跨仓入口：[Cloud 文档](../../petdock-office/petdock-cloud/docs/README.md)、[Web 文档](../../petdock-office/petdock-web/docs/README.md)。
 
 ## 5. 按任务选择文档
 
@@ -91,3 +94,5 @@
 - `Active` 文档中的现行规则与历史记录混杂过多时，将历史内容移入 `archive/`，不要继续扩展同一文件。
 - `External` 资料只作为供应商参考，项目自身的权限、隐私和网络安全规则优先。
 - 文档、代码注释和日志继续使用中文；路径、接口和代码标识保持原始命名。
+
+归档规则：完成的计划先提取仍有效的规则到功能说明/指南，再迁入 `archive/YYYY-MM/`；保留历史证据，不把本地测试改写成生产验收。移动后检查三仓链接及构建引用。

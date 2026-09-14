@@ -1,5 +1,7 @@
 # PetDock Managed Service Phase 0 BYOK 基线报告
 
+状态：Archived。归档日期：2026-09-14。本文保留当时的计划、验证和限制，不代表当前实现或当前上线状态；现行入口见 [文档索引](../../../README.md)。历史正文中的“当前”“待部署”“下一步”均指原记录时点。
+
 本报告记录 `P0-04` 在 Managed 功能开发前的桌面端 BYOK、Local 和 Mock 行为基线。后续 Provider 抽象、配置迁移和 Managed 接入必须以此作为最低回归范围。
 
 ## 1. 基线信息

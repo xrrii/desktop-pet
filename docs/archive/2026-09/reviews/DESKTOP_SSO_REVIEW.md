@@ -1,5 +1,7 @@
 # Desktop SSO 独立审查记录
 
+状态：Archived。归档日期：2026-09-14。本文保留当时的计划、验证和限制，不代表当前实现或当前上线状态；现行入口见 [文档索引](../../../README.md)。历史正文中的“当前”“待部署”“下一步”均指原记录时点。
+
 日期：2026-09-13。任务：SSO-REVIEW-01。角色：Reviewer；主代理整理交付。
 
 结论：本次范围内未发现可确认问题。该结论是指定工作区差异的只读审查，不代表所有运行场景均已测试。
@@ -24,4 +26,4 @@
 - Redis 操作超过 60 秒互斥锁租约时的故障并发。
 - 生产完整反代与正式 CA 验收、签名安装包的操作系统浏览器唤起及回调链路。
 
-开发自测、本地真实 QA、生产部署和安装包发布分别记录；不能以本审查替代后两者。完整实施及验证记录见 [Desktop SSO 方案与实施记录](../plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md)，QA 报告位于 Web 仓库 `docs/qa/DESKTOP_SSO_QA.md`。
+开发自测、本地真实 QA、生产部署和安装包发布分别记录；不能以本审查替代后两者。完整实施及验证记录见 [Desktop SSO 方案与实施记录](../plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md)，QA 报告位于 Web 仓库 `docs/archive/2026-09/qa/DESKTOP_SSO_QA.md`。
