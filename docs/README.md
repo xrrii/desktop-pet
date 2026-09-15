@@ -4,7 +4,7 @@
 
 本目录按文档职责组织。开始开发前，先根据任务类型找到对应基线；当多份文档存在交叉时，总体架构和开发规范优先，功能专项负责补充领域细节。
 
-最后审阅日期：2026-09-14。
+最后审阅日期：2026-09-15。
 
 ## 2. 状态说明
 
@@ -50,7 +50,7 @@
 | --- | --- | --- |
 | [CONVERSATION_RESOURCE_CAPABILITIES.md](features/CONVERSATION_RESOURCE_CAPABILITIES.md) | Active | 附件、Artifact、联网搜索、复杂输入和多文件能力 |
 | [Desktop 登录、SSO 与官网管理入口](features/DESKTOP_SSO.md) | Active | 当前行为、上线状态来源与历史证据入口 |
-| [Nacos 配置中心与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) | Draft | 配置迁移、Provider 热切换、NSIS 自动更新、Jenkins 发布编排与待确认决策 |
+| [Nacos 配置中心与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) | Tracking | P0 底座本地验证完成；服务器门禁、Chat 热切换与自动更新后续编排 |
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |
