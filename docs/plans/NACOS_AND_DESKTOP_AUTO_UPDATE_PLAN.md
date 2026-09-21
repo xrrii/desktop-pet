@@ -276,7 +276,7 @@ P1-B 已完成 Gateway 侧影子监听底座。固定资源为 Namespace `petdoc
 
 Cloud 新增 P1-B 部署入口：[Chat Nacos 影子监听部署与验收](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1B_CHAT_SHADOW_DEPLOYMENT.md)。服务器部署需要先让 Nacos P0 栈创建固定共享网络，再使用 `prepare-shadow`、`bootstrap-shadow` 初始化生产 Namespace 和只读账号，发布合成候选后再通过 Jenkins 发布 Gateway。Nacos 端口仍只绑定回环；生产 Compose 通过外部 Docker 网络连接，不新增公网端口。
 
-本批本地验证：AI Gateway 124 项通过，Ruff 和 Mypy 通过；Cloud Nacos 部署测试 7 项通过，P1-B 影子监听测试 4 项通过。未执行生产 Nacos Chat 监听、Linux 容器内 Gateway 回归、真实 Provider 调用或生产配置源切换；服务器动作必须按部署指南现场留证。下一批是 P1-C：先做影子长期运行与回退演练，再单独评审是否允许生产配置源切换。
+本批本地验证：AI Gateway 124 项通过，Ruff 和 Mypy 通过；Cloud Nacos 部署测试 7 项通过，P1-B 影子监听测试 4 项通过。2026-09-21 用户报告服务器影子监听验收通过：状态为 `healthy`，候选 revision 1 有效，`effectiveRevision=0`，指标与状态一致；该结果属于用户现场报告，不替代本地 Linux 容器回归或代理实际生产操作记录。生产真实 Provider 调用和配置源切换仍未执行。下一批是 P1-C：先做影子长期运行与回退演练，再单独评审是否允许生产配置源切换。
 
 ### 14.5 本批验证与未执行项
 
