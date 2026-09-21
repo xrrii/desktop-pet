@@ -268,6 +268,16 @@ P1-B：接入固定版本 Nacos SDK 的监听与影子校验；收到通知后�
 
 P0 的服务器部署与 SDK 真实验收已由用户确认；Jenkins 共存资源、长期日志、外网隔离和离机恢复若尚无逐项记录，继续按 P0 指南留证，不重复部署已验收的实例。
 
+## 15. P1-B Chat Nacos 影子监听交接（2026-09-21）
+
+P1-B 已完成 Gateway 侧影子监听底座。固定资源为 Namespace `petdock-production`、Group `PETDOCK_AI_GATEWAY`、Data ID `chat-provider.json`；只读账号为 `petdock-ai-gateway-reader`。生产默认关闭 `PETDOCK_CHAT_NACOS_SHADOW_ENABLED`，开启后只读取、校验和报告候选，不调用 `ProviderManager.apply()`，有效 Chat 配置仍是 `.env` 启动快照。
+
+监听器使用锁定的 `nacos-sdk-python==2.0.11`，为 Server 2.5.4 的单资源批量监听补齐顶层鉴权字段；回调只投递到 Gateway 事件循环，队列满时丢弃旧通知并重新读取服务端当前内容。候选按完整 Schema 校验，处理重复、同 revision 冲突、旧 revision、未登记 Secret 引用和错误资源；有效候选只更新影子 candidate revision。网络或 SDK 故障经过 stale 阈值后报告 `stale`，恢复读取后回到 `healthy`。候选、有效 revision、拒绝类别和连接时间通过内网状态端点 `/internal/v1/config/chat/status` 与低基数 Prometheus 指标暴露，不暴露凭据或配置正文。
+
+Cloud 新增 P1-B 部署入口：[Chat Nacos 影子监听部署与验收](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1B_CHAT_SHADOW_DEPLOYMENT.md)。服务器部署需要先让 Nacos P0 栈创建固定共享网络，再使用 `prepare-shadow`、`bootstrap-shadow` 初始化生产 Namespace 和只读账号，发布合成候选后再通过 Jenkins 发布 Gateway。Nacos 端口仍只绑定回环；生产 Compose 通过外部 Docker 网络连接，不新增公网端口。
+
+本批本地验证：AI Gateway 124 项通过，Ruff 和 Mypy 通过；Cloud Nacos 部署测试 7 项通过，P1-B 影子监听测试 4 项通过。未执行生产 Nacos Chat 监听、Linux 容器内 Gateway 回归、真实 Provider 调用或生产配置源切换；服务器动作必须按部署指南现场留证。下一批是 P1-C：先做影子长期运行与回退演练，再单独评审是否允许生产配置源切换。
+
 ### 14.5 本批验证与未执行项
 
 验证日期：2026-09-20。验证对象为 Cloud 实现提交 `d684453` 对应的业务源码与测试工作区；Cloud 基线 `ed7910e`，契约版本 v1，无公共契约改动。验证使用 Windows Python 3.13.2，pytest 临时目录显式指定到可写的独立测试目录；下表省略本机绝对目录值。Cloud 的解释器命令以下用 `python` 表示仓库 `.venv`。
