@@ -278,6 +278,14 @@ Cloud 新增 P1-B 部署入口：[Chat Nacos 影子监听部署与验收](../../
 
 本批本地验证：AI Gateway 124 项通过，Ruff 和 Mypy 通过；Cloud Nacos 部署测试 7 项通过，P1-B 影子监听测试 4 项通过。2026-09-21 用户报告服务器影子监听验收通过：状态为 `healthy`，候选 revision 1 有效，`effectiveRevision=0`，指标与状态一致；该结果属于用户现场报告，不替代本地 Linux 容器回归或代理实际生产操作记录。生产真实 Provider 调用和配置源切换仍未执行。下一批是 P1-C：先做影子长期运行与回退演练，再单独评审是否允许生产配置源切换。
 
+## 16. P1-C 服务器演练交接与 P1-D 边界（2026-09-22）
+
+用户报告已完成 P1-C 影子长期运行、故障恢复和影子回退演练，未发现问题；代理未直接操作服务器，也未收到逐项日志归档，因此只记录为用户现场验收。P1-C 不改变生产配置源，Nacos 监听仍只形成候选，生产有效 Chat 配置继续来自 `.env`。
+
+下一批 P1-D 只实现 Chat 生产源迁移与显式回退：增加默认值为 `env` 的源选择；选择 `nacos` 时完整候选经现有 Schema、Secret 白名单和 revision 校验后，才在 Gateway 事件循环调用 `ProviderManager.apply()`；运行期间 Nacos 失联保留最后有效快照，不自动回退到 `.env` 或另一 Provider。迁移前须生成与现网一致的 Nacos 完整配置、保留受限 `.env` 回退快照，并提供“旧内容加新 revision”的配置回退和显式切回 `env` 的维护步骤。
+
+P1-D 必须覆盖首次有效配置、无效候选、重复/乱序、在途流快照、旧 Provider 排空、Nacos 失联、Gateway 重启、真实 Chat SSE 与用量闭合；默认配置和本地测试不得触发真实 Provider 请求。完成开发、审查和部署指南前不启用生产 Nacos 配置源，不扩展 Vision、Web Search、Embedding、Rerank 或桌面更新。
+
 ### 14.5 本批验证与未执行项
 
 验证日期：2026-09-20。验证对象为 Cloud 实现提交 `d684453` 对应的业务源码与测试工作区；Cloud 基线 `ed7910e`，契约版本 v1，无公共契约改动。验证使用 Windows Python 3.13.2，pytest 临时目录显式指定到可写的独立测试目录；下表省略本机绝对目录值。Cloud 的解释器命令以下用 `python` 表示仓库 `.venv`。
