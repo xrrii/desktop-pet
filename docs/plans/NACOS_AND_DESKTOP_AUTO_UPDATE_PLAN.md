@@ -1,6 +1,6 @@
 # Nacos 配置中心与桌面自动更新实施方案
 
-状态：Tracking。2026-09-22：用户已确认 P0、P1-B、P1-C 服务器验收通过；P1-D Chat 生产源迁移与显式回退已完成代码、本地验证和交接文档，生产仍使用 `.env`，尚未执行源切换；桌面更新尚未开发。依据本次对话和当前仓库实现编写。已确认选择 Nacos 配置中心，以及桌面整体自动更新；不实施前端资源热更新。
+状态：Tracking。2026-09-26：用户已确认 P0、P1-B、P1-C 服务器验收通过；P1-D Chat 的生产切源、模型热更新、真实 SSE/用量闭合与两种回退也已由用户现场验收，P1 Chat 闭环结束。桌面更新尚未开发。依据本次对话和当前仓库实现编写。已确认选择 Nacos 配置中心，以及桌面整体自动更新；不实施前端资源热更新。
 
 ## 1. 目标与已确认边界
 
@@ -211,7 +211,7 @@ Jenkins 区分三个入口：服务镜像发布（沿用当前流程）、Nacos 
 
 本批不修改 Gateway 配置源或生产 `.env`，不引入 Java SDK，不更改公共契约，不开发其他模型能力或桌面更新。P0 名称与资源预算仅用于隔离验证；该记录形成时服务器尚未验收；2026-09-19 用户已确认服务器部署与 SDK 真实验收通过。Jenkins 同机资源、SSH/外网隔离、长期日志和加密离机恢复的逐项结果仍需现场留证，不能由 SDK 通过推定全部通过。
 
-P1 拆为可独立验收的小批次：P1-A 完成 Chat 配置 Schema、凭据引用、请求快照与 Provider 排空；P1-B 接入监听及影子校验；P1-C 完成影子长期运行和回退演练；P1-D 已完成生产源迁移代码、显式回退命令和部署指南，待服务器 reviewed deployment。P2 多能力迁移按需求后置，不阻塞后续桌面更新底座；本轮尚未确定的 COS、签名与 Windows 构建接入事项在对应阶段继续确认。
+P1 拆为可独立验收的小批次：P1-A 完成 Chat 配置 Schema、凭据引用、请求快照与 Provider 排空；P1-B 接入监听及影子校验；P1-C 完成影子长期运行和回退演练；P1-D 完成生产源迁移与两种回退，2026-09-26 用户确认生产验收通过，P1 Chat 闭环结束。P2 多能力迁移按需求后置，不阻塞后续桌面更新底座；本轮尚未确定的 COS、签名与 Windows 构建接入事项在对应阶段继续确认。
 
 每轮以小闭环交付并提交，进度继续维护现有文档，详细证据进入日期归档。阶段记录区分代码完成、本地验证、用户报告上线和实际生产验收；不因额度中断自动将未执行项标记通过。
 
@@ -284,7 +284,7 @@ Cloud 新增 P1-B 部署入口：[Chat Nacos 影子监听部署与验收](../../
 
 P1-D 已实现 Chat 生产源迁移与显式回退：增加默认值为 `env` 的源选择；选择 `nacos` 时完整候选经现有 Schema、Secret 白名单和 revision 校验后，才在 Gateway 事件循环调用 `ProviderManager.apply()`；运行期间 Nacos 失联保留最后有效快照，不自动回退到 `.env` 或另一 Provider。迁移前须生成与现网一致的 Nacos 完整配置、保留受限 `.env` 回退快照，并提供“旧内容加新 revision”的配置回退和显式切回 `env` 的维护步骤，具体见 Cloud 的 [P1-D 部署指南](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1D_CHAT_SOURCE_MIGRATION.md)。
 
-P1-D 已在本地覆盖首次有效配置、无效候选、重复/乱序、旧 Provider 排空、Nacos 失联和默认健康门槛；默认配置和本地测试不触发真实 Provider 请求。生产源仍未启用，服务器还需执行 Gateway 重启收敛、真实 Chat SSE 与用量闭合、Nacos revision 回退和显式 `.env` 源回退。P1-D 不扩展 Vision、Web Search、Embedding、Rerank 或桌面更新。
+P1-D 已在本地覆盖首次有效配置、无效候选、重复/乱序、旧 Provider 排空、Nacos 失联和默认健康门槛；默认配置和本地测试不触发真实 Provider 请求。2026-09-26 用户报告生产切源、模型热更新、真实 Chat SSE/用量闭合、Nacos revision 回退和显式 `.env` 源回退均通过；代理未直接操作生产服务器或归档逐项日志。P1-D 不扩展 Vision、Web Search、Embedding、Rerank 或桌面更新。
 
 ## 17. P1-D Chat 生产源迁移交接（2026-09-22）
 
@@ -292,7 +292,7 @@ Cloud 已完成 P1-D 实现：`PETDOCK_CHAT_CONFIG_SOURCE` 默认 `env`，切换
 
 运维命令覆盖 `.env` 脱敏快照、当前 Nacos 配置备份、候选发布、只读验证、Nacos 旧内容新 revision 回退和显式 `env` 源回退。Nacos 只保存逻辑 Secret 引用，真实 Provider Key 仍由服务器 Secret 提供。实现与测试结果记录在 Cloud [进度文档](../../../petdock-office/petdock-cloud/docs/roadmap/MANAGED_SERVICE_PROGRESS.md) 和 [部署指南](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1D_CHAT_SOURCE_MIGRATION.md)。
 
-本地验证已完成：AI Gateway 128 项、Cloud 根测试 41 项、Nacos 部署测试 10 项、Ruff、Mypy 34 个源码文件、Managed Service v1 契约快照和差异检查通过。生产仍保持 `PETDOCK_CHAT_CONFIG_SOURCE=env`；下一步由服务器按部署指南执行 reviewed deployment，确认真实 Chat SSE、用量闭合、失联保持和两种显式回退后，才考虑清理旧 `.env` Chat 业务字段。
+本地验证已完成：AI Gateway 128 项、Cloud 根测试 41 项、Nacos 部署测试 10 项、Ruff、Mypy 34 个源码文件、Managed Service v1 契约快照和差异检查通过。用户随后确认生产切源、模型热更新、真实 Chat SSE/用量闭合及两种回退通过，P1 按用户现场验收结束。旧 `.env` Chat 业务字段清理另行评审；P0 资源与备份专项继续独立留证。
 
 ### 14.5 本批验证与未执行项
 
