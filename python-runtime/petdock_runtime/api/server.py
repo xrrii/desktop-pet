@@ -33,6 +33,7 @@ from ..protocol import (
 from ..managed.auth_refresh import ManagedAuthResultValue
 from ..skills.manifest import SkillManifestError
 from .resources import create_runtime_resources
+from .update_barrier import RuntimeUpdateBarrier, RuntimeUpdateBarrierMiddleware
 
 """FastAPI 路由层，只负责鉴权、协议校验和 Runtime 服务编排。"""
 
@@ -42,6 +43,8 @@ LOGGER = logging.getLogger("petdock.server")
 def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | None = None) -> FastAPI:
     """创建带本地 SQLite、聊天、工具和记忆接口的 FastAPI 应用。"""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    update_barrier = RuntimeUpdateBarrier()
+    app.add_middleware(RuntimeUpdateBarrierMiddleware, barrier=update_barrier)
     resources = create_runtime_resources(config)
 
     @app.exception_handler(RequestValidationError)
@@ -81,6 +84,29 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
             "embeddingProfileId": embedding.descriptor.id,
             "indexSignature": embedding.descriptor.signature,
         }
+
+    @app.post("/v1/update/prepare")
+    async def prepare_update(authorization: str | None = Header(default=None)) -> dict[str, object]:
+        """原子检查后台活动并冻结新请求，只对本机 Main 启动令牌开放。"""
+        authorize(authorization)
+        counts = {
+            "activeRequests": update_barrier.active_requests,
+            "chatTasks": service.active_task_count(),
+            "knowledgeTasks": knowledge.active_task_count(),
+            "memoryTasks": service.memory_task_count(),
+        }
+        accepted = not any(counts.values())
+        if accepted:
+            update_barrier.prepared = True
+        LOGGER.info("桌面更新停机互锁 accepted=%s counts=%s", accepted, counts)
+        return {"accepted": accepted, **counts}
+
+    @app.post("/v1/update/resume")
+    async def resume_after_update(authorization: str | None = Header(default=None)) -> dict[str, bool]:
+        """安装准备失败时幂等解除互锁；不取消或重启任何用户任务。"""
+        authorize(authorization)
+        update_barrier.prepared = False
+        return {"accepted": True}
 
     @app.put("/v1/managed/session", status_code=204)
     async def update_managed_session(

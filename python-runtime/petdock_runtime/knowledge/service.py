@@ -171,6 +171,10 @@ class KnowledgeService:
         self._degraded_libraries: set[str] = set()
         self._degraded_lock = threading.RLock()
 
+    def active_task_count(self) -> int:
+        """返回后台索引任务数，不使用可能滞后的数据库展示状态判断空闲。"""
+        return sum(not task.done() for task in self._tasks.values())
+
     def reset_embedding_degradation(self) -> None:
         """在官方会话或能力快照更新后清除本次 Runtime 的 Hash 降级标记。"""
         with self._degraded_lock:

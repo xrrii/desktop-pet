@@ -30,6 +30,19 @@ class MemoryExtractor:
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
+    def active_task_count(self) -> int:
+        """返回仍可能写入 SQLite 的后台分析任务数。"""
+        return sum(not task.done() for task in self._tasks)
+
+    async def close(self) -> None:
+        """数据库关闭前取消并收束分析协程，避免停机后继续写入。"""
+        pending = list(self._tasks)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        self._tasks.clear()
+
     async def _run(self, request: AssistantRequest, assistant_text: str) -> None:
         """分析本轮对话并把合规结果写成待确认候选。"""
         if self._model is None:

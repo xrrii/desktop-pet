@@ -1288,12 +1288,13 @@ async function assertConversationWheelScroll(client) {
   )
 }
 
+/** 打开助手；旧诊断入口可能已从生产构建移除，布局验收仍由后续 DOM 断言完成。 */
 function openAssistantWithTrace(client) {
   return evaluate(
     client,
     `(() => {
       const pet = document.querySelector('#pet-root').getBoundingClientRect()
-      window.desktopPet.traceAssistantLayout({
+      window.desktopPet.traceAssistantLayout?.({
         phase: 'double-click',
         revision: null,
         viewport: { width: innerWidth, height: innerHeight },
@@ -1485,6 +1486,7 @@ class CdpClient {
   }
 }
 
+/** 执行合成冒烟表达式，保留异常类型与堆栈以定位 Main IPC 或 Renderer 故障。 */
 async function evaluate(client, expression, awaitPromise = false) {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -1492,7 +1494,7 @@ async function evaluate(client, expression, awaitPromise = false) {
     returnByValue: true
   })
   if (result.exceptionDetails) {
-    throw new Error(result.exceptionDetails.text || 'Electron evaluation failed.')
+    throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Electron evaluation failed.')
   }
   return result.result.value
 }

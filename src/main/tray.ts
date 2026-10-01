@@ -8,6 +8,8 @@ import { setAssistantTheme } from './theme'
 
 let tray: Tray | null = null
 let openAssistant: (() => void) | null = null
+let openUpdate: (() => void) | null = null
+let updateLabel: (() => string) | null = null
 
 const label = {
   title: 'PetDock',
@@ -34,8 +36,15 @@ const label = {
   quit: '\u9000\u51fa'
 }
 
-export function createTray(window: BrowserWindow, onOpenAssistant?: () => void): Tray {
+/** 创建托盘，并注入助手和桌面更新的 Main 专用入口。 */
+export function createTray(
+  window: BrowserWindow,
+  onOpenAssistant?: () => void,
+  updates?: { open: () => void; label: () => string }
+): Tray {
   openAssistant = onOpenAssistant ?? null
+  openUpdate = updates?.open ?? null
+  updateLabel = updates?.label ?? null
   tray?.destroy()
   tray = new Tray(createTrayIcon())
   tray.setToolTip(label.title)
@@ -138,6 +147,11 @@ export function rebuildTrayMenu(window: BrowserWindow): void {
       }
     },
     { type: 'separator' },
+    {
+      label: updateLabel?.() || '检查更新',
+      enabled: openUpdate !== null,
+      click: () => openUpdate?.()
+    },
     {
       label: window.isVisible() ? label.hide : label.show,
       click: () => {

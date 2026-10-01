@@ -17,6 +17,10 @@ from petdock_runtime.api.server import create_app
 
 async def run() -> None:
     """创建监听 socket、启动 FastAPI，并等待优雅关闭信号。"""
+    # PyInstaller 在 Windows 管道中可能沿用本地代码页；Main 按 UTF-8 解码，必须显式对齐。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     config = RuntimeConfig.from_environment()
     # Runtime 的日志只写入 Electron Main 的 stderr，由 Main 统一落盘；不记录 Prompt、回答正文或凭据。
     logging.basicConfig(

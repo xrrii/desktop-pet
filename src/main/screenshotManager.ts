@@ -7,6 +7,7 @@ import type { AssistantAttachmentDropResult } from '../shared/assistant'
 import type { ScreenshotOverlayPayload, ScreenshotSelectionInput } from '../shared/screenshot'
 import { logError, logInfo } from './logger'
 import type { AssistantManager } from './assistant/assistantManager'
+import { UpdateActivityGate } from './update/updateActivityGate'
 
 const SCREENSHOT_SHORTCUT = 'F5'
 const SCREENSHOT_CAPTURE_DELAY_MS = 120
@@ -39,14 +40,15 @@ export class ScreenshotManager {
     private readonly assistantManager: AssistantManager,
     private readonly openAssistantForPet: (window: BrowserWindow) => void,
     private readonly emitAttachmentsStaged: (result: AssistantAttachmentDropResult) => void,
-    private readonly emitStageError: (message: string) => void
+    private readonly emitStageError: (message: string) => void,
+    private readonly updateGate = new UpdateActivityGate()
   ) {}
 
   /** 注册截图窗口使用的 IPC 接口。 */
   registerIpc(): void {
     ipcMain.handle('screenshot:get-overlay', (event) => this.getOverlayPayload(event))
     ipcMain.handle('screenshot:confirm-selection', (event, input: ScreenshotSelectionInput) =>
-      this.confirmSelection(event, input)
+      this.updateGate.run(() => this.confirmSelection(event, input))
     )
     ipcMain.handle('screenshot:cancel', () => this.cancelCapture())
   }
@@ -77,6 +79,16 @@ export class ScreenshotManager {
 
   /** 启动一次新的截图会话；若已在截图中则直接聚焦现有覆盖层。 */
   async startCapture(): Promise<void> {
+    await this.updateGate.run(() => this.startCaptureInternal())
+  }
+
+  /** 返回截图会话状态，覆盖层等待用户选择时也参与安装互锁。 */
+  isBusy(): boolean {
+    return this.overlays.size > 0 || this.captures.size > 0
+  }
+
+  /** 在更新互锁保护内读取屏幕并创建覆盖层。 */
+  private async startCaptureInternal(): Promise<void> {
     if (this.overlays.size > 0) {
       this.focusFirstOverlay()
       return

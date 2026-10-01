@@ -123,6 +123,7 @@ async function runSmoke() {
     if (image?.status !== 'ready' || image.parserId !== 'image-metadata-v1') {
       throw new Error(`Packaged image registration is invalid: ${JSON.stringify(image)}`)
     }
+    await verifyUpdateBarrier(ready.port)
     const shutdown = await fetch(`http://127.0.0.1:${ready.port}/v1/shutdown`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -142,6 +143,38 @@ async function runSmoke() {
       child.kill()
     }
   }
+}
+
+/** 验证随包 Runtime 的更新互锁，不启动安装器或使用任何生产凭据。 */
+async function verifyUpdateBarrier(port) {
+  const baseUrl = `http://127.0.0.1:${port}`
+  const options = {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` }
+  }
+  const unauthorized = await fetch(`${baseUrl}/v1/update/prepare`, {
+    method: 'POST', signal: AbortSignal.timeout(5_000)
+  })
+  if (unauthorized.status !== 401) throw new Error('打包 Runtime 更新互锁未拒绝无令牌请求。')
+  const preparation = await fetch(`${baseUrl}/v1/update/prepare`, {
+    ...options, signal: AbortSignal.timeout(5_000)
+  })
+  const payload = await preparation.json()
+  const counts = ['activeRequests', 'chatTasks', 'knowledgeTasks', 'memoryTasks']
+  if (!preparation.ok || payload.accepted !== true || counts.some((key) => payload[key] !== 0)) {
+    throw new Error('打包 Runtime 未确认空闲并冻结更新。')
+  }
+  const blocked = await fetch(`${baseUrl}/v1/document-capabilities`, {
+    headers: options.headers, signal: AbortSignal.timeout(5_000)
+  })
+  if (blocked.status !== 409) throw new Error('打包 Runtime 更新冻结后仍接受业务请求。')
+  const resumed = await fetch(`${baseUrl}/v1/update/resume`, {
+    ...options, signal: AbortSignal.timeout(5_000)
+  })
+  const available = await fetch(`${baseUrl}/v1/document-capabilities`, {
+    headers: options.headers, signal: AbortSignal.timeout(5_000)
+  })
+  if (!resumed.ok || !available.ok) throw new Error('打包 Runtime 更新互锁解除失败。')
+  console.log('RUNTIME_UPDATE_BARRIER_OK')
 }
 
 /** 读取 Runtime stdout 的第一行 readiness JSON，并限制单文件解包启动时间。 */

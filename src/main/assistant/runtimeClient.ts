@@ -46,6 +46,25 @@ export class AssistantRuntimeClient {
     }
   }
 
+  /** 原子冻结 Runtime；无响应或不完整响应都不能被当作可安装。 */
+  async prepareForUpdate(): Promise<boolean> {
+    const response = await this.request('/v1/update/prepare', {
+      method: 'POST', signal: AbortSignal.timeout(3_000)
+    })
+    const value = await response.json() as Record<string, unknown>
+    const fields = ['activeRequests', 'chatTasks', 'knowledgeTasks', 'memoryTasks']
+    if (typeof value.accepted !== 'boolean' || fields.some((key) =>
+      !Number.isSafeInteger(value[key]) || Number(value[key]) < 0)) {
+      throw new Error('Runtime 更新互锁响应无效。')
+    }
+    return value.accepted && fields.every((key) => value[key] === 0)
+  }
+
+  /** 安装未进行时解除 Runtime 的请求冻结。 */
+  async resumeAfterUpdate(): Promise<void> {
+    await this.request('/v1/update/resume', { method: 'POST', signal: AbortSignal.timeout(3_000) })
+  }
+
   /** 使用本地启动令牌把官方短期 Token 写入 Runtime 内存。 */
   async updateManagedSession(update: ManagedRuntimeSessionUpdate): Promise<void> {
     await this.request('/v1/managed/session', {
@@ -375,7 +394,7 @@ export class AssistantRuntimeClient {
   }
 
   async shutdown(): Promise<void> {
-    await this.request('/v1/shutdown', { method: 'POST' })
+    await this.request('/v1/shutdown', { method: 'POST', signal: AbortSignal.timeout(3_000) })
   }
 
   private async request(path: string, init: RequestInit): Promise<Response> {

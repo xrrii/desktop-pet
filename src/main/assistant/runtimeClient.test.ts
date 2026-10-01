@@ -10,6 +10,26 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('Runtime 更新互锁', () => {
+  it.each([
+    [{ accepted: true, activeRequests: 0, chatTasks: 0, knowledgeTasks: 0, memoryTasks: 0 }, true],
+    [{ accepted: false, activeRequests: 0, chatTasks: 0, knowledgeTasks: 1, memoryTasks: 0 }, false],
+    [{ accepted: true, activeRequests: 0, chatTasks: 0, knowledgeTasks: 0, memoryTasks: 1 }, false]
+  ])('只有全部真实活动计数为零才允许安装', async (value, expected) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(value)))
+    vi.stubGlobal('fetch', fetcher)
+    await expect(runtimeClient().prepareForUpdate()).resolves.toBe(expected)
+    expect((fetcher.mock.calls[0][1]?.headers as Headers).get('Authorization')).toBe('Bearer local-runtime-start-token')
+  })
+
+  it('不完整互锁响应与失联不得当作空闲', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response('{"accepted":true}')))
+    await expect(runtimeClient().prepareForUpdate()).rejects.toThrow('互锁响应无效')
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('synthetic network failure')))
+    await expect(runtimeClient().prepareForUpdate()).rejects.toThrow()
+  })
+})
+
 describe('AssistantRuntimeClient Managed Session', () => {
   it('使用本地启动令牌更新并查询脱敏 Session 状态', async () => {
     const fetcher = vi.fn<typeof fetch>()

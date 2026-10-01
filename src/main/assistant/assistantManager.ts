@@ -38,6 +38,7 @@ import type {
 } from '../../shared/assistant'
 import { ASSISTANT_PROTOCOL_VERSION } from '../../shared/assistant'
 import { loadSettings } from '../store'
+import { UpdateActivityGate } from '../update/updateActivityGate'
 import { logError, logInfo } from '../logger'
 import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess, type AssistantRuntimeLifecycle } from './runtimeProcess'
@@ -99,6 +100,7 @@ export class AssistantManager {
     webSearch: this.webSettings.snapshot()
   }))
   private readonly runtime: AssistantRuntimeProcess
+  private readonly updateGate: UpdateActivityGate
   private readonly toolHost = new AssistantToolHost(this.webSearch)
   private readonly activeTasks = new Map<string, ActiveTask>()
   private readonly pendingPermissions = new Map<string, PendingPermission>()
@@ -145,6 +147,7 @@ export class AssistantManager {
     onStatus: (status: AssistantRuntimeStatus) => void,
     private readonly onEvent: (event: AssistantEvent) => void,
     runtimeLifecycle: AssistantRuntimeLifecycle & {
+      updateGate?: UpdateActivityGate
       getManagedChatState?: () => {
         enabled: boolean
         authenticated: boolean
@@ -190,6 +193,7 @@ export class AssistantManager {
       })
     }
   ) {
+    this.updateGate = runtimeLifecycle.updateGate || new UpdateActivityGate()
     this.getManagedChatState = runtimeLifecycle.getManagedChatState || (() => ({
       enabled: false,
       authenticated: false,
@@ -706,6 +710,22 @@ export class AssistantManager {
     await this.runtime.stop()
   }
 
+  /** Main 任务与 Runtime 后台活动都为空闲时才冻结安装。 */
+  async prepareForUpdate(): Promise<boolean> {
+    if (this.activeTasks.size > 0 || this.pendingPermissions.size > 0) return false
+    return this.runtime.prepareForUpdate()
+  }
+
+  /** 更新安装禁止强杀 Runtime，必须等待数据库和内层进程优雅退出。 */
+  async stopForUpdate(): Promise<void> {
+    await this.runtime.stop(true)
+  }
+
+  /** 安装准备失败后开放助手入口，不主动取消任何任务。 */
+  async resumeAfterUpdate(): Promise<void> {
+    await this.runtime.resumeAfterUpdate()
+  }
+
   /** 获取 Runtime 返回的脱敏记忆摘要，Renderer 不直接访问数据库。 */
   async getMemorySnapshot(): Promise<AssistantMemorySnapshot> {
     const client = await this.runtime.start()
@@ -894,7 +914,7 @@ export class AssistantManager {
     state.lastRuntimeSequence = event.sequence
 
     if (event.type === 'tool_call') {
-      void this.processToolCall(event.taskId, event.payload).catch((error: unknown) => {
+      void this.updateGate.run(() => this.processToolCall(event.taskId, event.payload)).catch((error: unknown) => {
         logError('assistant tool call failed', error)
       })
       return

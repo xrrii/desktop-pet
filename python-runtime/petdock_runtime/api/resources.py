@@ -58,6 +58,7 @@ class RuntimeResources:
     async def close(self) -> None:
         """按依赖顺序关闭后台任务、索引和数据库连接。"""
         LOGGER.info("开始关闭 Runtime 服务资源")
+        await self.assistant.close()
         self.managed_session.clear()
         await self.managed_auth_refresh.close()
         await self.chat_models.close()

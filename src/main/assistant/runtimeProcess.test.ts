@@ -108,4 +108,56 @@ describe('AssistantRuntimeProcess', () => {
     expect(child.kill).not.toHaveBeenCalled()
     expect(statuses.at(-1)).toBe('stopped')
   })
+
+  it('更新准备冻结后拒绝新启动，恢复后重新开放助手', async () => {
+    const runtime = new AssistantRuntimeProcess(vi.fn())
+    await expect(runtime.prepareForUpdate()).resolves.toBe(true)
+    await expect(runtime.start()).rejects.toThrow('正在准备安装更新')
+    expect(mocks.spawn).not.toHaveBeenCalled()
+    await runtime.resumeAfterUpdate()
+    expect(runtime.getStatus().state).toBe('stopped')
+  })
+
+  it('严格优雅退出正常完成时只发送一次停止通知', async () => {
+    const child = createRuntimeChild()
+    mocks.spawn.mockReturnValue(child)
+    vi.spyOn(AssistantRuntimeClient.prototype, 'health').mockResolvedValue()
+    vi.spyOn(AssistantRuntimeClient.prototype, 'shutdown').mockImplementation(async () => {
+      child.exitCode = 0
+      child.emit('exit', 0, null)
+    })
+    const onStopped = vi.fn()
+    const runtime = new AssistantRuntimeProcess(vi.fn(), () => ({}), { onStopped })
+    const starting = runtime.start()
+    child.stdout.write(`${JSON.stringify({ type: 'ready', protocolVersion: 1, port: 3210, pid: 1234, backend: 'mock' })}\n`)
+    await starting
+    await runtime.stop(true)
+    expect(onStopped).toHaveBeenCalledOnce()
+    expect(child.kill).not.toHaveBeenCalled()
+  })
+
+  it('更新要求优雅停机，超时不强杀、不创建第二个 Runtime', async () => {
+    vi.useFakeTimers()
+    const child = createRuntimeChild()
+    mocks.spawn.mockReturnValue(child)
+    vi.spyOn(AssistantRuntimeClient.prototype, 'health').mockResolvedValue()
+    vi.spyOn(AssistantRuntimeClient.prototype, 'shutdown').mockResolvedValue()
+    vi.spyOn(AssistantRuntimeClient.prototype, 'prepareForUpdate').mockResolvedValue(true)
+    vi.spyOn(AssistantRuntimeClient.prototype, 'resumeAfterUpdate').mockResolvedValue()
+    const runtime = new AssistantRuntimeProcess(vi.fn())
+    const starting = runtime.start()
+    child.stdout.write(`${JSON.stringify({ type: 'ready', protocolVersion: 1, port: 3210, pid: 1234, backend: 'mock' })}\n`)
+    await starting
+    await runtime.prepareForUpdate()
+    const stopping = runtime.stop(true)
+    const rejection = expect(stopping).rejects.toThrow('未完成优雅退出')
+    await vi.advanceTimersByTimeAsync(3_000)
+    await rejection
+    expect(child.kill).not.toHaveBeenCalled()
+    await runtime.resumeAfterUpdate()
+    await expect(runtime.start()).rejects.toThrow('停机状态不可确认')
+    expect(mocks.spawn).toHaveBeenCalledOnce()
+    child.exitCode = 0
+    child.emit('exit', 0, null)
+  })
 })

@@ -53,6 +53,7 @@ class AssistantService:
         self._extractor = extractor
         self._prepare_attachments = prepare_attachments
         self._sessions: dict[str, TaskSession] = {}
+        self._running_tasks: set[asyncio.Task[None]] = set()
 
     def start(self, request: AssistantRequest) -> None:
         """创建任务会话并启动后台执行协程。"""
@@ -61,6 +62,26 @@ class AssistantService:
         session = TaskSession()
         self._sessions[request.taskId] = session
         session.task = asyncio.create_task(self._run(request, session))
+        self._running_tasks.add(session.task)
+        session.task.add_done_callback(self._running_tasks.discard)
+
+    def active_task_count(self) -> int:
+        """统计真实协程，而非 SSE 会话；流断开后后台任务仍参与安装互锁。"""
+        return sum(not task.done() for task in self._running_tasks)
+
+    def memory_task_count(self) -> int:
+        """主任务 done 后的记忆写入仍阻止更新安装。"""
+        return self._extractor.active_task_count() if self._extractor else 0
+
+    async def close(self) -> None:
+        """停机时先收束助手任务和记忆任务，再允许资源层关闭数据库。"""
+        pending = list(self._running_tasks)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        if self._extractor:
+            await self._extractor.close()
 
     async def events(self, task_id: str):
         """消费指定任务的单次 SSE 事件流，并在结束后释放会话。"""

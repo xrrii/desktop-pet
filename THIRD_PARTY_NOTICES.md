@@ -28,36 +28,51 @@ PetDock 的 MIT 许可证仅覆盖项目自有代码和文档。下列组件继�
 | @types/trusted-types | 2.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/trusted-types |
 | argparse | 2.0.1 | Python-2.0 | nodeca/argparse |
 | bidi-js | 1.0.3 | MIT | https://github.com/lojjic/bidi-js |
+| builder-util-runtime | 9.5.1 | MIT | https://github.com/electron-userland/electron-builder |
 | css-tree | 3.2.1 | MIT | csstree/csstree |
 | data-urls | 7.0.0 | MIT | https://github.com/jsdom/data-urls |
+| debug | 4.4.3 | MIT | git://github.com/debug-js/debug |
 | decimal.js | 10.6.0 | MIT | https://github.com/MikeMcl/decimal.js |
 | dompurify | 3.4.13 | (MPL-2.0 OR Apache-2.0) | https://github.com/cure53/DOMPurify |
+| electron-updater | 6.8.3 | MIT | https://github.com/electron-userland/electron-builder |
 | entities | 4.5.0 | BSD-2-Clause | git://github.com/fb55/entities |
 | entities | 8.0.0 | BSD-2-Clause | https://github.com/fb55/entities |
+| fs-extra | 10.1.0 | MIT | https://github.com/jprichardson/node-fs-extra |
+| graceful-fs | 4.2.11 | ISC | https://github.com/isaacs/node-graceful-fs |
 | html-encoding-sniffer | 6.0.0 | MIT | https://github.com/jsdom/html-encoding-sniffer |
 | is-potential-custom-element-name | 1.0.1 | MIT | https://github.com/mathiasbynens/is-potential-custom-element-name |
 | jose | 6.2.9 | MIT | https://github.com/panva/jose |
+| js-yaml | 4.3.1 | MIT | nodeca/js-yaml |
 | jsdom | 29.1.1 | MIT | https://github.com/jsdom/jsdom |
+| jsonfile | 6.2.1 | MIT | git@github.com:jprichardson/node-jsonfile |
+| lazy-val | 1.0.5 | MIT | https://github.com/develar/lazy-val |
 | linkify-it | 5.0.2 | MIT | markdown-it/linkify-it |
+| lodash.escaperegexp | 4.1.2 | MIT | https://lodash.com/ |
+| lodash.isequal | 4.5.0 | MIT | https://lodash.com/ |
 | lru-cache | 11.5.2 | BlueOak-1.0.0 | ssh://git@github.com/isaacs/node-lru-cache |
 | markdown-it | 14.3.0 | MIT | markdown-it/markdown-it |
 | mdn-data | 2.27.1 | CC0-1.0 | https://developer.mozilla.org |
 | mdurl | 2.1.0 | MIT | https://github.com/markdown-it/mdurl |
+| ms | 2.1.3 | MIT | vercel/ms |
 | oauth4webapi | 3.8.7 | MIT | https://github.com/panva/oauth4webapi |
 | openid-client | 6.8.1 | MIT | https://github.com/panva/openid-client |
 | parse5 | 8.0.1 | MIT | https://parse5.js.org |
 | punycode.js | 2.3.1 | MIT | https://mths.be/punycode |
 | punycode | 2.3.1 | MIT | https://mths.be/punycode |
 | require-from-string | 2.0.2 | MIT | floatdrop/require-from-string |
+| sax | 1.6.0 | BlueOak-1.0.0 | ssh://git@github.com/isaacs/sax-js |
 | saxes | 6.0.0 | ISC | https://github.com/lddubeau/saxes |
+| semver | 7.7.4 | ISC | https://github.com/npm/node-semver |
 | source-map-js | 1.2.1 | BSD-3-Clause | https://github.com/7rulnik/source-map-js |
 | symbol-tree | 3.2.4 | MIT | https://github.com/jsdom/js-symbol-tree#symbol-tree |
+| tiny-typed-emitter | 2.1.0 | MIT | https://github.com/binier/tiny-typed-emitter |
 | tldts-core | 7.4.9 | MIT | https://github.com/remusao/tldts#readme |
 | tldts | 7.4.9 | MIT | https://github.com/remusao/tldts#readme |
 | tough-cookie | 6.0.2 | BSD-3-Clause | https://github.com/salesforce/tough-cookie |
 | tr46 | 6.0.0 | MIT | https://github.com/jsdom/tr46 |
 | uc.micro | 2.1.0 | MIT | markdown-it/uc.micro |
 | undici | 7.29.0 | MIT | https://undici.nodejs.org |
+| universalify | 2.0.1 | MIT | https://github.com/RyanZim/universalify#readme |
 | w3c-xmlserializer | 5.0.0 | MIT | jsdom/w3c-xmlserializer |
 | webidl-conversions | 8.0.1 | BSD-2-Clause | https://github.com/jsdom/webidl-conversions |
 | whatwg-mimetype | 5.0.0 | MIT | jsdom/whatwg-mimetype |
@@ -188,7 +203,8 @@ PetDock 的 MIT 许可证仅覆盖项目自有代码和文档。下列组件继�
 
 ## 人工复核
 
-- 所有条目均已找到许可证正文或元数据中的完整许可证文本。
+- 以下条目未找到许可证正文，正式发布前必须从上游补齐：
+  - npm: `lazy-val@1.0.5`（MIT）
 - 自动识别结果不能替代对上游许可证、NOTICE、商标和素材条款的发布前审阅。
 - 升级锁文件、改变打包入口或新增依赖后，必须重新运行 `npm run licenses`。
 

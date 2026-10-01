@@ -26,6 +26,7 @@ export class AssistantRuntimeProcess {
   private client: AssistantRuntimeClient | null = null
   private startPromise: Promise<AssistantRuntimeClient> | null = null
   private stopping = false
+  private updatePrepared = false
   private status: AssistantRuntimeStatus = { state: 'stopped', backend: null, error: null }
 
   constructor(
@@ -39,6 +40,12 @@ export class AssistantRuntimeProcess {
   }
 
   async start(): Promise<AssistantRuntimeClient> {
+    if (this.updatePrepared) {
+      throw new Error('正在准备安装更新，暂不能启动助手。')
+    }
+    if (this.child && this.status.state === 'failed') {
+      throw new Error('助手停机状态不可确认，请先退出应用再重试。')
+    }
     if (this.client && this.status.state === 'ready') {
       return this.client
     }
@@ -53,7 +60,7 @@ export class AssistantRuntimeProcess {
   }
 
   /** 停止 Runtime；若冷启动仍在进行，先等待 client 就绪以便关闭 PyInstaller 内层进程。 */
-  async stop(): Promise<void> {
+  async stop(requireGraceful = false): Promise<void> {
     this.stopping = true
     if (this.startPromise) {
       await this.startPromise.catch(() => undefined)
@@ -69,24 +76,60 @@ export class AssistantRuntimeProcess {
 
     this.setStatus({ ...this.status, state: 'stopping', error: null })
     const client = this.client
-    if (client) {
+    if (client && !requireGraceful) {
       this.lifecycle.onStopped?.(client)
       this.client = null
     }
-    await client?.shutdown().catch(() => undefined)
+    try {
+      await client?.shutdown()
+    } catch (error) {
+      if (requireGraceful) {
+        this.stopping = false
+        this.setStatus({ ...this.status, state: 'failed', error: '助手停机状态不可确认，已延后更新安装。' })
+        throw error
+      }
+    }
 
     if (child.exitCode === null) {
       const exited = await waitForExit(child, STOP_TIMEOUT_MS)
       if (!exited) {
+        if (requireGraceful) {
+          this.stopping = false
+          this.setStatus({ ...this.status, state: 'failed', error: '助手未完成优雅退出，已延后更新安装。' })
+          throw new Error('助手未完成优雅退出，已延后更新安装。')
+        }
         child.kill()
         await waitForExit(child, 1_000)
       }
     }
 
+    if (client && requireGraceful && this.client === client) {
+      this.lifecycle.onStopped?.(client)
+    }
     this.child = null
     this.client = null
     this.stopping = false
     this.setStatus({ state: 'stopped', backend: null, error: null })
+  }
+
+  /** 禁止后续启动，并由正在运行的 Runtime 原子确认后台任务已全部完成。 */
+  async prepareForUpdate(): Promise<boolean> {
+    if (this.status.state === 'stopped' && !this.child && !this.startPromise) {
+      this.updatePrepared = true
+      return true
+    }
+    if (this.status.state !== 'ready' || !this.client || this.startPromise) return false
+    this.updatePrepared = true
+    return this.client.prepareForUpdate()
+  }
+
+  /** 恢复未停机的 Runtime，并重新允许用户启动助手。 */
+  async resumeAfterUpdate(): Promise<void> {
+    try {
+      if (this.client) await this.client.resumeAfterUpdate()
+    } finally {
+      this.updatePrepared = false
+    }
   }
 
   /** 释放旧 Provider 后按最新模型配置启动新的 Runtime。 */

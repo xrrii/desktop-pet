@@ -9,7 +9,8 @@ import {
   type IpcMainInvokeEvent
 } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { basename, extname, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import type {
   AssistantAskInput,
   AssistantAttachmentDropZone,
@@ -49,6 +50,11 @@ import { ManagedRuntimeAuthRefreshHandler } from './managed/managedRuntimeAuthRe
 import { ManagedServerClock } from './managed/managedServerClock'
 import { ScreenshotManager } from './screenshotManager'
 import { configureSingleInstance } from './singleInstance'
+import { UpdateActivityGate } from './update/updateActivityGate'
+import { DesktopUpdateManager } from './update/updateManager'
+import { createReleaseDesktopUpdater } from './update/electronDesktopUpdater'
+import { detectUpdatePackageKind } from './update/updatePolicy'
+import { DesktopUpdateUi } from './update/updateUi'
 import { setAssistantTheme } from './theme'
 import {
   createUserPet,
@@ -94,6 +100,8 @@ if (process.env.PETDOCK_SMOKE_DISABLE_GPU === '1') {
 
 let petWindow: BrowserWindow | null = null
 let quitAfterRuntimeStops = false
+let quitInProgress = false
+const updateGate = new UpdateActivityGate()
 let smokeArtifactSaveCancelled = false
 let activeManagedPortalRefresh: Promise<void> | null = null
 const pendingPetSpritesheetSelections = new Map<string, { filePath: string; fileName: string }>()
@@ -117,6 +125,7 @@ assistantManager = new AssistantManager(
   (status) => petWindow?.webContents.send('assistant:status', status),
   (event) => petWindow?.webContents.send('assistant:event', event),
   {
+    updateGate,
     onReady: (client) => managedRuntimeTokenBroker.attachRuntime(client),
     onStopped: (client) => managedRuntimeTokenBroker.detachRuntime(client),
     getManagedChatState: () => managedAuthManager?.getManagedChatState() || {
@@ -179,24 +188,58 @@ const screenshotManager = new ScreenshotManager(
   assistantManager,
   (window) => openAssistantForPet(window),
   (result) => petWindow?.webContents.send('assistant:attachments-staged', result),
-  (message) => petWindow?.webContents.send('assistant:attachment-stage-error', message)
+  (message) => petWindow?.webContents.send('assistant:attachment-stage-error', message),
+  updateGate
 )
 managedAuthManager = new ManagedAuthManager(managedEndpointPolicy, app.getVersion(), {
   runtimeTokenBroker: managedRuntimeTokenBroker,
   serverClock: managedServerClock,
   onRuntimeSessionReady: async () => {
     try {
-      await assistantManager.reindexAllKnowledge()
+      await updateGate.run(() => assistantManager.reindexAllKnowledge())
     } catch (error: unknown) {
       logError('Managed Runtime Session 就绪后的知识库重建失败', error)
     }
   },
   onCapabilityPreferencesSync: async (snapshot) => {
-    await assistantManager.synchronizeManagedCapabilities(snapshot)
+    await updateGate.run(() => assistantManager.synchronizeManagedCapabilities(snapshot))
   },
   isManagedServiceSelected: () => assistantManager.getServiceModeSelection() === 'managed',
   onStatusChange: (status) => petWindow?.webContents.send('managed:status-changed', status)
 })
+
+const updateKind = detectUpdatePackageKind({
+  platform: process.platform,
+  packaged: app.isPackaged,
+  portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR),
+  nsisInstalled: existsSync(join(dirname(process.execPath), 'Uninstall PetDock.exe'))
+})
+const desktopUpdates = new DesktopUpdateManager(
+  updateKind, createReleaseDesktopUpdater(updateKind), updateGate,
+  {
+    prepare: async () => !quitInProgress && !screenshotManager.isBusy() && await assistantManager.prepareForUpdate(),
+    stop: async () => {
+      flushSettings()
+      await assistantManager.stopForUpdate()
+    },
+    resume: () => assistantManager.resumeAfterUpdate()
+  },
+  () => { if (petWindow && !petWindow.isDestroyed()) rebuildTrayMenu(petWindow) },
+  (message) => logInfo(message),
+  ['development', 'unpacked', 'unsupported'].includes(updateKind)
+    ? '当前运行形态不启用自动更新。'
+    : '正式更新源与独立签名验证尚未就绪。'
+)
+const desktopUpdateUi = new DesktopUpdateUi(desktopUpdates)
+
+/** 保持现有 IPC 授权校验，并把请求从对话框开始到最终写入统一纳入安装互锁。 */
+function handlePetIpc(channel: string, listener: (event: IpcMainInvokeEvent, ...args: any[]) => any): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    requirePetSender(event)
+    if (quitInProgress) throw new Error('应用正在退出。')
+    return updateGate.run(() => listener(event, ...args))
+  })
+}
 
 /**
  * 打开 Artifact 原生保存对话框；仅在自动化 Smoke 明确注入变量时提供确定性选择结果。
@@ -238,43 +281,43 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('pet:move-window', (event, x: number, y: number) => {
+  handlePetIpc('pet:move-window', (event, x: number, y: number) => {
     const window = requirePetSender(event)
     requireFiniteNumbers(x, y)
     return movePetWindow(window, x, y)
   })
 
-  ipcMain.handle('pet:get-window-position', (event) => {
+  handlePetIpc('pet:get-window-position', (event) => {
     const window = requirePetSender(event)
     return getPetWindowPosition(window)
   })
 
-  ipcMain.handle('pet:begin-drag', (event) => {
+  handlePetIpc('pet:begin-drag', (event) => {
     const window = requirePetSender(event)
     return beginPetWindowDrag(window, 0, 0)
   })
 
-  ipcMain.handle('pet:begin-drag-at', (event, grabOffsetX: number, grabOffsetY: number) => {
+  handlePetIpc('pet:begin-drag-at', (event, grabOffsetX: number, grabOffsetY: number) => {
     const window = requirePetSender(event)
     requireFiniteNumbers(grabOffsetX, grabOffsetY)
     return beginPetWindowDrag(window, grabOffsetX, grabOffsetY)
   })
 
-  ipcMain.handle('pet:drag-window', (event) => {
+  handlePetIpc('pet:drag-window', (event) => {
     const window = requirePetSender(event)
     return dragPetWindow(window)
   })
 
-  ipcMain.handle('pet:end-drag', (event) => {
+  handlePetIpc('pet:end-drag', (event) => {
     endPetWindowDrag(requirePetSender(event))
   })
 
-  ipcMain.handle('pet:reset-position', (event) => {
+  handlePetIpc('pet:reset-position', (event) => {
     const window = requirePetSender(event)
     return resetPetWindowPosition(window)
   })
 
-  ipcMain.handle('pet:set-always-on-top', (event, value: boolean) => {
+  handlePetIpc('pet:set-always-on-top', (event, value: boolean) => {
     const window = requirePetSender(event)
     requireBoolean(value)
     const next = setAlwaysOnTop(window, value)
@@ -282,7 +325,7 @@ function registerIpc(): void {
     return next
   })
 
-  ipcMain.handle('pet:set-click-through', (event, value: boolean) => {
+  handlePetIpc('pet:set-click-through', (event, value: boolean) => {
     const window = requirePetSender(event)
     requireBoolean(value)
     const next = setClickThrough(window, value)
@@ -290,23 +333,23 @@ function registerIpc(): void {
     return next
   })
 
-  ipcMain.handle('pet:set-transparent-area-click-through', (event, value: boolean) => {
+  handlePetIpc('pet:set-transparent-area-click-through', (event, value: boolean) => {
     const window = requirePetSender(event)
     requireBoolean(value)
     setTransparentAreaClickThrough(window, value)
   })
 
-  ipcMain.handle('pet:get-settings', (event) => {
+  handlePetIpc('pet:get-settings', (event) => {
     requirePetSender(event)
     return loadSettings()
   })
 
-  ipcMain.handle('pet:list-available', (event) => {
+  handlePetIpc('pet:list-available', (event) => {
     requirePetSender(event)
     return listAvailablePets()
   })
 
-  ipcMain.handle('pet:pick-spritesheet', async (event) => {
+  handlePetIpc('pet:pick-spritesheet', async (event) => {
     const window = requirePetSender(event)
     const selection = await dialog.showOpenDialog(window, {
       title: '选择桌宠 spritesheet 图集',
@@ -327,7 +370,7 @@ function registerIpc(): void {
     return result
   })
 
-  ipcMain.handle('pet:load-manifest', (event, petId: string) => {
+  handlePetIpc('pet:load-manifest', (event, petId: string) => {
     requirePetSender(event)
     requireString(petId)
     if (!isAvailablePet(petId)) {
@@ -336,7 +379,7 @@ function registerIpc(): void {
     return readPetManifest(petId)
   })
 
-  ipcMain.handle('pet:load-spritesheet', (event, petId: string, spritesheetPath: string) => {
+  handlePetIpc('pet:load-spritesheet', (event, petId: string, spritesheetPath: string) => {
     requirePetSender(event)
     requireString(petId)
     requireString(spritesheetPath)
@@ -346,7 +389,7 @@ function registerIpc(): void {
     return readPetSpritesheetDataUrl(petId, spritesheetPath)
   })
 
-  ipcMain.handle('pet:create', (event, input: CreatePetInput) => {
+  handlePetIpc('pet:create', (event, input: CreatePetInput) => {
     const window = requirePetSender(event)
     const nextInput = requireCreatePetInput(input)
     const selection = requirePetSpritesheetSelection(nextInput.spritesheetToken)
@@ -361,7 +404,7 @@ function registerIpc(): void {
     return pet
   })
 
-  ipcMain.handle('pet:set-current', (event, petId: string) => {
+  handlePetIpc('pet:set-current', (event, petId: string) => {
     const window = requirePetSender(event)
     requireString(petId)
     if (!isAvailablePet(petId)) {
@@ -373,7 +416,7 @@ function registerIpc(): void {
     return true
   })
 
-  ipcMain.handle('pet:delete-user', (event, petId: string) => {
+  handlePetIpc('pet:delete-user', (event, petId: string) => {
     const window = requirePetSender(event)
     requireString(petId)
     const deleted = deleteUserPet(petId)
@@ -392,7 +435,7 @@ function registerIpc(): void {
     return true
   })
 
-  ipcMain.handle('pet:open-user-pets-dir', async (event) => {
+  handlePetIpc('pet:open-user-pets-dir', async (event) => {
     requirePetSender(event)
     const result = await shell.openPath(ensureUserPetsRoot())
     if (result) {
@@ -400,22 +443,22 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('pet:show-context-menu', (event) => {
+  handlePetIpc('pet:show-context-menu', (event) => {
     const window = requirePetSender(event)
     createPetContextMenu(window).popup({ window })
   })
 
-  ipcMain.handle('app:quit', (event) => {
+  handlePetIpc('app:quit', (event) => {
     requirePetSender(event)
     app.quit()
   })
 
-  ipcMain.handle('assistant:open', (event) => {
+  handlePetIpc('assistant:open', (event) => {
     const window = requirePetSender(event)
     openAssistantForPet(window)
   })
 
-  ipcMain.handle('assistant:open-external-url', async (event, value: unknown) => {
+  handlePetIpc('assistant:open-external-url', async (event, value: unknown) => {
     requirePetSender(event)
     const url = requireExternalHttpUrl(value)
     try {
@@ -427,7 +470,7 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('assistant:copy-text', (event, value: unknown) => {
+  handlePetIpc('assistant:copy-text', (event, value: unknown) => {
     requirePetSender(event)
     const text = requireClipboardText(value)
     try {
@@ -439,38 +482,38 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('assistant:get-status', (event) => {
+  handlePetIpc('assistant:get-status', (event) => {
     requirePetSender(event)
     return assistantManager.getStatus()
   })
 
-  ipcMain.handle('assistant:get-web-settings', (event) => {
+  handlePetIpc('assistant:get-web-settings', (event) => {
     requirePetSender(event)
     return assistantManager.getWebSettings()
   })
 
-  ipcMain.handle('assistant:set-web-settings', (event, input: AssistantWebSettingsInput) => {
+  handlePetIpc('assistant:set-web-settings', (event, input: AssistantWebSettingsInput) => {
     requirePetSender(event)
     return assistantManager.configureWebSettings(input)
   })
 
-  ipcMain.handle('assistant:test-web-search', (event) => {
+  handlePetIpc('assistant:test-web-search', (event) => {
     requirePetSender(event)
     return assistantManager.testWebSearch()
   })
 
-  ipcMain.handle('assistant:get-layout', (event) => {
+  handlePetIpc('assistant:get-layout', (event) => {
     return getPetWindowLayout(requirePetSender(event))
   })
 
-  ipcMain.handle('assistant:set-theme', (event, theme: unknown) => {
+  handlePetIpc('assistant:set-theme', (event, theme: unknown) => {
     const window = requirePetSender(event)
     const next = setAssistantTheme(window, theme)
     rebuildTrayMenu(window)
     return next
   })
 
-  ipcMain.handle('assistant:ask', (event, request: AssistantAskInput) => {
+  handlePetIpc('assistant:ask', (event, request: AssistantAskInput) => {
     requirePetSender(event)
     if (!request || typeof request !== 'object') {
       throw new TypeError('Assistant request is invalid.')
@@ -478,42 +521,42 @@ function registerIpc(): void {
     return assistantManager.ask(request)
   })
 
-  ipcMain.handle('assistant:get-document-capabilities', (event) => {
+  handlePetIpc('assistant:get-document-capabilities', (event) => {
     requirePetSender(event)
     return assistantManager.getDocumentCapabilities()
   })
 
-  ipcMain.handle('assistant:test-vision', (event) => {
+  handlePetIpc('assistant:test-vision', (event) => {
     requirePetSender(event)
     return assistantManager.testVision()
   })
 
-  ipcMain.handle('assistant:get-vision-settings', (event) => {
+  handlePetIpc('assistant:get-vision-settings', (event) => {
     requirePetSender(event)
     return assistantManager.getVisionSettings()
   })
 
-  ipcMain.handle('assistant:set-vision-settings', (event, input: AssistantVisionSettingsInput) => {
+  handlePetIpc('assistant:set-vision-settings', (event, input: AssistantVisionSettingsInput) => {
     requirePetSender(event)
     return assistantManager.configureVisionSettings(input)
   })
 
-  ipcMain.handle('assistant:get-model-settings', (event) => {
+  handlePetIpc('assistant:get-model-settings', (event) => {
     requirePetSender(event)
     return assistantManager.getModelSettings()
   })
 
-  ipcMain.handle('managed:get-status', (event) => {
+  handlePetIpc('managed:get-status', (event) => {
     requirePetSender(event)
     return managedAuthManager.getStatus()
   })
 
-  ipcMain.handle('managed:refresh-features', (event) => {
+  handlePetIpc('managed:refresh-features', (event) => {
     requirePetSender(event)
     return managedAuthManager.refreshFeatures()
   })
 
-  ipcMain.handle('managed:get-usage-summary', async (event): Promise<ManagedUsageSummaryResult> => {
+  handlePetIpc('managed:get-usage-summary', async (event): Promise<ManagedUsageSummaryResult> => {
     requirePetSender(event)
     try {
       return await managedAuthManager.getUsageSummary()
@@ -526,7 +569,7 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('managed:open-portal', async (event, target: unknown) => {
+  handlePetIpc('managed:open-portal', async (event, target: unknown) => {
     requirePetSender(event)
     const portalTarget = requireManagedPortalTarget(target)
     const url = resolveManagedPortalUrl(
@@ -544,37 +587,37 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('managed:refresh-portal-return', (event) => {
+  handlePetIpc('managed:refresh-portal-return', (event) => {
     requirePetSender(event)
     return refreshManagedPortalStatus()
   })
 
-  ipcMain.handle('managed:login', (event) => {
+  handlePetIpc('managed:login', (event) => {
     requirePetSender(event)
     return managedAuthManager.login()
   })
 
-  ipcMain.handle('managed:cancel-login', (event) => {
+  handlePetIpc('managed:cancel-login', (event) => {
     requirePetSender(event)
     return managedAuthManager.cancel()
   })
 
-  ipcMain.handle('managed:logout', (event) => {
+  handlePetIpc('managed:logout', (event) => {
     requirePetSender(event)
     return managedAuthManager.logout()
   })
 
-  ipcMain.handle('managed:revoke-current-device', (event) => {
+  handlePetIpc('managed:revoke-current-device', (event) => {
     requirePetSender(event)
     return managedAuthManager.revokeCurrentDevice()
   })
 
-  ipcMain.handle('assistant:get-capability-settings', (event) => {
+  handlePetIpc('assistant:get-capability-settings', (event) => {
     requirePetSender(event)
     return assistantManager.getCapabilitySettings()
   })
 
-  ipcMain.handle('assistant:set-chat-source', async (event, source: unknown) => {
+  handlePetIpc('assistant:set-chat-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Chat 来源无效。')
@@ -585,7 +628,7 @@ function registerIpc(): void {
     }
     return assistantManager.setChatSource(source)
   })
-  ipcMain.handle('assistant:set-service-mode', async (event, mode: unknown) => {
+  handlePetIpc('assistant:set-service-mode', async (event, mode: unknown) => {
     requirePetSender(event)
     if (mode !== 'byok' && mode !== 'managed') {
       throw new TypeError('助手服务模式无效。')
@@ -608,7 +651,7 @@ function registerIpc(): void {
     }
     return assistantManager.setServiceMode(mode as AssistantServiceMode)
   })
-  ipcMain.handle('assistant:set-web-search-source', async (event, source: unknown) => {
+  handlePetIpc('assistant:set-web-search-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Web Search 来源无效。')
@@ -619,7 +662,7 @@ function registerIpc(): void {
     }
     return assistantManager.setWebSearchSource(source)
   })
-  ipcMain.handle('assistant:set-vision-source', async (event, source: unknown) => {
+  handlePetIpc('assistant:set-vision-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'byok' && source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Vision 来源无效。')
@@ -630,7 +673,7 @@ function registerIpc(): void {
     }
     return assistantManager.setVisionSource(source)
   })
-  ipcMain.handle('assistant:set-embedding-source', async (event, source: unknown) => {
+  handlePetIpc('assistant:set-embedding-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'managed' && source !== 'local' && source !== 'byok') {
       throw new TypeError('Embedding 来源无效。')
@@ -641,7 +684,7 @@ function registerIpc(): void {
     }
     return assistantManager.setEmbeddingSource(source)
   })
-  ipcMain.handle('assistant:set-rerank-source', async (event, source: unknown) => {
+  handlePetIpc('assistant:set-rerank-source', async (event, source: unknown) => {
     requirePetSender(event)
     if (source !== 'managed' && source !== 'disabled') {
       throw new TypeError('Rerank 来源无效。')
@@ -653,12 +696,12 @@ function registerIpc(): void {
     return assistantManager.setRerankSource(source)
   })
 
-  ipcMain.handle('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {
+  handlePetIpc('assistant:set-model-settings', (event, input: AssistantModelSettingsInput) => {
     requirePetSender(event)
     return assistantManager.configureModelSettings(input)
   })
 
-  ipcMain.handle(
+  handlePetIpc(
     'assistant:stage-dropped-files',
     async (event, paths: unknown, dropZone: unknown) => {
       const window = requirePetSender(event)
@@ -672,7 +715,7 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('assistant:pick-attachments', async (event) => {
+  handlePetIpc('assistant:pick-attachments', async (event) => {
     const window = requirePetSender(event)
     const selection = await dialog.showOpenDialog(window, {
       title: '选择要添加到对话的文件',
@@ -684,28 +727,28 @@ function registerIpc(): void {
     return assistantManager.stageAttachments(selection.filePaths)
   })
 
-  ipcMain.handle('assistant:remove-attachment', (event, attachmentId: unknown) => {
+  handlePetIpc('assistant:remove-attachment', (event, attachmentId: unknown) => {
     requirePetSender(event)
     requireAttachmentId(attachmentId)
     return assistantManager.removeDraftAttachment(attachmentId)
   })
 
-  ipcMain.handle('assistant:preview-attachment', (event, input: AssistantAttachmentPreviewInput) => {
+  handlePetIpc('assistant:preview-attachment', (event, input: AssistantAttachmentPreviewInput) => {
     requirePetSender(event)
     return assistantManager.previewAttachment(input)
   })
 
-  ipcMain.handle('assistant:preview-artifact', (event, input: AssistantArtifactPreviewInput) => {
+  handlePetIpc('assistant:preview-artifact', (event, input: AssistantArtifactPreviewInput) => {
     requirePetSender(event)
     return assistantManager.previewArtifact(input)
   })
 
-  ipcMain.handle('assistant:delete-artifact', (event, input: AssistantArtifactAccessInput) => {
+  handlePetIpc('assistant:delete-artifact', (event, input: AssistantArtifactAccessInput) => {
     requirePetSender(event)
     return assistantManager.deleteArtifact(input)
   })
 
-  ipcMain.handle('assistant:save-artifact', async (event, input: AssistantArtifactAccessInput) => {
+  handlePetIpc('assistant:save-artifact', async (event, input: AssistantArtifactAccessInput) => {
     const window = requirePetSender(event)
     const artifact = await assistantManager.getArtifact(input)
     if (artifact.status !== 'ready') {
@@ -746,12 +789,12 @@ function registerIpc(): void {
     }
   })
 
-  ipcMain.handle('assistant:cancel', (event, taskId: string) => {
+  handlePetIpc('assistant:cancel', (event, taskId: string) => {
     requirePetSender(event)
     return assistantManager.cancel(taskId)
   })
 
-  ipcMain.handle('assistant:resolve-permission', (event, input: AssistantPermissionResolution) => {
+  handlePetIpc('assistant:resolve-permission', (event, input: AssistantPermissionResolution) => {
     requirePetSender(event)
     if (!input || typeof input !== 'object') {
       throw new TypeError('Permission resolution is invalid.')
@@ -759,31 +802,31 @@ function registerIpc(): void {
     return assistantManager.resolvePermission(input)
   })
 
-  ipcMain.handle('assistant:get-memory', (event) => {
+  handlePetIpc('assistant:get-memory', (event) => {
     requirePetSender(event)
     return assistantManager.getMemorySnapshot()
   })
 
-  ipcMain.handle('assistant:get-conversation-messages', (event, conversationId: string) => {
+  handlePetIpc('assistant:get-conversation-messages', (event, conversationId: string) => {
     requirePetSender(event)
     requireMemoryId(conversationId)
     return assistantManager.getConversationMessages(conversationId)
   })
 
-  ipcMain.handle('assistant:delete-memory-item', (event, kind: MemoryItemKind, id: string) => {
+  handlePetIpc('assistant:delete-memory-item', (event, kind: MemoryItemKind, id: string) => {
     requirePetSender(event)
     requireMemoryKind(kind)
     requireMemoryId(id)
     return assistantManager.deleteMemoryItem(kind, id)
   })
 
-  ipcMain.handle('assistant:clear-memory', (event, scope: MemoryClearScope) => {
+  handlePetIpc('assistant:clear-memory', (event, scope: MemoryClearScope) => {
     requirePetSender(event)
     requireMemoryScope(scope)
     return assistantManager.clearMemory(scope)
   })
 
-  ipcMain.handle(
+  handlePetIpc(
     'assistant:resolve-memory-candidate',
     (event, candidateId: number, decision: 'confirmed' | 'rejected') => {
       requirePetSender(event)
@@ -797,12 +840,12 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('assistant:get-knowledge', (event) => {
+  handlePetIpc('assistant:get-knowledge', (event) => {
     requirePetSender(event)
     return assistantManager.getKnowledgeSnapshot()
   })
 
-  ipcMain.handle('assistant:add-knowledge-library', async (event) => {
+  handlePetIpc('assistant:add-knowledge-library', async (event) => {
     const window = requirePetSender(event)
     const selection = await dialog.showOpenDialog(window, {
       title: '选择允许 PetDock 索引的目录',
@@ -816,19 +859,19 @@ function registerIpc(): void {
     return assistantManager.addKnowledgeLibrary(basename(selectedPath), selectedPath)
   })
 
-  ipcMain.handle('assistant:start-knowledge-index', (event, libraryId: string) => {
+  handlePetIpc('assistant:start-knowledge-index', (event, libraryId: string) => {
     requirePetSender(event)
     requireKnowledgeLibraryId(libraryId)
     return assistantManager.startKnowledgeIndex(libraryId)
   })
 
-  ipcMain.handle('assistant:pause-knowledge-index', (event, libraryId: string) => {
+  handlePetIpc('assistant:pause-knowledge-index', (event, libraryId: string) => {
     requirePetSender(event)
     requireKnowledgeLibraryId(libraryId)
     return assistantManager.pauseKnowledgeIndex(libraryId)
   })
 
-  ipcMain.handle('assistant:delete-knowledge-library', (event, libraryId: string) => {
+  handlePetIpc('assistant:delete-knowledge-library', (event, libraryId: string) => {
     requirePetSender(event)
     requireKnowledgeLibraryId(libraryId)
     return assistantManager.deleteKnowledgeLibrary(libraryId).then((deleted: boolean) => {
@@ -840,7 +883,7 @@ function registerIpc(): void {
     })
   })
 
-  ipcMain.handle('assistant:set-knowledge-selection', (event, libraryIds: unknown) => {
+  handlePetIpc('assistant:set-knowledge-selection', (event, libraryIds: unknown) => {
     requirePetSender(event)
     if (!Array.isArray(libraryIds) || libraryIds.length > 20) {
       throw new TypeError('Knowledge library selection is invalid.')
@@ -851,22 +894,22 @@ function registerIpc(): void {
     return selected
   })
 
-  ipcMain.handle('assistant:get-embedding-models', (event) => {
+  handlePetIpc('assistant:get-embedding-models', (event) => {
     requirePetSender(event)
     return assistantManager.getEmbeddingSnapshot()
   })
 
-  ipcMain.handle('assistant:get-skills', (event) => {
+  handlePetIpc('assistant:get-skills', (event) => {
     requirePetSender(event)
     return assistantManager.getSkillSnapshot()
   })
 
-  ipcMain.handle('assistant:refresh-skills', (event) => {
+  handlePetIpc('assistant:refresh-skills', (event) => {
     requirePetSender(event)
     return assistantManager.refreshSkills()
   })
 
-  ipcMain.handle('assistant:preview-local-skills', async (event) => {
+  handlePetIpc('assistant:preview-local-skills', async (event) => {
     const window = requirePetSender(event)
     const selection = await dialog.showOpenDialog(window, {
       title: '选择包含 SKILL.md 的目录',
@@ -879,13 +922,13 @@ function registerIpc(): void {
     return assistantManager.previewLocalSkills(selectedPath)
   })
 
-  ipcMain.handle('assistant:preview-github-skills', (event, url: string) => {
+  handlePetIpc('assistant:preview-github-skills', (event, url: string) => {
     requirePetSender(event)
     requireString(url)
     return assistantManager.previewGithubSkills(url)
   })
 
-  ipcMain.handle(
+  handlePetIpc(
     'assistant:install-skills',
     (event, previewToken: string, skillIds: string[]) => {
       requirePetSender(event)
@@ -897,32 +940,32 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('assistant:set-skill-enabled', (event, skillId: string, enabled: boolean) => {
+  handlePetIpc('assistant:set-skill-enabled', (event, skillId: string, enabled: boolean) => {
     requirePetSender(event)
     requireString(skillId)
     requireBoolean(enabled)
     return assistantManager.setSkillEnabled(skillId, enabled)
   })
 
-  ipcMain.handle('assistant:uninstall-skill', (event, skillId: string) => {
+  handlePetIpc('assistant:uninstall-skill', (event, skillId: string) => {
     requirePetSender(event)
     requireString(skillId)
     return assistantManager.uninstallSkill(skillId)
   })
 
-  ipcMain.handle('assistant:download-embedding-model', (event, modelId: string) => {
+  handlePetIpc('assistant:download-embedding-model', (event, modelId: string) => {
     requirePetSender(event)
     requireEmbeddingModelId(modelId)
     return assistantManager.downloadEmbeddingModel(modelId)
   })
 
-  ipcMain.handle('assistant:pause-embedding-download', (event, modelId: string) => {
+  handlePetIpc('assistant:pause-embedding-download', (event, modelId: string) => {
     requirePetSender(event)
     requireEmbeddingModelId(modelId)
     return assistantManager.pauseEmbeddingModelDownload(modelId)
   })
 
-  ipcMain.handle('assistant:select-embedding-model', (event, modelId: string | null) => {
+  handlePetIpc('assistant:select-embedding-model', (event, modelId: string | null) => {
     requirePetSender(event)
     if (modelId !== null) {
       requireEmbeddingModelId(modelId)
@@ -930,7 +973,7 @@ function registerIpc(): void {
     return assistantManager.selectEmbeddingModel(modelId)
   })
 
-  ipcMain.handle(
+  handlePetIpc(
     'assistant:configure-online-embedding',
     (event, input: AssistantEmbeddingOnlineInput) => {
       requirePetSender(event)
@@ -938,13 +981,13 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('assistant:delete-embedding-model', (event, modelId: string) => {
+  handlePetIpc('assistant:delete-embedding-model', (event, modelId: string) => {
     requirePetSender(event)
     requireEmbeddingModelId(modelId)
     return assistantManager.deleteEmbeddingModel(modelId)
   })
 
-  ipcMain.handle('assistant:close', (event) => {
+  handlePetIpc('assistant:close', (event) => {
     const window = requirePetSender(event)
     if (!isAssistantExpanded(window)) {
       return
@@ -964,6 +1007,13 @@ if (isPrimaryInstance) {
     registerIpc()
     openPetWindow()
     screenshotManager.registerGlobalShortcut()
+    logInfo('桌面更新底座已初始化', { kind: updateKind, phase: desktopUpdates.snapshot().phase })
+    if (desktopUpdates.snapshot().phase !== 'disabled') {
+      const startupCheck = setTimeout(() => {
+        if (!quitInProgress) void desktopUpdateUi.open(true).catch(() => logError('启动检查更新失败'))
+      }, 20_000)
+      startupCheck.unref()
+    }
     void (async () => {
       try {
         // 先读取服务端 Feature Flags，再恢复已有会话，避免使用初始化时的关闭态默认值。
@@ -996,7 +1046,15 @@ function openPetWindow(): void {
       petWindow = null
     }
   })
-  createTray(window, () => openAssistantForPet(window))
+  createTray(window, () => openAssistantForPet(window), {
+    open: () => { void desktopUpdateUi.open().catch(() => logError('更新对话框打开失败')) },
+    label: () => {
+      const status = desktopUpdates.snapshot()
+      if (status.phase === 'downloading') return `更新下载 ${Math.floor(status.progress || 0)}%`
+      if (['downloaded', 'deferred'].includes(status.phase)) return '重启安装更新'
+      return '检查更新'
+    }
+  })
 }
 
 function openAssistantForPet(window: BrowserWindow): void {
@@ -1234,15 +1292,29 @@ app.on('before-quit', (event) => {
   if (quitAfterRuntimeStops) {
     return
   }
-  logInfo('before quit')
+  if (updateGate.snapshot().reserved) {
+    if (desktopUpdates.snapshot().phase === 'installing' && assistantManager.getStatus().state === 'stopped') {
+      managedAuthManager.dispose()
+      flushSettings()
+      quitAfterRuntimeStops = true
+      return
+    }
+    event.preventDefault()
+    return
+  }
+  event.preventDefault()
+  if (quitInProgress) return
+  quitInProgress = true
+  logInfo('应用退出：保存设置并停止助手')
   managedAuthManager.dispose()
   flushSettings()
-  event.preventDefault()
-  quitAfterRuntimeStops = true
   void assistantManager
     .stop()
     .catch((error: unknown) => logError('assistant runtime failed to stop', error))
-    .finally(() => app.quit())
+    .finally(() => {
+      quitAfterRuntimeStops = true
+      app.quit()
+    })
 })
 
 app.on('window-all-closed', () => {
