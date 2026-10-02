@@ -14,6 +14,9 @@ const pyinstallerArgs = [
   '--onefile',
   '--name',
   'petdock-assistant',
+  // 独立启动也读取同一份应用版本，避免 Runtime 内维护另一份版本字符串。
+  '--add-data',
+  `${join(projectRoot, 'package.json')}${delimiter}.`,
   '--specpath',
   join(runtimeRoot, 'build'),
   '--distpath',

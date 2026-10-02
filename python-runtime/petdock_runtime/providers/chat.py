@@ -70,13 +70,13 @@ class ChatModelFactory:
         api_key: str | None,
         base_url: str | None,
         model: str,
+        managed_client_version: str,
         managed_ai_base_url: str = "https://ai.petdock.site",
-        managed_client_version: str = "0.2.0",
         managed_device_id: str = "",
         managed_session: ManagedSessionStore | None = None,
         managed_auth_refresh: ManagedAuthRefreshCoordinator | None = None,
     ) -> None:
-        """保存本次 Runtime 的只读装配参数。"""
+        """保存只读装配参数，客户端版本由 RuntimeConfig 显式注入。"""
         self.source = source
         self._api_key = api_key
         self._base_url = base_url

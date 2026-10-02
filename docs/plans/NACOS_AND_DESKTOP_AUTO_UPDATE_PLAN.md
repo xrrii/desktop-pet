@@ -2,6 +2,8 @@
 
 状态：Tracking。2026-09-26：用户已确认 P0、P1-B、P1-C 服务器验收通过；P1-D Chat 的生产切源、模型热更新、真实 SSE/用量闭合与两种回退也已由用户现场验收，P1 Chat 闭环结束。2026-10-01 继续 P3-B1：应用层签名及受限下载本地底座，用户确认已创建 Lighthouse 版广州桶。生产信任根、真实更新源及 NSIS 升级尚未接入，P3 整阶段未完成，当前交接见第 19 节，P3-A 历史证据见第 18 节。已确认选择 Nacos 配置中心，以及桌面整体自动更新；不实施前端资源热更新。
 
+2026-10-02 版本准备：用户指定 Desktop 源码版本升为 `0.2.2`，并自行执行 `npm run dist` 构建。应用与锁文件的根版本同步更新，Managed 登录从调用方取得实际应用版本，Runtime 优先接收 Main 注入，独立启动读取源码或随包的 `package.json`；不再硬编码客户端版本。第 18～20 节的 `0.2.1` 是当时快照的历史证据。版本准备不代表安装包已构建、签名或发布，正式信任根和 NSIS 升级仍待验收，正式更新保持关闭；本轮验证与未执行项见第 21 节。
+
 ## 1. 目标与已确认边界
 
 1. 将高频业务配置从生产 `.env` 迁入 Nacos，提供集中编辑、历史记录、发布与回退，减少 SSH 手改文件。
@@ -435,3 +437,13 @@ Cloud 子代理负责下载服务，完成后释放名额再由独立 Reviewer �
 P3-B2 的代码、本地下载闭环及真实 COS 合成对象验收已完成；不宣称生产入口上线或 P3 整体结束。正式 `trustReady=false`，公钥为空，源/桶/Portable 入口仍为空，版本保持 `0.2.1`。当前正式工厂不会访问真实桶。
 
 下一批 P3-B3：配置服务器专用只读身份与 Secret 轮换，接通 `download.petdock.site` DNS/TLS 和精确代理，设置账单/下行告警并现场演练暂停；落实离线生产签名和首次可信引导，完成隔离两版本 NSIS 的主动下载/重启、任务忙碌延后、Runtime 替换、数据/登录态、单实例和 UAC 取消验收。Portable 真实下载页与缺失许可证正文仍需正式分发前处理。10 元/月继续是目标预算，告警/发链预算不保证硬封顶。P4 发布登记、上传编排与 Jenkins 自动化继续独立后置。
+
+## 21. Desktop 0.2.2 版本准备与单一版本源（2026-10-02）
+
+用户指定源码版本为 `0.2.2`，由用户自行运行 `npm run dist`。本轮基线 Desktop `71a660d`、Cloud `81cf7d3`；保留历史安装包，不改名旧 EXE，不修改 Managed v1 契约、依赖版本或生产更新信任。
+
+版本以 Desktop 根 `package.json` 为唯一来源，锁文件两处根版本同步。Managed 登录与 Chat 工厂要求调用方显式注入客户端版本，正常装配沿用 `app.getVersion()` 和 `RuntimeConfig`；Runtime 配置优先读取 Main 的 `PETDOCK_CLIENT_VERSION`，独立启动时读取源码或 PyInstaller 随包的同一份 `package.json`。缺失/损坏元数据、非法或显式空注入值均拒绝，不回退固定旧版本。Runtime 构建参数增加元数据资源；Cloud 指南 2.10 也从 Desktop 元数据读取签名版本。后续更新方式见 [开发指南](../guides/DEVELOPMENT.md#windows-打包操作提交前)。
+
+本轮验证：`npm.cmd run typecheck` 通过；Managed 登录与更新适配器 3 文件/40 项定向 Vitest 通过；`python-runtime/.venv/Scripts/python.exe -m pytest -q python-runtime/tests --basetemp temp/pytest-version-dynamic-final` 全套 119 项通过，包含 9 项新增版本来源/随包目录/注入优先级/非法值测试，仅有既有重复 Office ZIP entry 警告。`node --check tools/build_runtime.mjs` 与已安装 PyInstaller 的 `--add-data` 参数解析通过；JSON 结构比对确认锁文件除两处根版本外不变。Cloud 三份部署指南 81 个 Bash、5 个 PowerShell 片段解析通过。独立审查发现 Chat 工厂残留固定默认版本，已改为必传参数并复验、复审通过。
+
+未运行 `npm run dist`、实际 PyInstaller/NSIS/Portable 构建或生产更新验收，按用户要求由其执行构建；本地参数解析与模拟 `_MEIPASS` 不替代真实打包验收。生成包仍需核对生产公钥/更新源、签名信封、许可证与两版本升级；`0.2.2` 版本准备不表示这些前提已落实。

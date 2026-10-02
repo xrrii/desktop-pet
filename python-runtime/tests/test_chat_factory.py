@@ -33,6 +33,7 @@ def test_byok_factory_centralizes_agent_and_memory_model_creation(monkeypatch) -
         api_key="test-key",
         base_url="https://example.test/v1",
         model="test-model",
+        managed_client_version="9.8.7",
     )
 
     agent = factory.create_agent_model([{"name": "demo"}])
@@ -62,8 +63,8 @@ def test_byok_factory_centralizes_agent_and_memory_model_creation(monkeypatch) -
 
 def test_mock_and_managed_sources_never_create_background_network_model() -> None:
     """Mock 和 Managed 后台分析固定使用本地规则，避免隐式用量。"""
-    mock = ChatModelFactory("mock", api_key=None, base_url=None, model="unused")
-    managed = ChatModelFactory("managed", api_key="must-not-use", base_url=None, model="unused")
+    mock = ChatModelFactory("mock", api_key=None, base_url=None, model="unused", managed_client_version="9.8.7")
+    managed = ChatModelFactory("managed", api_key="must-not-use", base_url=None, model="unused", managed_client_version="9.8.7")
 
     assert mock.backend_name == "mock"
     assert mock.create_text_model("memory") is None

@@ -79,9 +79,10 @@ export class ManagedAuthManager {
   private readonly serverClock: ManagedServerClock
   private readonly refreshCoordinator = new ManagedRefreshCoordinator<ManagedTokenSet>()
 
+  /** 接收 Main 注入的实际应用版本，避免登录请求使用固定旧版本。 */
   constructor(
     private readonly policy: ManagedEndpointPolicy = resolveManagedEndpointPolicy(),
-    private readonly clientVersion = '0.2.1',
+    private readonly clientVersion: string,
     dependencies: {
       featureFlags?: ManagedFeatureFlags
       controlPlaneClient?: ManagedControlPlaneClient

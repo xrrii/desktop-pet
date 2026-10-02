@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -16,6 +19,26 @@ from .providers.selector import (
 
 BackendName = Literal["mock", "langchain"]
 EmbeddingProviderName = Literal["hash", "local", "online", "managed"]
+
+
+def resolve_client_version() -> str:
+    """优先使用 Main 注入的版本，独立启动时读取源码或随包的应用元数据。"""
+    version = os.environ.get("PETDOCK_CLIENT_VERSION")
+    if version is None:
+        bundle_root = getattr(sys, "_MEIPASS", None)
+        metadata_path = (
+            Path(bundle_root) / "package.json"
+            if bundle_root is not None
+            else Path(__file__).resolve().parents[2] / "package.json"
+        )
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ValueError("无法读取应用版本元数据，请重新构建 Runtime 或由 Main 注入版本。") from error
+        version = metadata.get("version") if isinstance(metadata, dict) else None
+    if not isinstance(version, str) or not managed_device_version(version.strip()):
+        raise ValueError("PETDOCK_CLIENT_VERSION 格式无效。")
+    return version.strip()
 
 
 @dataclass(frozen=True)
@@ -48,7 +71,7 @@ class RuntimeConfig:
     vision_source: Literal["inherited", "custom", "managed"] = "inherited"
     chat_source: ChatSource | None = None
     managed_ai_base_url: str = "https://ai.petdock.site"
-    managed_client_version: str = "0.2.0"
+    managed_client_version: str = field(default_factory=resolve_client_version)
     managed_device_id: str = ""
     rerank_source: Literal["managed", "disabled"] = "disabled"
 
@@ -64,7 +87,7 @@ class RuntimeConfig:
         model = os.environ.get("PETDOCK_LLM_MODEL", "gpt-4o-mini").strip()
         base_url = os.environ.get("PETDOCK_LLM_BASE_URL", "").strip() or None
         managed_ai_base_url = os.environ.get("PETDOCK_AI_BASE_URL", "https://ai.petdock.site").strip().rstrip("/")
-        managed_client_version = os.environ.get("PETDOCK_CLIENT_VERSION", "0.2.1").strip()
+        managed_client_version = resolve_client_version()
         managed_device_id = os.environ.get("PETDOCK_MANAGED_DEVICE_ID", "").strip() or str(uuid4())
         if not managed_ai_base_url.startswith(("http://", "https://")):
             raise ValueError("PETDOCK_AI_BASE_URL 必须是 HTTP(S) 地址。")

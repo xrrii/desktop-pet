@@ -468,6 +468,10 @@ npm.cmd run check
 
 ### Windows 打包操作（提交前）
 
+应用版本以仓库根 `package.json` 的 `version` 为唯一来源，`package-lock.json` 的两处根版本随它同步。以后可用 `npm version <目标版本> --no-git-tag-version --ignore-scripts` 更新这三处元数据；不批量替换依赖版本、测试中的旧版本样例或历史验收记录。Managed 登录必须由调用方传入 `app.getVersion()`，Main 通过 `PETDOCK_CLIENT_VERSION` 传给 Runtime；Runtime 独立启动时读取源码或 PyInstaller 随包的同一份 `package.json`。Python 包自身的版本独立维护，不作为桌面客户端版本。
+
+`npm run dist` 会重新构建前端、主进程和 Python Runtime，再生成 NSIS 安装版与 Portable；不能只给旧 EXE 改名。升级版本不会自动配置生产公钥或开启正式更新，构建后仍需完成签名和安装升级验收。
+
 以下命令均在项目根目录的 PowerShell 中执行。Windows 下统一使用 `npm.cmd`，可以避免 PowerShell 的脚本执行策略拦截 `npm.ps1`。
 
 1. 安装 Node.js `22.12+`，然后安装前端依赖：
