@@ -1,11 +1,11 @@
 import type { UpdatePackageKind } from './updateManager'
 
-/** 正式配置必须随应用发布；Lighthouse 私有桶、下载入口与发布公钥尚未接入。 */
+/** 正式配置随引导版内置；运行时不接受环境变量或远程业务配置覆盖。 */
 export const DESKTOP_UPDATE_RELEASE = Object.freeze({
-  feedUrl: null as string | null,
-  bucketHost: null as string | null,
-  portableDownloadUrl: null as string | null,
-  trustReady: false
+  feedUrl: 'https://download.petdock.site/',
+  bucketHost: 'petdock-1467993618.cos.ap-guangzhou.myqcloud.com',
+  portableDownloadUrl: 'https://download.petdock.site/download',
+  trustReady: true
 })
 
 /** 识别构建形态；未知打包目录保持关闭，不把 isPackaged 直接当成 NSIS 安装版。 */

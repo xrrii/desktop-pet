@@ -14,6 +14,7 @@ const licenseOverridesRoot = join(projectRoot, 'licenses', 'third-party')
 const LICENSE_FILE_PATTERN =
   /^(?:licen[cs]e|copying|copyright|notice|third[-_.]?party[-_.]?notices?)(?:[-_.]|$)/i
 const LICENSE_OVERRIDES = new Map([
+  ['npm:lazy-val@1.0.5', 'npm/lazy-val-1.0.5-LICENSE.txt'],
   ['npm:saxes@6.0.0', 'npm/saxes-6.0.0-LICENSE.txt'],
   ['PyPI:flatbuffers@25.12.19', 'common/Apache-2.0.txt'],
   ['PyPI:langchain-core@1.4.9', 'pypi/langchain-core-1.4.9-LICENSE.txt'],

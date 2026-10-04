@@ -41,9 +41,12 @@ export class UpdateVerificationError extends Error {
   }
 }
 
-/** 正式公钥只随应用更新；当前未建立发布密钥，任何远程清单都不能添加信任根。 */
+/** 正式公钥只随应用更新；已与离线 0.2.2 清单验签匹配，远程数据不能添加信任根。 */
 export const DESKTOP_UPDATE_TRUST: UpdateTrust = Object.freeze({
-  keys: Object.freeze({}), revokedKeyIds: Object.freeze([] as string[])
+  keys: Object.freeze({
+    'desktop-release-1': '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA3E24K7SeTC1xXmg0oWi5vxfB1GtNIDATavHCi2GXEG4=\n-----END PUBLIC KEY-----\n'
+  }),
+  revokedKeyIds: Object.freeze([] as string[])
 })
 
 /** 正式版本不允许预发布、前导零或超出安全整数范围。 */

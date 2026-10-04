@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 /** 用可控子进程事件替身验证真实 NSIS 参数编排，不启动 EXE 或提权进程。 */
-function setup() {
+function setup(adminRightsRequired = false) {
   const children: Array<EventEmitter & { unref: ReturnType<typeof vi.fn> }> = []
   const quit = vi.fn()
   class SyntheticUpdater extends ConfirmedNsisUpdater {
@@ -30,7 +30,9 @@ function setup() {
   })
   updater.logger = null
   // 下载与独立验证在适配器测试覆盖；这里只提供引擎安装方法要求的合成缓存描述。
-  Reflect.set(updater, 'downloadedUpdateHelper', { file: 'synthetic.exe', downloadedFileInfo: {} })
+  Reflect.set(updater, 'downloadedUpdateHelper', {
+    file: 'synthetic.exe', downloadedFileInfo: { isAdminRightsRequired: adminRightsRequired }
+  })
   return { updater, quit, children }
 }
 
@@ -90,5 +92,45 @@ describe('NSIS 启动确认', () => {
     } finally {
       entry.exports = previous
     }
+  })
+
+  it('提权辅助进程 spawn 后继续保持应用，退出成功才确认启动', async () => {
+    const { updater, quit, children } = setup(true)
+    const installing = updater.quitAndInstallConfirmed()
+    children[0].emit('spawn')
+    await Promise.resolve()
+    expect(quit).not.toHaveBeenCalled()
+    expect(children[0].unref).not.toHaveBeenCalled()
+    children[0].emit('exit', 0, null)
+    await installing
+    expect(quit).toHaveBeenCalledOnce()
+  })
+
+  it.each([[1, null], [1223, null], [null, 'SIGTERM']])('提权取消或异常退出 %s/%s 时保留应用并允许重试', async (code, signal) => {
+    const { updater, quit, children } = setup(true)
+    const installing = updater.quitAndInstallConfirmed()
+    const rejected = expect(installing).rejects.toThrow('未成功启动')
+    children[0].emit('spawn')
+    children[0].emit('exit', code, signal)
+    await rejected
+    expect(quit).not.toHaveBeenCalled()
+    const retry = updater.quitAndInstallConfirmed()
+    children[1].emit('spawn')
+    children[1].emit('exit', 0, null)
+    await retry
+    expect(quit).toHaveBeenCalledOnce()
+  })
+
+  it('普通启动权限失败后，提权 helper 必须接受 UAC 才允许退出', async () => {
+    const { updater, quit, children } = setup()
+    const installing = updater.quitAndInstallConfirmed()
+    children[0].emit('error', Object.assign(new Error('synthetic permission failure'), { code: 'EACCES' }))
+    await Promise.resolve()
+    children[1].emit('spawn')
+    await Promise.resolve()
+    expect(quit).not.toHaveBeenCalled()
+    children[1].emit('exit', 0, null)
+    await installing
+    expect(quit).toHaveBeenCalledOnce()
   })
 })

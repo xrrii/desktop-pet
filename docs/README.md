@@ -4,7 +4,7 @@
 
 本目录按文档职责组织。开始开发前，先根据任务类型找到对应基线；当多份文档存在交叉时，总体架构和开发规范优先，功能专项负责补充领域细节。
 
-最后审阅日期：2026-09-20。
+最后审阅日期：2026-10-04。
 
 ## 2. 状态说明
 
@@ -40,6 +40,7 @@
 | 文档 | 状态 | 用途 |
 | --- | --- | --- |
 | [DEVELOPMENT.md](guides/DEVELOPMENT.md) | Active | 开发环境、代码规范、测试、构建和打包说明 |
+| [P3-B3 桌面正式信任与安装更新验收](guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md) | Tracking | 0.2.3 引导版、0.2.4 目标版、下载页部署与真实 NSIS 验收步骤 |
 | [MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md](guides/MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md) | Active | Phase 2 PostgreSQL、Redis、SSH 隧道和备份部署步骤 |
 | [UI_STYLE_GUIDELINES.md](guides/UI_STYLE_GUIDELINES.md) | Active | Renderer 界面布局、组件和视觉风格约定 |
 | [多代理角色手册](guides/multi-agent/README.md) | Active | 三项目开发角色、文件归属、任务分派和独立验收规范 |
@@ -50,7 +51,7 @@
 | --- | --- | --- |
 | [CONVERSATION_RESOURCE_CAPABILITIES.md](features/CONVERSATION_RESOURCE_CAPABILITIES.md) | Active | 附件、Artifact、联网搜索、复杂输入和多文件能力 |
 | [Desktop 登录、SSO 与官网管理入口](features/DESKTOP_SSO.md) | Active | 当前行为、上线状态来源与历史证据入口 |
-| [Nacos 配置中心与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) | Tracking | P1 Chat 已验收；P3-B2 下载入口与真实 COS 合成对象通过，正式 HTTPS/NSIS 接入待验收 |
+| [Nacos 配置中心与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) | Tracking | P1 Chat 已验收；P3-B2 正式 HTTPS 已由用户验收，P3-B3 正式信任与下载页准备完成，真实 NSIS 升级待验收 |
 | [桌面更新签名与 Lighthouse 下载边界](features/DESKTOP_UPDATE_TRUST.md) | Active | 应用层签名、离线工具、私有桶路径及费用防护的本地实施基线 |
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |

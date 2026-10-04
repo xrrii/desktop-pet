@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess, type StdioOptions } from 'node:child_process'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { NsisUpdater } from 'electron-updater'
 import { DownloadedUpdateHelper } from 'electron-updater/out/DownloadedUpdateHelper'
 import type { ElectronHttpExecutor } from 'electron-updater/out/electronHttpExecutor'
@@ -39,16 +39,30 @@ export class ConfirmedNsisUpdater extends NsisUpdater {
     }
   }
 
-  /** 替换引擎按 pid 立即成功的判定，使用 Node 的 spawn/error 事件确认启动。 */
+  /** 普通安装器确认 spawn；提权辅助进程须退出成功，不能把 UAC 等待误判为启动完成。 */
   protected override spawnLog(cmd: string, args: string[] = [], env?: NodeJS.ProcessEnv, stdio: StdioOptions = 'ignore'): Promise<boolean> {
+    const elevation = resolve(cmd).toLowerCase() === resolve(process.resourcesPath, 'elevate.exe').toLowerCase()
     const launch = new Promise<boolean>((resolve, reject) => {
       try {
         const child = this.createInstallerProcess(cmd, args, env, stdio)
         child.once('error', (error) => reject(this.normalizeLaunchError(error)))
         child.once('spawn', () => {
-          child.unref()
-          resolve(true)
+          if (!elevation) {
+            child.unref()
+            resolve(true)
+          }
         })
+        if (elevation) {
+          // 当前锁定 helper 未使用 -wait；成功退出仅表示 ShellExecute/UAC 接受启动。
+          child.once('exit', (code, signal) => {
+            if (code === 0 && signal === null) {
+              child.unref()
+              resolve(true)
+            } else {
+              reject(new Error('提权已取消或安装器未接受启动请求。'))
+            }
+          })
+        }
       } catch (error) {
         reject(this.normalizeLaunchError(error))
       }

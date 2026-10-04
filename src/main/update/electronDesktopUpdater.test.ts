@@ -239,8 +239,9 @@ describe('真实引擎的独立签名与私有桶受限下载', () => {
     }, { version: '0.2.2-beta.1' })
   })
 
-  it('缺少生产入口、桶主机和信任根时，正式工厂仍关闭', () => {
-    expect(createReleaseDesktopUpdater('nsis')).toBeNull()
-    expect(createReleaseDesktopUpdater('portable')).toBeNull()
+  it('内置正式配置后，开发态、解包态和不支持的平台仍不创建更新器', () => {
+    for (const kind of ['development', 'unpacked', 'unsupported'] as const) {
+      expect(createReleaseDesktopUpdater(kind)).toBeNull()
+    }
   })
 })
