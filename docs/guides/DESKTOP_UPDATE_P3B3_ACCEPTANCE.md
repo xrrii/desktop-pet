@@ -85,30 +85,66 @@ sudo /usr/local/sbin/petdock-downloadctl status
 
 ### 2.2 更新第五站点白名单（Ubuntu）
 
-新模板 `deploy/desktop-download/nginx-public.conf` 对应 P3-B2 2.7 的下载站点，仅新增 `/download` 白名单。执行前核对现有第五站点仍使用相同 `.2:8080` 上游、TLS snippet 与独立域名；有现场定制时在候选副本中保留定制，只增加 `download|`，不要覆盖其他站点。
+在原来已通过 HTTPS 验收的第五站点配置上只增加 `/download` 白名单，保留证书、上游和其他现场配置。旧配置可能直接写 `ssl_certificate`，没有单独 TLS snippet；不能直接覆盖为依赖新 TLS snippet 的仓库模板。下面使用本次升级的原始备份生成候选，备份已存在时保留，可在同一 `UPGRADE_BACKUP` 下重试。脚本需要服务器 `python3`，生成器拒绝无法识别或多处匹配的白名单。
+
+**旧 2.2 已报缺少 `petdock-desktop-download-tls.conf`：** 2.1 已成功，不重建下载服务、不重复创建升级备份。沿用原 `UPGRADE_BACKUP`，执行下面更新后的整块，候选从原 `nginx-download.conf` 备份生成；失败时恢复该备份并检查重建 Nginx，入口保持暂停。换终端后先把变量恢复为 2.1 输出的实际目录，不使用其他备份。
 
 ```bash
 (
 set -euo pipefail
 PAGE_CHECK_PASSED=false
-# 开放后的任一步失败都先暂停，退出钩子只属于当前子 Shell。
+RESTORE_ON_FAILURE=false
+PAGE_CANDIDATE=''
+# 失败时暂停并恢复原站点；备份不覆盖，临时候选只属于当前子 Shell。
 finish_page_check() {
   local result=$?
   trap - EXIT
   if [ "$PAGE_CHECK_PASSED" != true ]; then
     sudo /usr/local/sbin/petdock-downloadctl pause || \
       printf '%s\n' '暂停失败：按 P3-B2 2.15 执行 root 应急暂停。' >&2
+    if [ "$RESTORE_ON_FAILURE" = true ]; then
+      if ! sudo cp -a "$UPGRADE_BACKUP/nginx-download.conf" \
+        /opt/petdock/production/nginx/snippets/petdock-desktop-download.conf || \
+        ! sudo /usr/local/sbin/petdock-reload-nginx; then
+        printf '%s\n' '原站点配置恢复失败，停止后续操作，按 P3-B2 2.15 恢复入口。' >&2
+      fi
+    fi
+  fi
+  if [ -n "$PAGE_CANDIDATE" ]; then
+    if ! sudo rm -- "$PAGE_CANDIDATE"; then
+      printf '%s\n' '临时候选清理失败，核对 PAGE_CANDIDATE 后手工处理。' >&2
+    fi
   fi
   return "$result"
 }
 trap finish_page_check EXIT
 test -n "${UPGRADE_BACKUP:-}"
 sudo test -f "$UPGRADE_BACKUP/image.ref"
-sudo test ! -e "$UPGRADE_BACKUP/nginx-download.conf"
-sudo cp -a /opt/petdock/production/nginx/snippets/petdock-desktop-download.conf \
-  "$UPGRADE_BACKUP/nginx-download.conf"
+sudo /usr/local/sbin/petdock-downloadctl pause
+if ! sudo test -f "$UPGRADE_BACKUP/nginx-download.conf"; then
+  sudo test ! -e "$UPGRADE_BACKUP/nginx-download.conf"
+  sudo cp -a /opt/petdock/production/nginx/snippets/petdock-desktop-download.conf \
+    "$UPGRADE_BACKUP/nginx-download.conf"
+fi
+RESTORE_ON_FAILURE=true
+command -v python3 >/dev/null
+PAGE_CANDIDATE=$(sudo mktemp "$UPGRADE_BACKUP/nginx-download.page.XXXXXX")
+sudo python3 - "$UPGRADE_BACKUP/nginx-download.conf" "$PAGE_CANDIDATE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+# 只匹配原有公开下载 location，保留证书配置和其他站点定制。
+source = Path(sys.argv[1]).read_text(encoding='utf-8')
+pattern = r'(?m)^([ \t]*location[ \t]+~[ \t]+\^/\()(?:download\|)?(latest\\\.yml\|manifests/[^\r\n]+)$'
+matches = list(re.finditer(pattern, source))
+assert len(matches) == 1 and '|releases/' in matches[0].group(2), '无法唯一识别旧白名单，停止修改'
+candidate = re.sub(pattern, lambda match: match.group(1) + 'download|' + match.group(2), source)
+Path(sys.argv[2]).write_text(candidate, encoding='utf-8')
+print('候选只增加下载页白名单，原证书和上游配置保留。')
+PY
 sudo install -o root -g root -m 0644 \
-  /opt/petdock/source/petdock-cloud/deploy/desktop-download/nginx-public.conf \
+  "$PAGE_CANDIDATE" \
   /opt/petdock/production/nginx/snippets/petdock-desktop-download.conf
 sudo /usr/local/sbin/petdock-reload-nginx
 sudo /usr/local/sbin/petdock-downloadctl resume
@@ -122,7 +158,7 @@ PAGE_CHECK_PASSED=true
 )
 ```
 
-这段开放前必须已有 2.9/2.12 门禁；任何失败先运行 `sudo /usr/local/sbin/petdock-downloadctl pause`。Nginx 校验失败时恢复备份的 **第五站点 snippet** 后再次 `petdock-reload-nginx`，不要重置生产主配置或预算。随后按 P3-B2 2.13.2 对当前登记版本复验完整 HTTPS 和暂停/恢复；浏览下载页不消耗发链次数，点击制品才计预算。Cloud 回退仍按 2.15 保留安全运维入口。
+预期 Nginx 校验、健康等待及页面 200 通过；自动钩子清理临时候选。这段开放前必须已有 2.9/2.12 门禁。确认本次原始备份后，任何候选准备、安装或验收失败都会尝试暂停、恢复备份的 **第五站点 snippet** 并执行校验重建；任何恢复失败需停止后续操作，不能仅恢复下载开关。不要重置生产主配置或预算。随后按 P3-B2 2.13.2 对当前登记版本复验完整 HTTPS 和暂停/恢复；浏览下载页不消耗发链次数，点击制品才计预算。Cloud 回退仍按 2.15 保留安全运维入口。
 
 ## 3. 检查客户端信任接入（Windows）
 
