@@ -535,6 +535,8 @@ npm.cmd run pack
 
 提交功能代码前至少运行 `npm.cmd run check`，该命令依次执行严格类型检查、TypeScript 单元测试、Managed Service 契约测试、Python Runtime 测试、检索评测和生产构建。
 
+`test:runtime` 使用 `tools/run_runtime_tests.mjs` 为每次运行创建独立临时目录，禁用共享 pytest 缓存并原样返回测试退出码，结束只清理本次创建的目录。旧 `temp/pytest-runtime` 可能属于其他运行身份，不能为测试直接删目录、放开权限或跳过失败；新命令不复用它。PowerShell 中需要失败后停止的多步流程放在同一个 `& { ... }` 块内，逐行粘贴时上一条 `throw` 不会阻止下一条独立命令执行。
+
 安全基线：
 
 - Renderer 必须保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
@@ -645,7 +647,7 @@ Runtime 只在 Main 注入的 Artifact 根目录生成白名单 UTF-8 文本文�
 C4 Parser 由附件和知识库共用的 `DocumentParserRegistry` 提供。依赖安装后可运行：
 
 ```powershell
-python-runtime\.venv\Scripts\python.exe -m pytest -q python-runtime\tests --basetemp temp\pytest-runtime
+npm.cmd run test:runtime
 npm.cmd run typecheck
 npm.cmd test -- --run
 npm.cmd run build:runtime

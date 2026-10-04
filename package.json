@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:contracts": "python-runtime\\.venv\\Scripts\\python.exe -m pytest -q contracts\\managed-service\\v1\\tests",
-    "test:runtime": "python-runtime\\.venv\\Scripts\\python.exe -m pytest -q python-runtime\\tests --basetemp temp\\pytest-runtime",
+    "test:runtime": "node tools/run_runtime_tests.mjs",
     "test:retrieval": "python-runtime\\.venv\\Scripts\\python.exe tools\\evaluate_retrieval.py",
     "test:runtime:packaged": "node tools/runtime_smoke.mjs",
     "test:updates:transport": "node tools/update_transport_smoke.mjs",

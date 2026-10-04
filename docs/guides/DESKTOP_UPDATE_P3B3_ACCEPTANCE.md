@@ -180,23 +180,35 @@ if ($LASTEXITCODE -ne 0) { throw '正式元数据或客户端验签失败，不�
 使用专用 Windows 测试用户或可恢复虚拟机快照。当前用户安装与所有用户安装分别取干净快照，避免同机同时混装；DPAPI 登录态验收保持同机、同一 Windows 用户。先备份正式使用的数据，测试只写合成会话、知识库和附件。
 
 ```powershell
+& {
 $ErrorActionPreference = 'Stop'
 Set-Location E:\project\desktop-pet
 $Version = (Get-Content package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
 if ($Version -ne '0.2.3') { throw '当前步骤要求 0.2.3 引导版源码。' }
+node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(l.version!==p.version || l.packages?.['']?.version!==p.version) process.exit(1)"
+if ($LASTEXITCODE -ne 0) { throw '应用与锁文件根版本不一致。' }
+$Archive = Join-Path $env:USERPROFILE "PetDock-P3-B3\$Version"
+if (Test-Path -LiteralPath $Archive) { throw '归档已存在，保留原目录，按 4.1 核对并重新归档。' }
 npm.cmd run check
 if ($LASTEXITCODE -ne 0) { throw '源码检查失败。' }
 npm.cmd run dist
 if ($LASTEXITCODE -ne 0) { throw '引导版完整构建失败。' }
-$Archive = Join-Path $env:USERPROFILE "PetDock-P3-B3\$Version"
-if (Test-Path -LiteralPath $Archive) { throw '引导版归档已存在，先核对，不覆盖。' }
+node -e "const asar=require('@electron/asar'); const p=JSON.parse(asar.extractFile(process.argv[1],'package.json').toString('utf8')); if(p.version!==process.argv[2]) process.exit(1)" 'release\win-unpacked\resources\app.asar' $Version
+if ($LASTEXITCODE -ne 0) { throw '实际解包版本不一致，不归档。' }
 New-Item -ItemType Directory -Path $Archive | Out-Null
 Copy-Item -LiteralPath "release\PetDock Setup $Version.exe" -Destination $Archive
 Copy-Item -LiteralPath "release\PetDock Portable $Version.exe" -Destination $Archive
 Copy-Item -LiteralPath 'release\win-unpacked' -Destination $Archive -Recurse
+foreach ($Relative in @("PetDock Setup $Version.exe", "PetDock Portable $Version.exe", 'win-unpacked\PetDock.exe', 'win-unpacked\resources\app.asar', 'win-unpacked\resources\python-runtime\petdock-assistant.exe')) {
+    if ((Get-FileHash -LiteralPath "release\$Relative" -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath "$Archive\$Relative" -Algorithm SHA256).Hash) { throw "归档关键文件不一致：$Relative" }
+}
 Get-FileHash -LiteralPath "$Archive\PetDock Setup $Version.exe" -Algorithm SHA512
 Get-FileHash -LiteralPath "$Archive\win-unpacked\resources\python-runtime\petdock-assistant.exe" -Algorithm SHA256
+Write-Output "引导版归档校验通过：$Archive"
+}
 ```
+
+复制整个 `& { ... }` 块执行。交互终端里逐条执行时，一条 `throw` 不会阻止随后独立粘贴的命令；看到测试、版本或归档错误不能继续打包/复制。`test:runtime` 每次创建独立临时目录，避开旧 `temp/pytest-runtime` 的身份/ACL 冲突，不需要删除或放宽旧目录权限。
 
 预期许可生成 `缺少正文=0`。`lazy-val@1.0.5` 的明确 MIT 声明已附标准正文，来源和上游未附原始版权行的事实记录在 `licenses/third-party/README.md`；不是取得上游原始 LICENSE 的声明。
 
@@ -204,22 +216,74 @@ Get-FileHash -LiteralPath "$Archive\win-unpacked\resources\python-runtime\petdoc
 
 创建并记录合成基线：设置/宠物、可打开的会话和附件、可检索的知识库、可运行的 Skill，以及已登录状态。记录安装目录、Main/Runtime PID 与 Runtime 文件 SHA-256；PID 可用任务管理器查看，不记录 Token 或用户正文。服务器尚指向 `0.2.2` 时，`0.2.3` 的“当前已是最新版本”符合禁止降级策略，不要为测试临时关闭该策略。
 
+### 4.1 已打包成功但归档存在或混合（Windows）
+
+先保留已有归档。若旧命令在报错后仍执行复制，Setup/Portable 可能已覆盖为新版，而 `win-unpacked` 仍是旧版；单个 Runtime 摘要不能证明完整归档一致。下面不重新执行 `dist`，要求现有 `release` 已完整构建为 `0.2.3`，补过全部源码检查后创建带时间的新归档，并比对五项关键文件。新路径会打印出来，之后手动安装使用该新路径中的 Setup。
+
+```powershell
+& {
+$ErrorActionPreference = 'Stop'
+Set-Location E:\project\desktop-pet
+$Version = (Get-Content package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
+if ($Version -ne '0.2.3') { throw '当前步骤要求 0.2.3 引导版源码。' }
+node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(l.version!==p.version || l.packages?.['']?.version!==p.version) process.exit(1)"
+if ($LASTEXITCODE -ne 0) { throw '先统一 0.2.3 引导版元数据。' }
+npm.cmd run check
+if ($LASTEXITCODE -ne 0) { throw '源码检查失败，停止归档。' }
+node -e "const asar=require('@electron/asar'); const p=JSON.parse(asar.extractFile(process.argv[1],'package.json').toString('utf8')); if(p.version!==process.argv[2]) process.exit(1)" 'release\win-unpacked\resources\app.asar' $Version
+if ($LASTEXITCODE -ne 0) { throw '当前解包目录不属于 0.2.3，请重新完整构建。' }
+$Archive = Join-Path $env:USERPROFILE ("PetDock-P3-B3\$Version-verified-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+if (Test-Path -LiteralPath $Archive) { throw '新归档已存在，不覆盖。' }
+New-Item -ItemType Directory -Path $Archive | Out-Null
+Copy-Item -LiteralPath "release\PetDock Setup $Version.exe" -Destination $Archive
+Copy-Item -LiteralPath "release\PetDock Portable $Version.exe" -Destination $Archive
+Copy-Item -LiteralPath 'release\win-unpacked' -Destination $Archive -Recurse
+foreach ($Relative in @("PetDock Setup $Version.exe", "PetDock Portable $Version.exe", 'win-unpacked\PetDock.exe', 'win-unpacked\resources\app.asar', 'win-unpacked\resources\python-runtime\petdock-assistant.exe')) {
+    if ((Get-FileHash -LiteralPath "release\$Relative" -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath "$Archive\$Relative" -Algorithm SHA256).Hash) { throw "归档关键文件不一致：$Relative" }
+}
+Get-FileHash -LiteralPath "$Archive\PetDock Setup $Version.exe" -Algorithm SHA512
+Get-FileHash -LiteralPath "$Archive\win-unpacked\resources\python-runtime\petdock-assistant.exe" -Algorithm SHA256
+Write-Output "引导版归档校验通过：$Archive"
+}
+```
+
+这段不会覆盖或删除旧归档，复制中断留下的新目录也不自动复用。归档校验通过后再手动安装及记录数据基线；随后才能进入第 5 节。
+
 ## 5. 准备 0.2.4 目标版（Windows、控制台、Ubuntu）
 
 引导版及数据基线准备好之后再修改版本，不提前覆盖 `0.2.3` 构建归档：
 
 ```powershell
+& {
 $ErrorActionPreference = 'Stop'
 Set-Location E:\project\desktop-pet
-npm.cmd version 0.2.4 --no-git-tag-version
+$Version = '0.2.4'
+$Archive = Join-Path $env:USERPROFILE "PetDock-P3-B3\$Version"
+if (Test-Path -LiteralPath $Archive) { throw '目标版归档已存在，保留原目录，停止重复构建。' }
+npm.cmd version 0.2.4 --no-git-tag-version --allow-same-version
 if ($LASTEXITCODE -ne 0) { throw '目标版版本更新失败。' }
+node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(p.version!==process.argv[1] || l.version!==p.version || l.packages?.['']?.version!==p.version) process.exit(1)" $Version
+if ($LASTEXITCODE -ne 0) { throw '目标版应用与锁文件根版本不一致。' }
 npm.cmd run check
 if ($LASTEXITCODE -ne 0) { throw '目标版源码检查失败。' }
 npm.cmd run dist
 if ($LASTEXITCODE -ne 0) { throw '目标版完整构建失败。' }
+node -e "const asar=require('@electron/asar'); const p=JSON.parse(asar.extractFile(process.argv[1],'package.json').toString('utf8')); if(p.version!==process.argv[2]) process.exit(1)" 'release\win-unpacked\resources\app.asar' $Version
+if ($LASTEXITCODE -ne 0) { throw '实际解包版本不一致，不归档。' }
+New-Item -ItemType Directory -Path $Archive | Out-Null
+Copy-Item -LiteralPath "release\PetDock Setup $Version.exe" -Destination $Archive
+Copy-Item -LiteralPath "release\PetDock Portable $Version.exe" -Destination $Archive
+Copy-Item -LiteralPath 'release\win-unpacked' -Destination $Archive -Recurse
+foreach ($Relative in @("PetDock Setup $Version.exe", "PetDock Portable $Version.exe", 'win-unpacked\PetDock.exe', 'win-unpacked\resources\app.asar', 'win-unpacked\resources\python-runtime\petdock-assistant.exe')) {
+    if ((Get-FileHash -LiteralPath "release\$Relative" -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath "$Archive\$Relative" -Algorithm SHA256).Hash) { throw "归档关键文件不一致：$Relative" }
+}
+Get-FileHash -LiteralPath "$Archive\PetDock Setup $Version.exe" -Algorithm SHA512
+Get-FileHash -LiteralPath "$Archive\win-unpacked\resources\python-runtime\petdock-assistant.exe" -Algorithm SHA256
+Write-Output "目标版归档校验通过：$Archive"
+}
 ```
 
-按第 4 节归档同版本 Setup、Portable、win-unpacked，并记录目标 Runtime 摘要。不要只给旧 EXE 改名。使用既有受控私钥和 **同一 keyId**，按 P3-B2 2.10 签最终 `0.2.4` Setup；先用第 3 节离线检查新信封，再上传原始对象名 `releases/0.2.4/PetDock Setup 0.2.4.exe`。本地签名以 root `package.json` 为版本源，签完后不改 EXE。
+整块完成版本更新、构建、实际解包版本检查和五项关键文件归档比对，并输出目标 Runtime 摘要；任一步失败都停止，不覆盖已有归档。若升版成功后检查或构建失败，可在修复原因后重试整块；`--allow-same-version` 允许重新执行同版本更新，后续检查与构建照常进行。复制中断后新归档可能已经存在，此时先保留目录、核对制品，不能直接删目录重跑。锁文件含空名称的根包，使用 Node 解析以兼容 Windows PowerShell 5.1 和 PowerShell 7。不要只给旧 EXE 改名。使用既有受控私钥和 **同一 keyId**，按 P3-B2 2.10 签最终 `0.2.4` Setup；先用第 3 节离线检查新信封，再上传原始对象名 `releases/0.2.4/PetDock Setup 0.2.4.exe`。本地签名以 root `package.json` 为版本源，签完后不改 EXE。
 
 按 P3-B2 2.11 的 **SSH 传输片段** 将新信封放到 `/tmp/desktop-update-manifest.json`，沿用原公钥，不重新生成密钥或传私钥。已有目录使用下面 5.1 合并，不执行 2.11 的首次单版本生成器；随后执行 2.12、2.13.2 的对象和完整 HTTPS 验收。确需移除旧条目时先批准并留备份，不能把过期条目保留在目录中。
 
