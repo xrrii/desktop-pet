@@ -377,8 +377,8 @@ sudo rm -- /tmp/desktop-update-manifest.json
 | 主动下载 | 从安装态 `0.2.3` 托盘检查更新；出现 `0.2.4` 后默认选择稍后，不产生 EXE 请求；明确点击下载才取包 |
 | 稍后安装 | 下载后选择稍后，应用继续运行；普通退出/再次启动不自动安装；再次检查可重新主动下载或命中已验证缓存 |
 | 忙碌延后 | 下载完成后运行真实合成聊天流/工具/知识库写入任务，选择重启应提示延后，任务正常结束；任务结束不自动安装，再次选择才继续 |
-| 重启安装 | 明确选择重启，设置 flush、Runtime 停止，再启动已验证安装器；不能强杀任务 |
-| 启动失败 | 受控模拟安装器或 helper 无法启动，保留旧应用/下载并恢复入口，可再次显式重试；不使用 Shell 绕过确认 |
+| 重启安装 | 明确选择重启，设置 flush、Runtime 停止，再启动已验证安装器；普通 NSIS 确认可见窗口后才请求退出，helper 仍以成功退出代表接受启动；不能强杀任务 |
+| 启动失败 | 普通进程创建不等于窗口就绪，提前退出不关闭应用；观察失败先结束本次安装器，确认结束后恢复入口；无法确认结束则保持任务互锁，提示结束安装器后重试，不自动再开第二个安装器 |
 | helper 的 UAC 取消 | `elevate.exe` 已 spawn 但 UAC 尚未接受时保持应用；取消或非零退出不退出应用，Runtime/任务入口恢复，下一次可重试 |
 | 安装向导的 UAC/取消 | 普通 NSIS 已启动后再由向导请求 UAC，取消不应安装目标版；此时旧应用可能已退出，结束向导后旧版应能重新启动且数据可用。当前没有“安装准备握手”，不能宣称这类取消保证原应用一直运行 |
 | 完成后的版本 | 安装目录及 `app.asar` 元数据为 `0.2.4`，运行的 Main 与 Runtime 来自目标安装目录；Runtime SHA-256 与目标制品一致，不要求两版 Runtime 摘要必然不同 |
@@ -388,6 +388,49 @@ sudo rm -- /tmp/desktop-update-manifest.json
 | 离线与拒绝 | 断网/入口暂停/签名不匹配或过期均给固定错误，旧版可继续使用；未完成的下载不能进入安装 |
 
 helper 退出语义核对的是当前锁定工具链的 Johannes Passing `elevate.exe`，本地 SHA-256 为 `9b1fbf0c11c520ae714af8aa9af12cfd48503eedecd7398d8992ee94d1b4dc37`；源见 [作者实现](https://github.com/jpassing/elevate/blob/master/Elevate/main.c)，核查 Git blob `15445a83b39045cd8ef3af4c536109a5fbe69237`。引擎未传 `-wait`，helper 不等整个安装器结束。工具链升级时必须重新核对，不能把此结论套给新版 helper。
+
+### 6.1 首次重启安装没有窗口的修复复验（Windows）
+
+2026-10-05 用户在两个个人电脑报告：检查、下载成功，首次重启安装后应用关闭，等待超过一分钟也没有 UAC 或安装窗口；重新启动并使用缓存再次安装才出现窗口。本次普通安装分支移除隐藏窗口标志，并等待确切 PID 的可见顶层窗口。Windows 系统 PowerShell 以只读 Win32 查询观察窗口，不启动安装器或提权；内部观察 30 秒、外层截止 35 秒。系统限制 PowerShell 或 `Add-Type` 时验证失败，不能跳过检查来退出应用。
+
+窗口确认不是 NSIS 安装准备握手，也不表示安装完成。当前 helper 成功退出的语义保持不变，UAC 内层及真实 NSIS 时序仍要逐项复验。原来的隐藏标志在合成窗口上可复现不可见，但不把合成结果直接等同两台电脑的已确定根因。
+
+**先手动安装含本次修复的客户端，再验收自动更新。** 修复属于发起安装的旧客户端：只把新 EXE 上传服务器，不能修复已运行旧版的退出逻辑。当前工作区版本由用户升为 `0.2.4`；下面按实际源码版本构建独立本地修复归档，不改源码版本、不覆盖已有归档或生产同版本对象。在可信构建机执行完整块：
+
+```powershell
+& {
+$ErrorActionPreference = 'Stop'
+Set-Location E:\project\desktop-pet
+$Version = (Get-Content package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
+if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw '源码版本必须是正式三段版本。' }
+node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(l.version!==p.version || l.packages?.['']?.version!==p.version) process.exit(1)"
+if ($LASTEXITCODE -ne 0) { throw '应用与锁文件根版本不一致。' }
+$Archive = Join-Path $env:USERPROFILE ("PetDock-P3-B3\$Version-launch-fix-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+if (Test-Path -LiteralPath $Archive) { throw '修复归档已存在，不覆盖。' }
+npm.cmd run check
+if ($LASTEXITCODE -ne 0) { throw '源码检查失败。' }
+npm.cmd run dist
+if ($LASTEXITCODE -ne 0) { throw '修复版完整构建失败。' }
+node -e "const asar=require('@electron/asar'); const p=JSON.parse(asar.extractFile(process.argv[1],'package.json').toString('utf8')); if(p.version!==process.argv[2]) process.exit(1)" 'release\win-unpacked\resources\app.asar' $Version
+if ($LASTEXITCODE -ne 0) { throw '实际解包版本不一致，不归档。' }
+New-Item -ItemType Directory -Path $Archive | Out-Null
+Copy-Item -LiteralPath "release\PetDock Setup $Version.exe" -Destination $Archive
+Copy-Item -LiteralPath "release\PetDock Portable $Version.exe" -Destination $Archive
+Copy-Item -LiteralPath 'release\win-unpacked' -Destination $Archive -Recurse
+foreach ($Relative in @("PetDock Setup $Version.exe", "PetDock Portable $Version.exe", 'win-unpacked\PetDock.exe', 'win-unpacked\resources\app.asar', 'win-unpacked\resources\python-runtime\petdock-assistant.exe')) {
+    if ((Get-FileHash -LiteralPath "release\$Relative" -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath "$Archive\$Relative" -Algorithm SHA256).Hash) { throw "归档关键文件不一致：$Relative" }
+}
+Get-FileHash -LiteralPath "$Archive\PetDock Setup $Version.exe" -Algorithm SHA512
+Get-FileHash -LiteralPath "$Archive\win-unpacked\resources\python-runtime\petdock-assistant.exe" -Algorithm SHA256
+Write-Output "本地修复引导版归档校验通过：$Archive"
+}
+```
+
+1. 备份合成数据和登录基线，在两台测试机结束旧 PetDock 及遗留安装器；手动安装新归档中的 Setup，不使用旧缓存作为修复客户端。
+2. 准备并批准高于该修复引导版的目标版本。若引导版为 `0.2.4`，目标应为更高正式版本；不可为测试放开降级，也不覆盖原已签名登记的 `0.2.4` 对象。目标按现有离线签名与目录合并流程人工发布。
+3. 冷下载场景使用新的测试用户或快照，确保没有目标版本缓存；只点击一次重启安装。预期首次可见窗口正常出现，当前应用随后退出，不需要重新打开重复下载；完成后核对实际版本、Runtime、数据和单实例。
+4. 从相同引导快照再执行缓存场景：下载后选稍后、普通退出、重开，命中缓存仍只点击一次重启安装。复验窗口、UAC 取消、任务延后和数据；不能只做这条路径就判首次安装通过。
+5. 若仍异常，在任务管理器核对安装进程是否存在。只提取实际用户数据目录 `logs/main.log` 中包含“桌面更新”的脱敏阶段、PID、退出码；记录首次和重试各自的时间，不回传完整日志、Token 或下载 URL。启动确认失败时不强制结束当前应用，未确认安装器结束时按提示处理其 PID 后再重试。
 
 ## 7. 失败处理与记录
 

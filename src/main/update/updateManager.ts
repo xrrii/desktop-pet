@@ -1,5 +1,6 @@
 import { UpdateActivityGate } from './updateActivityGate'
 import { UpdateVerificationError } from './signedUpdateManifest'
+import { InstallerProcessPendingError } from './installerLaunchError'
 
 export type UpdatePackageKind = 'nsis' | 'portable' | 'unpacked' | 'development' | 'unsupported'
 export type UpdatePhase = 'disabled' | 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'downloaded' | 'deferred' | 'installing' | 'error'
@@ -28,6 +29,7 @@ export interface UpdateLifecycle {
 export class DesktopUpdateManager {
   private status: UpdateSnapshot
   private operation: Promise<void> | null = null
+  private pendingInstaller = false
 
   constructor(
     kind: UpdatePackageKind,
@@ -83,7 +85,7 @@ export class DesktopUpdateManager {
 
   /** 预留 Main 与 Runtime 后才停机；忙碌只延后，不取消任务或自动等待安装。 */
   install(): Promise<void> {
-    if (!this.updater || this.status.kind !== 'nsis' || !['downloaded', 'deferred'].includes(this.status.phase)) {
+    if (this.pendingInstaller || !this.updater || this.status.kind !== 'nsis' || !['downloaded', 'deferred'].includes(this.status.phase)) {
       return Promise.resolve()
     }
     return this.perform(async () => {
@@ -102,6 +104,19 @@ export class DesktopUpdateManager {
         await this.lifecycle.stop()
         await this.updater!.install()
       } catch (error) {
+        if (error instanceof InstallerProcessPendingError) {
+          this.pendingInstaller = true
+          this.setStatus('deferred', '安装器仍在运行，任务入口保持暂停；请结束该安装器进程后再重试。', 100)
+          this.log('桌面更新安装器退出未确认，继续保持任务互锁')
+          // 原安装器完全结束后才恢复，不在后台自行再次启动安装器。
+          void error.closed.then(async () => {
+            await this.lifecycle.resume().catch(() => this.log('安装器结束后恢复助手入口失败'))
+            this.gate.release()
+            this.pendingInstaller = false
+            this.setStatus('downloaded', '安装器已结束，已保留下载，可以重新选择重启安装。', 100)
+          })
+          return
+        }
         await this.lifecycle.resume().catch(() => this.log('更新准备失败后恢复助手入口失败'))
         this.gate.release()
         if (error instanceof UpdateVerificationError) {

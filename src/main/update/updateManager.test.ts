@@ -3,6 +3,7 @@ import { DesktopUpdateManager, type UpdatePackageKind } from './updateManager'
 import { UpdateActivityGate } from './updateActivityGate'
 import { detectUpdatePackageKind, requireOfficialUpdateUrl } from './updatePolicy'
 import { UpdateVerificationError } from './signedUpdateManifest'
+import { InstallerProcessPendingError } from './installerLaunchError'
 
 /** 创建能控制检查、下载与停机顺序的合成更新器，不执行真实安装。 */
 function setup(kind: UpdatePackageKind = 'nsis') {
@@ -133,6 +134,29 @@ describe('桌面更新编排', () => {
     await Promise.all([manager.download(), manager.download()])
     expect(updater.check).toHaveBeenCalledOnce()
     expect(updater.download).toHaveBeenCalledOnce()
+  })
+
+  it('安装器未确认结束时保持互锁并拒绝重复启动，退出后恢复且仍需用户主动重试', async () => {
+    const { manager, updater, gate, lifecycle } = setup()
+    let close!: () => void
+    const closed = new Promise<void>((resolve) => { close = resolve })
+    updater.install.mockImplementationOnce(() => { throw new InstallerProcessPendingError(closed) })
+    await manager.check()
+    await manager.download()
+    await manager.install()
+    expect(manager.snapshot().message).toContain('请结束该安装器进程')
+    expect(gate.snapshot().reserved).toBe(true)
+    expect(lifecycle.resume).not.toHaveBeenCalled()
+    await expect(gate.run(() => '新任务')).rejects.toThrow('正在准备安装更新')
+    await manager.install()
+    expect(updater.install).toHaveBeenCalledOnce()
+    close()
+    await vi.waitFor(() => expect(gate.snapshot().reserved).toBe(false))
+    expect(lifecycle.resume).toHaveBeenCalledOnce()
+    expect(manager.snapshot().phase).toBe('downloaded')
+    expect(updater.install).toHaveBeenCalledOnce()
+    await manager.install()
+    expect(updater.install).toHaveBeenCalledTimes(2)
   })
 
   it('Portable 只检查版本，不能下载或启动 NSIS 安装器', async () => {

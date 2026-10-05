@@ -215,7 +215,7 @@ const updateKind = detectUpdatePackageKind({
   nsisInstalled: existsSync(join(dirname(process.execPath), 'Uninstall PetDock.exe'))
 })
 const desktopUpdates = new DesktopUpdateManager(
-  updateKind, createReleaseDesktopUpdater(updateKind), updateGate,
+  updateKind, createReleaseDesktopUpdater(updateKind, (message) => logInfo(message)), updateGate,
   {
     prepare: async () => !quitInProgress && !screenshotManager.isBusy() && await assistantManager.prepareForUpdate(),
     stop: async () => {

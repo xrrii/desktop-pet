@@ -18,10 +18,12 @@ export class ElectronDesktopUpdater implements DesktopUpdater {
     private readonly trust: UpdateTrust,
     private readonly engine: ConfirmedNsisUpdater = new ConfirmedNsisUpdater({ provider: 'generic', url: feedUrl }),
     private readonly transport = new GuardedUpdateHttpExecutor(feedUrl, DESKTOP_UPDATE_RELEASE.bucketHost),
-    private readonly now = Date.now
+    private readonly now = Date.now,
+    log: (message: string) => void = () => {}
   ) {
     requireOfficialUpdateUrl(feedUrl)
     engine.setTransport(transport)
+    engine.setLaunchLogger(log)
     // 不读取 builder 推断的源；关闭后台下载、普通退出安装、预发布和降级。
     engine.setFeedURL({ provider: 'generic', url: feedUrl, useMultipleRangeRequest: false })
     engine.autoDownload = false
@@ -101,8 +103,8 @@ export class ElectronDesktopUpdater implements DesktopUpdater {
 }
 
 /** 源、确切桶主机和发布公钥都经发布评审内置后，才可创建正式更新器。 */
-export function createReleaseDesktopUpdater(kind: UpdatePackageKind): DesktopUpdater | null {
+export function createReleaseDesktopUpdater(kind: UpdatePackageKind, log: (message: string) => void = () => {}): DesktopUpdater | null {
   if (!['nsis', 'portable'].includes(kind) || !DESKTOP_UPDATE_RELEASE.trustReady ||
       !DESKTOP_UPDATE_RELEASE.feedUrl || !DESKTOP_UPDATE_RELEASE.bucketHost || !Object.keys(DESKTOP_UPDATE_TRUST.keys).length) return null
-  return new ElectronDesktopUpdater(DESKTOP_UPDATE_RELEASE.feedUrl, DESKTOP_UPDATE_TRUST)
+  return new ElectronDesktopUpdater(DESKTOP_UPDATE_RELEASE.feedUrl, DESKTOP_UPDATE_TRUST, undefined, undefined, undefined, log)
 }
