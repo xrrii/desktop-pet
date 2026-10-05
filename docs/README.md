@@ -4,7 +4,7 @@
 
 本目录按文档职责组织。开始开发前，先根据任务类型找到对应基线；当多份文档存在交叉时，总体架构和开发规范优先，功能专项负责补充领域细节。
 
-最后审阅日期：2026-10-04。
+最后审阅日期：2026-10-05。
 
 ## 2. 状态说明
 
@@ -41,6 +41,7 @@
 | --- | --- | --- |
 | [DEVELOPMENT.md](guides/DEVELOPMENT.md) | Active | 开发环境、代码规范、测试、构建和打包说明 |
 | [P3-B3 桌面正式信任与安装更新验收](guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md) | Tracking | 0.2.3 引导版、0.2.4 目标版、下载页部署与真实 NSIS 验收步骤 |
+| [桌面一键发布](guides/DESKTOP_RELEASE_AUTOMATION.md) | Tracking | Windows 本地检查、构建、清单签名、COS 上传、人工确认和受控 SSH 发布；Jenkins 后置 |
 | [MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md](guides/MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md) | Active | Phase 2 PostgreSQL、Redis、SSH 隧道和备份部署步骤 |
 | [UI_STYLE_GUIDELINES.md](guides/UI_STYLE_GUIDELINES.md) | Active | Renderer 界面布局、组件和视觉风格约定 |
 | [多代理角色手册](guides/multi-agent/README.md) | Active | 三项目开发角色、文件归属、任务分派和独立验收规范 |

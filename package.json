@@ -17,6 +17,8 @@
     "test:retrieval": "python-runtime\\.venv\\Scripts\\python.exe tools\\evaluate_retrieval.py",
     "test:runtime:packaged": "node tools/runtime_smoke.mjs",
     "test:updates:transport": "node tools/update_transport_smoke.mjs",
+    "test:release": "node --test tools/desktop-release/*.node-test.mjs",
+    "release:desktop": "node tools/release_desktop.mjs",
     "test:e2e:assistant": "npm run build && node tools/assistant_smoke.mjs",
     "test:e2e:assistant:dev": "cross-env PETDOCK_SMOKE_DEV=1 PETDOCK_SMOKE_SCREENSHOT=outputs\\assistant-stage1-dev.png node tools/assistant_smoke.mjs",
     "test:e2e:assistant:packaged": "cross-env PETDOCK_SMOKE_EXECUTABLE=release\\win-unpacked\\PetDock.exe PETDOCK_SMOKE_SCREENSHOT=outputs\\assistant-stage1-packaged.png node tools/assistant_smoke.mjs",
@@ -31,7 +33,7 @@
     "build": "electron-vite build && npm run check:production",
     "build:runtime": "node tools/build_runtime.mjs",
     "licenses": "node tools/generate_third_party_notices.mjs",
-    "check": "npm run typecheck && npm test && npm run test:contracts && npm run test:runtime && npm run test:retrieval && npm run build",
+    "check": "npm run typecheck && npm test && npm run test:release && npm run test:contracts && npm run test:runtime && npm run test:retrieval && npm run build",
     "preview": "electron-vite preview",
     "pack": "npm run licenses && npm run build && npm run build:runtime && electron-builder --dir --publish never",
     "dist": "npm run licenses && npm run build && npm run build:runtime && electron-builder --publish never"

@@ -472,6 +472,8 @@ npm.cmd run check
 
 `npm run dist` 会重新构建前端、主进程和 Python Runtime，再生成 NSIS 安装版与 Portable；不能只给旧 EXE 改名。升级版本不会自动配置生产公钥或开启正式更新，构建后仍需完成签名和安装升级验收。
 
+Windows 本地正式发布可使用 `npm run release:desktop -- --version <已批准版本>`，自动完成检查、完整打包、清单签名、COS 上传与人工确认后的目录切换。首次配置、服务器安装和恢复步骤见[桌面一键发布](DESKTOP_RELEASE_AUTOMATION.md)。本命令会操作正式更新源，应在完成一次性配置后由发布者主动运行。
+
 以下命令均在项目根目录的 PowerShell 中执行。Windows 下统一使用 `npm.cmd`，可以避免 PowerShell 的脚本执行策略拦截 `npm.ps1`。
 
 1. 安装 Node.js `22.12+`，然后安装前端依赖：
@@ -533,7 +535,7 @@ npm.cmd run pack
 
 - `dist`、`release`、`python-runtime\build`、`python-runtime\dist` 和 `outputs` 是构建产物，不应提交到 Git；提交前用 `git status --short` 检查待提交文件。
 
-提交功能代码前至少运行 `npm.cmd run check`，该命令依次执行严格类型检查、TypeScript 单元测试、Managed Service 契约测试、Python Runtime 测试、检索评测和生产构建。
+提交功能代码前至少运行 `npm.cmd run check`，该命令依次执行严格类型检查、TypeScript 单元测试、发布工具 Node 测试、Managed Service 契约测试、Python Runtime 测试、检索评测和生产构建。
 
 `test:runtime` 使用 `tools/run_runtime_tests.mjs` 为每次运行创建独立临时目录，禁用共享 pytest 缓存并原样返回测试退出码，结束只清理本次创建的目录。旧 `temp/pytest-runtime` 可能属于其他运行身份，不能为测试直接删目录、放开权限或跳过失败；新命令不复用它。PowerShell 中需要失败后停止的多步流程放在同一个 `& { ... }` 块内，逐行粘贴时上一条 `throw` 不会阻止下一条独立命令执行。
 
@@ -610,7 +612,7 @@ npm.cmd run test:e2e:assistant:c5
 npm.cmd run test:e2e:assistant:c5:packaged
 ```
 
-`npm.cmd run check` 会执行 TypeScript 类型检查、TypeScript 单元测试、Managed Service 契约测试、Python Runtime 测试、检索评测和 Electron 生产构建。
+`npm.cmd run check` 会执行 TypeScript 类型检查、TypeScript 单元测试、发布工具 Node 测试、Managed Service 契约测试、Python Runtime 测试、检索评测和 Electron 生产构建。
 
 C2 离线 Mock 可使用以下明确指令生成 Artifact：
 

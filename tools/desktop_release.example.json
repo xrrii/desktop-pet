@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "ssh": {
+    "host": "petdock-release",
+    "port": 22,
+    "identityFile": "C:/replace/ssh/server.pem"
+  },
+  "signing": {
+    "keyId": "desktop-release-1",
+    "privateKeyFile": "C:/replace/secure/ed25519-private.pem"
+  },
+  "cosCredentialsFile": "C:/replace/secure/cos-upload.json",
+  "cloudRepository": "E:/replace/petdock-cloud",
+  "pythonExecutable": "E:/replace/petdock-cloud/services/desktop-download/.venv/Scripts/python.exe"
+}
