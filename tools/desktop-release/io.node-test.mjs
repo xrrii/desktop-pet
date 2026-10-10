@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import { createPackage } from '@electron/asar'
-import { acquireLock, archiveBuild, callRemote, checkUpload, forkAbortedRelease, httpsRead, loadPolicy, readJson, snapshotSource, updateVersion, verifyHttps, verifySigningKey } from './io.mjs'
+import { acquireLock, archiveBuild, callRemote, checkUpload, forkAbortedRelease, httpsRead, loadPolicy, readJson, runProcess, snapshotSource, updateVersion, uploadArtifact, verifyHttps, verifySigningKey } from './io.mjs'
 
 /** 使用独立目录，结束只删除本次合成输出。 */
 async function temporary(callback) {
@@ -104,6 +104,49 @@ test('SSH只执行固定入口和stdin协议，严格主机信任，无真实连
 test('上传器退出成功但摘要不匹配不能继续发布', () => {
   const release = { releaseId: 'synthetic-id', version: '0.2.5', artifact: { size: 123, sha512: 'synthetic' } }
   assert.throws(() => checkUpload({ status: 'uploaded', version: '0.2.5', size: 123, sha512: 'wrong' }, release))
+})
+
+/** 使用合成路径和真实失败子进程，检查固定诊断不会泄露任意 stdout。 */
+async function uploadResult(output, code = 1) {
+  const config = { pythonExecutable: 'synthetic-python', cloudRepository: resolve('synthetic-cloud'),
+    cosCredentialsFile: resolve('synthetic-credentials.json') }
+  const release = { releaseId: 'synthetic-id', version: '0.2.5', artifactPath: resolve('synthetic.exe'),
+    artifact: { size: 123, sha512: 'synthetic' } }
+  return uploadArtifact(config, 'synthetic-1234567890', release, resolve('synthetic-manifest.json'),
+    async (executable, args, options) => {
+      assert.equal(executable, config.pythonExecutable)
+      assert.equal(args[0], join(config.cloudRepository, 'tools', 'desktop_cos_upload.py'))
+      assert.equal(options.timeout, 60 * 60 * 1000)
+      return runProcess(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(output)});process.exitCode=${code}`])
+    })
+}
+
+test('上传器非零退出的白名单错误映射固定中文', async () => {
+  await assert.rejects(uploadResult(JSON.stringify({ status: 'failed', category: 'AccessDenied' })), /GetObject\/PutObject/)
+  await assert.rejects(uploadResult(JSON.stringify({ status: 'failed', category: 'ExpiredToken' })), /临时凭据已过期/)
+})
+
+for (const output of [
+  JSON.stringify({ status: 'failed', category: 'synthetic-private-marker' }),
+  JSON.stringify({ status: 'failed', category: 'AccessDenied', detail: 'synthetic-private-marker' }),
+  JSON.stringify([{ status: 'failed', category: 'AccessDenied' }]),
+  'synthetic-private-marker\nnot-json',
+  JSON.stringify({ status: 'uploaded', version: '0.2.5', size: 123, sha512: 'synthetic' }),
+  JSON.stringify({ status: 'failed', category: 'toString' })
+]) {
+  test('上传失败的未知或伪造输出保持隐藏且不作为成功', async () => {
+    await assert.rejects(uploadResult(output), (error) => {
+      assert.match(error.message, /COS 上传未完成/)
+      assert.doesNotMatch(error.message, /synthetic-private-marker|AccessDenied|uploaded|toString/)
+      return true
+    })
+  })
+}
+
+test('上传器零退出仍须核对失败状态和完整制品摘要', async () => {
+  await assert.rejects(uploadResult(JSON.stringify({ status: 'failed', category: 'AccessDenied' }), 0), /GetObject\/PutObject/)
+  await assert.rejects(uploadResult(JSON.stringify({ status: 'uploaded', version: '0.2.5', size: 123, sha512: 'wrong' }), 0), /不一致/)
+  assert.equal((await uploadResult(JSON.stringify({ status: 'uploaded', version: '0.2.5', size: 123, sha512: 'synthetic' }), 0)).status, 'uploaded')
 })
 
 /** 使用真实验签器和合成密钥；传输函数只返回内存响应。 */

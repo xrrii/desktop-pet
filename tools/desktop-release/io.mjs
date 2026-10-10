@@ -347,3 +347,48 @@ export function defaultConfigPath() { return join(homedir(), 'PetDock-release-in
 export function checkUpload(reply, release) {
   requireReply({ ...reply, schemaVersion: 1, releaseId: release.releaseId, artifact: { size: reply.size, sha512: reply.sha512 } }, release, ['uploaded', 'already_present'])
 }
+
+const UPLOAD_FAILURE_HINTS = Object.freeze({
+  AccessDenied: 'COS 拒绝访问，请核对发布身份对 releases/* 的 GetObject/PutObject 权限，修正后使用原事务恢复。',
+  NoSuchBucket: 'COS 目标存储桶不存在或不可访问，请核对广州桶配置。',
+  NoSuchKey: 'COS 上传回读未找到制品，请核对上传结果后使用原事务恢复。',
+  InvalidAccessKeyId: 'COS 发布凭据 SecretId 无效，请更新仓库外的上传凭据文件。',
+  SignatureDoesNotMatch: 'COS 请求签名不匹配，请核对上传凭据及系统时间。',
+  ExpiredToken: 'COS 临时凭据已过期，请更新仓库外的上传凭据文件后使用原事务恢复。',
+  RequestTimeTooSkewed: '本机时间与 COS 时间偏差过大，请同步系统时间后使用原事务恢复。',
+  InvalidToken: 'COS 临时令牌无效，请核对上传凭据的 securityToken 后使用原事务恢复。',
+  upload_or_binding_error: 'COS 上传或本地制品绑定检查失败，请核对凭据格式、网络及冻结制品，再使用原事务恢复。'
+})
+const UNKNOWN_UPLOAD_FAILURE = 'COS 上传未完成，详细输出已隐藏；请核对上传配置、连接和冻结制品，再使用原事务恢复。'
+
+/** 只把精确失败协议中的白名单类别映射为固定中文，任何底层正文都不进入日志。 */
+function uploadFailureMessage(output) {
+  try {
+    if (typeof output !== 'string' || Buffer.byteLength(output) > MAX_JSON) return UNKNOWN_UPLOAD_FAILURE
+    const reply = JSON.parse(output)
+    if (reply && typeof reply === 'object' && !Array.isArray(reply) &&
+        Object.keys(reply).sort().join(',') === 'category,status' && reply.status === 'failed' &&
+        typeof reply.category === 'string' && Object.hasOwn(UPLOAD_FAILURE_HINTS, reply.category)) {
+      return UPLOAD_FAILURE_HINTS[reply.category]
+    }
+  } catch { /* 非协议输出保持隐藏，不能将 traceback 或 SDK 诊断转印到终端。 */ }
+  return UNKNOWN_UPLOAD_FAILURE
+}
+
+/** 上传失败保持原事务的 signed 阶段；非零退出即使伪造成功回应也不能继续上线。 */
+export async function uploadArtifact(config, bucket, release, manifestFile, execute = runProcess) {
+  let output
+  try {
+    output = await execute(config.pythonExecutable, [join(config.cloudRepository, 'tools', 'desktop_cos_upload.py'),
+      '--credentials-file', config.cosCredentialsFile, '--bucket', bucket,
+      '--artifact', release.artifactPath, '--manifest', manifestFile], { timeout: 60 * 60 * 1000 })
+  } catch (error) {
+    if (error instanceof ProcessExitError) throw new ReleaseError(uploadFailureMessage(error.output))
+    throw error
+  }
+  let reply
+  try { reply = JSON.parse(output) } catch { throw new ReleaseError(UNKNOWN_UPLOAD_FAILURE) }
+  if (reply?.status === 'failed') throw new ReleaseError(uploadFailureMessage(output))
+  checkUpload(reply, release)
+  return reply
+}

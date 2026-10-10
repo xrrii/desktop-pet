@@ -541,3 +541,11 @@ Cloud 最终服务/运维 pytest 144 项通过（新增发布 23 项），新增
 用户执行 Windows 发布指南第 3 节时，`py -3.13` 无法识别。本机已有可运行的 Runtime Python 3.13.2，指南改为优先验证已有 COS 环境，否则用 Runtime 解释器创建独立 SDK 环境，保留版本与外部退出码门禁，无须安装启动器或修改 Runtime 依赖。版本检查避免内嵌引号，兼容 Windows PowerShell 5.1 的参数传递。
 
 修正后的全部 PowerShell 片段在 5.1/7 语法检查通过；第 3 节原文在本机 PowerShell 5.1 完整执行退出 0，真实创建 COS 专用环境并安装既有 requirements。COS/cryptography 导入和 `pip check` 通过；Cloud 服务目录的 `.venv` 已被现有规则忽略。未运行发行构建、读取正式凭据、连接 SSH 或操作 COS，用户下一步继续第 4 节配置仓库外凭据路径。原有 `python-runtime/petdock_runtime/agent/context.py` 修改保留，不纳入本次文档提交。
+
+### 23.5 首次真实发布的 COS 请求头故障（2026-10-10）
+
+本轮基线 Desktop `11bec77`、Cloud `7f882c8`。用户主动发布 0.2.5，日志确认 325 项 Vitest、31 项发布测试、30 契约、119 Runtime、检索/生产构建与完整 Windows 打包通过，随后完成归档和清单签名，上传阶段失败。本地原事务保持 `signed`；版本文件已由用户命令升至 0.2.5，保留这些修改及既有 context.py，不将其混入故障修复提交。
+
+只读核对当前发布凭据结构有效，目标对象 HEAD 为 404 `NoSuchResource`；未执行 PUT。用合成凭据将旧测试的拦截点下移到真实 requests 发送边界，修复前复现 `Content-Length` 整数导致 InvalidHeader/CosClientError，修复为字符串后通过。Desktop 只将上传器严格失败 JSON 的白名单类别映射为固定中文，未知/额外字段/非零伪成功均拒绝且隐藏原文；原事务可用 `--resume` 复用冻结制品与签名，不重新打包。
+
+本轮发布工具 39 项 Node 测试、Cloud 发布/上传 23 项 pytest 和受影响 Python Ruff 通过，包含真实请求准备及禁止覆盖/MD5 门禁；CLI 语法/help、原 0.2.5 公钥验签及冻结安装包 SHA-512 复验通过。独立审查未发现遗留可确认问题。未重复用户已通过的业务全套，未读取签名私钥、连接 SSH、实际上传或切换生产目录。真实 COS 上传、服务器受控发布、HTTPS 整包和两机 NSIS 首次窗口复验继续由用户执行留证。

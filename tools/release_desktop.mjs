@@ -4,8 +4,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkAndBuild, publishRelease, ReleaseError, requireVersion } from './desktop-release/core.mjs'
 import {
-  acquireLock, archiveBuild, callRemote, checkUpload, confirmRelease, defaultConfigPath, describeFile,
-  forkAbortedRelease, loadConfig, loadPolicy, readJson, runNpm, runProcess, snapshotSource, updateVersion, verifyHttps, verifySigningKey, writeJson
+  acquireLock, archiveBuild, callRemote, confirmRelease, defaultConfigPath, describeFile,
+  forkAbortedRelease, loadConfig, loadPolicy, readJson, runNpm, runProcess, snapshotSource, updateVersion, uploadArtifact, verifyHttps, verifySigningKey, writeJson
 } from './desktop-release/io.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -150,10 +150,7 @@ async function main(args) {
     if (state.phase === 'signed') {
       console.log('开始上传冻结制品；同版本不同内容会拒绝覆盖。')
       const bucket = policy.DESKTOP_UPDATE_RELEASE.bucketHost.split('.cos.')[0]
-      const reply = JSON.parse(await runProcess(config.pythonExecutable, [join(config.cloudRepository, 'tools', 'desktop_cos_upload.py'),
-        '--credentials-file', config.cosCredentialsFile, '--bucket', bucket,
-        '--artifact', release.artifactPath, '--manifest', join(directory, 'manifest.json')], { timeout: 60 * 60 * 1000 }))
-      checkUpload(reply, release)
+      await uploadArtifact(config, bucket, release, join(directory, 'manifest.json'))
       state.phase = 'uploaded'
       await writeJson(join(directory, 'state.json'), state)
     }
