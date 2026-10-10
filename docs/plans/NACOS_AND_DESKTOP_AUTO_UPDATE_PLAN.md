@@ -535,3 +535,9 @@ Cloud 最终服务/运维 pytest 144 项通过（新增发布 23 项），新增
 补充 Cloud [清单续签与过期恢复指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)，更新原巡检与两个发布指南的续签入口。Windows 用原私钥/内置公钥验证旧签名并只刷新时间；Ubuntu 共锁、拒在途事务、比较快照/版本集合/currentVersion/keyId/制品绑定、备份与降 UID 复验后替换，异常恢复原目录并保持暂停。不重建或重传包，不修改信任或预算，不放宽服务时效。
 
 新指南 3 个 Bash、1 个 PowerShell、1 段 Node、1 段 Python 语法及提取原文的 6 个离线续签、10 个服务器校验/回退合成场景通过；Windows PowerShell 5.1/7 完整原文各 1 个成功场景通过，SCP 使用替身；未重复业务全套。独立审查发现首次原子写入未被异常回退覆盖，已修复并补充替换后同步失败场景，复审无遗留可确认问题。Windows 的 flock/降 UID 为替身，真实 Linux、SSH、正式私钥、生产续签与恢复均未执行。临时验证脚本和合成密钥/目录保持忽略；下一步用户按新指南刷新两版后重跑原安装指南第 4 节，生产恢复和 NSIS 两机复验继续单列。
+
+### 23.4 Windows 发布环境缺少 py 启动器（2026-10-10）
+
+用户执行 Windows 发布指南第 3 节时，`py -3.13` 无法识别。本机已有可运行的 Runtime Python 3.13.2，指南改为优先验证已有 COS 环境，否则用 Runtime 解释器创建独立 SDK 环境，保留版本与外部退出码门禁，无须安装启动器或修改 Runtime 依赖。版本检查避免内嵌引号，兼容 Windows PowerShell 5.1 的参数传递。
+
+修正后的全部 PowerShell 片段在 5.1/7 语法检查通过；第 3 节原文在本机 PowerShell 5.1 完整执行退出 0，真实创建 COS 专用环境并安装既有 requirements。COS/cryptography 导入和 `pip check` 通过；Cloud 服务目录的 `.venv` 已被现有规则忽略。未运行发行构建、读取正式凭据、连接 SSH 或操作 COS，用户下一步继续第 4 节配置仓库外凭据路径。原有 `python-runtime/petdock_runtime/agent/context.py` 修改保留，不纳入本次文档提交。

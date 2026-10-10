@@ -1,6 +1,6 @@
 # 桌面一键发布操作指南
 
-状态：Tracking。2026-10-05。实现 Windows 本地发布编排；Jenkins 尚未接入，P3-B3 两台真实 NSIS 首次安装复验继续按[验收指南 6.1](DESKTOP_UPDATE_P3B3_ACCEPTANCE.md#61-首次重启安装没有窗口的修复复验windows)执行。本轮开发不连接生产 SSH、不构建正式发行包、不读取生产私钥或上传对象。
+状态：Tracking。2026-10-10。实现 Windows 本地发布编排；Jenkins 尚未接入，P3-B3 两台真实 NSIS 首次安装复验继续按[验收指南 6.1](DESKTOP_UPDATE_P3B3_ACCEPTANCE.md#61-首次重启安装没有窗口的修复复验windows)执行。本轮开发不连接生产 SSH、不构建正式发行包、不读取生产私钥或上传对象。
 
 ## 1. 命令与发布行为
 
@@ -38,15 +38,25 @@ sudo -n /usr/local/sbin/petdock-desktop-release
 
 ## 3. 一次性准备 Windows 环境
 
-使用项目现有 Node/npm 与 Python 3.13。新建 COS SDK 专用环境，避免改动 Runtime 环境；所有外部进程退出码都必须检查。在 Desktop 根目录整块执行：
+使用项目现有 Node/npm 与 Python 3.13。用已有 Runtime 解释器创建独立的 COS SDK 环境，无须依赖 Windows 的 `py` 启动器；SDK 依赖只安装到新环境。已有 COS 环境先核对版本再复用，所有外部进程退出码都必须检查。在 Desktop 根目录整块执行：
 
 ```powershell
 & {
 $ErrorActionPreference = 'Stop'
 $Cloud = (Resolve-Path '..\petdock-office\petdock-cloud').Path
 $Python = Join-Path $Cloud 'services\desktop-download\.venv\Scripts\python.exe'
+$BootstrapPython = $Python
+if (!(Test-Path -LiteralPath $BootstrapPython -PathType Leaf)) {
+    $BootstrapPython = Join-Path (Get-Location).Path 'python-runtime\.venv\Scripts\python.exe'
+}
+if (!(Test-Path -LiteralPath $BootstrapPython -PathType Leaf)) {
+    throw '未找到已有 Python 环境，请先按开发指南准备 Runtime 的 Python 3.13 环境。'
+}
+# 先核对实际解释器版本，再创建独立环境，避免误用其他版本或商店占位程序。
+& $BootstrapPython -c 'import sys; print(sys.version.split()[0]); sys.exit(0 if sys.version_info[:2] == (3, 13) else 1)'
+if ($LASTEXITCODE -ne 0) { throw '发布依赖需要可运行的 Python 3.13，请核对已有环境。' }
 if (!(Test-Path -LiteralPath $Python -PathType Leaf)) {
-    py -3.13 -m venv (Join-Path $Cloud 'services\desktop-download\.venv')
+    & $BootstrapPython -m venv (Join-Path $Cloud 'services\desktop-download\.venv')
     if ($LASTEXITCODE -ne 0) { throw 'COS SDK Python 环境创建失败。' }
 }
 & $Python -m pip install -r (Join-Path $Cloud 'services\desktop-download\requirements.txt')
