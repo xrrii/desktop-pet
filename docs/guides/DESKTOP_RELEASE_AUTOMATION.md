@@ -1,6 +1,6 @@
 # 桌面一键发布操作指南
 
-状态：Active。2026-10-15。Windows 本地发布编排已实现；P3 桌面更新已按用户确认验收收尾，见 [验收指南 6.3](DESKTOP_UPDATE_P3B3_ACCEPTANCE.md#63-p3-验收收尾2026-10-15)。Jenkins 和 Nacos 发布整合仍后置。发布命令由用户执行，开发会话不连接生产 SSH。
+状态：Active。2026-10-15。Windows 本地发布编排已实现；P3 桌面更新已按用户确认验收收尾，见 [验收指南 6.3](DESKTOP_UPDATE_P3B3_ACCEPTANCE.md#63-p3-验收收尾2026-10-15)。本方案已取消 P2；Jenkins 与已有 Chat 的 Nacos 发布整合、最终验收属于 P4 剩余工作，见 [计划第 25 节](../plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#25-范围调整与-p4-最终交付2026-10-15)。现有命令需要交互终端，不可直接用于 Jenkins 自动批准。发布命令由用户执行，开发会话不连接生产 SSH。
 
 ## 1. 命令与发布行为
 

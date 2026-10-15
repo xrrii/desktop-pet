@@ -41,7 +41,7 @@
 | --- | --- | --- |
 | [DEVELOPMENT.md](guides/DEVELOPMENT.md) | Active | 开发环境、代码规范、测试、构建和打包说明 |
 | [P3-B3 桌面正式信任与安装更新验收](guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md) | Active | P3 已由用户确认验收完成；保留升级复验、故障处理和持续维护步骤，收尾记录见 6.3 |
-| [桌面一键发布](guides/DESKTOP_RELEASE_AUTOMATION.md) | Active | Windows 本地检查、构建、清单签名、COS 上传、人工确认和受控 SSH 发布；Jenkins 后置 |
+| [桌面一键发布](guides/DESKTOP_RELEASE_AUTOMATION.md) | Active | Windows 本地检查、构建、清单签名、COS 上传、人工确认和受控 SSH 发布；Jenkins 接入属于 P4 剩余工作 |
 | [MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md](guides/MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md) | Active | Phase 2 PostgreSQL、Redis、SSH 隧道和备份部署步骤 |
 | [UI_STYLE_GUIDELINES.md](guides/UI_STYLE_GUIDELINES.md) | Active | Renderer 界面布局、组件和视觉风格约定 |
 | [多代理角色手册](guides/multi-agent/README.md) | Active | 三项目开发角色、文件归属、任务分派和独立验收规范 |
@@ -52,7 +52,7 @@
 | --- | --- | --- |
 | [CONVERSATION_RESOURCE_CAPABILITIES.md](features/CONVERSATION_RESOURCE_CAPABILITIES.md) | Active | 附件、Artifact、联网搜索、复杂输入和多文件能力 |
 | [Desktop 登录、SSO 与官网管理入口](features/DESKTOP_SSO.md) | Active | 当前行为、上线状态来源与历史证据入口 |
-| [Nacos 配置中心与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) | Tracking | P1 Chat、P3 桌面自动更新已由用户确认验收完成；下一阶段为 P2 多能力配置迁移，P4 完整整合与 P5 尚未完成 |
+| [Nacos 配置中心与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) | Tracking | P1 Chat、P3 桌面自动更新已完成；P2 多能力迁移在本方案取消，P4 发布整合含最终验收完成后整体收尾 |
 | [桌面更新签名与 Lighthouse 下载边界](features/DESKTOP_UPDATE_TRUST.md) | Active | 应用层签名、离线工具、私有桶路径及费用防护的本地实施基线 |
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
@@ -69,7 +69,7 @@
 | [MANAGED_SERVICE_PROGRESS.md](roadmap/MANAGED_SERVICE_PROGRESS.md) | Tracking | 官方托管服务当前阶段、跨仓库边界、验证事实和跨会话交接入口 |
 | [历史归档](archive/README.md) | Archived | 已结束计划、SSO 验收、BYOK 基线和旧进度全文 |
 
-当前工作入口：[Nacos 与桌面自动更新](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) 第 24 节：P3 已收尾，后续准备 P2，不重复开发 P1。跨仓入口：[Cloud 文档](../../petdock-office/petdock-cloud/docs/README.md)、[Web 文档](../../petdock-office/petdock-web/docs/README.md)。
+当前工作入口：[Nacos 与桌面自动更新第 25 节](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#25-范围调整与-p4-最终交付2026-10-15)：P1/P3 已完成，本方案取消 P2，唯一剩余阶段为 P4；原 P5 必要验收并入 P4。跨仓入口：[Cloud 文档](../../petdock-office/petdock-cloud/docs/README.md)、[Web 文档](../../petdock-office/petdock-web/docs/README.md)。
 
 ## 5. 按任务选择文档
 
