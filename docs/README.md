@@ -41,7 +41,7 @@
 | --- | --- | --- |
 | [DEVELOPMENT.md](guides/DEVELOPMENT.md) | Active | 开发环境、代码规范、测试、构建和打包说明 |
 | [P3-B3 桌面正式信任与安装更新验收](guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md) | Active | P3 已由用户确认验收完成；保留升级复验、故障处理和持续维护步骤，收尾记录见 6.3 |
-| [桌面一键发布](guides/DESKTOP_RELEASE_AUTOMATION.md) | Active | 当前桌面发布入口：本地检查、构建、签名、COS 上传、交互确认和受控 SSH 发布；本方案不接 Jenkins |
+| [桌面一键发布](guides/DESKTOP_RELEASE_AUTOMATION.md) | Active | 本地构建/上传与交互发布、当前版独立续签、旧目录迁移及可选 Windows 每日临期维护；不接 Jenkins |
 | [MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md](guides/MANAGED_SERVICE_SHARED_DEV_DEPLOYMENT.md) | Active | Phase 2 PostgreSQL、Redis、SSH 隧道和备份部署步骤 |
 | [UI_STYLE_GUIDELINES.md](guides/UI_STYLE_GUIDELINES.md) | Active | Renderer 界面布局、组件和视觉风格约定 |
 | [多代理角色手册](guides/multi-agent/README.md) | Active | 三项目开发角色、文件归属、任务分派和独立验收规范 |
@@ -69,7 +69,7 @@
 | [MANAGED_SERVICE_PROGRESS.md](roadmap/MANAGED_SERVICE_PROGRESS.md) | Tracking | 官方托管服务当前阶段、跨仓库边界、验证事实和跨会话交接入口 |
 | [历史归档](archive/README.md) | Archived | 已结束计划、SSO 验收、BYOK 基线和旧进度全文 |
 
-当前工作入口：[Nacos 与桌面自动更新第 25 节](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#25-范围调整与-p4-最终交付2026-10-15)：桌面继续使用 `npm run release:desktop`，Chat 沿用 P1 运维，不新增 Jenkins 编排；现场缺证据项与持续维护保留清单，原 P5 不再单列。跨仓入口：[Cloud 文档](../../petdock-office/petdock-cloud/docs/README.md)、[Web 文档](../../petdock-office/petdock-web/docs/README.md)。
+当前工作入口：[Nacos 与桌面自动更新第26节](plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#26-当前版目录与独立续签调整2026-10-15)：正式目录只保留当前版，独立续签和可选 Windows 每日维护；服务器旧目录迁移及任务启用由用户按指南执行。桌面继续本地发布，Chat 沿用 P1 运维，不接 Jenkins；现场缺证据项与持续维护单列。跨仓入口：[Cloud 文档](../../petdock-office/petdock-cloud/docs/README.md)、[Web 文档](../../petdock-office/petdock-web/docs/README.md)。
 
 ## 5. 按任务选择文档
 

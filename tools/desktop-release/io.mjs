@@ -55,7 +55,7 @@ async function requireExternalFile(path, roots, maximum = 16_384) {
 }
 
 /** 从仓库外配置读取路径，正式域名/桶仍由应用内置策略决定。 */
-export async function loadConfig(path, root) {
+export async function loadConfig(path, root, mode = 'release') {
   const config = await readJson(path)
   const cloudRoot = resolve(root, '..', 'petdock-office', 'petdock-cloud')
   const roots = [root, cloudRoot, resolve(cloudRoot, '..', 'petdock-web')]
@@ -72,6 +72,12 @@ export async function loadConfig(path, root) {
     throw new ReleaseError('发布配置结构或 SSH 参数无效。')
   }
   if (config.cloudRepository !== undefined && (typeof config.cloudRepository !== 'string' || !isAbsolute(config.cloudRepository))) throw new ReleaseError('Cloud 仓库必须使用完整目录路径。')
+  // 续签只依赖 SSH 与签名密钥，不要求安装 COS SDK、上传凭据或保留本地 EXE。
+  if (mode === 'renew') return {
+    ...config,
+    ssh: { ...config.ssh, identityFile: await requireExternalFile(config.ssh.identityFile, roots) },
+    signing: { ...config.signing, privateKeyFile: await requireExternalFile(config.signing.privateKeyFile, roots) }
+  }
   const repository = await realpath(config.cloudRepository ?? cloudRoot)
   roots.push(repository)
   await stat(join(repository, 'tools', 'desktop_cos_upload.py'))
@@ -232,6 +238,8 @@ export async function forkAbortedRelease(runs, state) {
 export async function callRemote(config, action, release, execute = runProcess) {
   const input = { schemaVersion: 1, action, releaseId: release.releaseId, version: release.version }
   if (action === 'prepare') input.manifest = release.envelope
+  if (action === 'renew') Object.assign(input, { manifest: release.envelope,
+    baseline: release.baseline, migration: release.migration })
   const args = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'IdentitiesOnly=yes',
     '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2',
     '-p', String(config.ssh.port), '-i', config.ssh.identityFile, config.ssh.host,
@@ -243,7 +251,9 @@ export async function callRemote(config, action, release, execute = runProcess) 
   if (reply.status === 'failed') {
     if (reply.schemaVersion !== 1 || reply.releaseId !== release.releaseId || reply.version !== release.version) throw new ReleaseError('服务器错误回应身份不一致，请查询本次事务后再操作。')
     const hints = {
-      catalog_or_manifest_invalid: '服务器历史目录或新清单无效，可能已有旧版本过期；请按指南续签维护后再发布。',
+      catalog_or_manifest_invalid: '服务器当前目录或清单无效，请按指南检查签名、权限并续签维护。',
+      migration_required: '正式目录尚有历史版本，请按指南在交互终端执行 --renew --migrate-current。',
+      renewal_invalid: '续签被拒绝：必须保持当前版本、签名身份和制品绑定，只延长清单时效。',
       download_paused: '下载入口处于运维暂停状态；请先完成服务器检查，发布工具不会自行解除此暂停。',
       version_conflict: '服务器拒绝同版本或非递增发布，请核对版本和已有对象。',
       release_in_progress: '服务器存在未结束事务，请先查询并处理原事务。',
@@ -251,8 +261,8 @@ export async function callRemote(config, action, release, execute = runProcess) 
       baseline_changed: '正式目录、信任或暂停开关已发生变化，已停止发布。',
       pause_failed: '服务器暂停失败，请立即按部署指南执行 root 应急暂停。'
     }
-    const error = new ReleaseError(hints[reply.category] ?? '服务器拒绝发布，请在服务器核对事务状态、目录时效和权限。')
-    error.prepareRejected = action === 'prepare' && ['invalid_request', 'catalog_or_manifest_invalid', 'catalog_unavailable', 'download_paused', 'version_conflict', 'release_in_progress', 'manifest_invalid'].includes(reply.category)
+    const error = new ReleaseError(Object.hasOwn(hints, reply.category) ? hints[reply.category] : '服务器拒绝发布，请在服务器核对事务状态、目录时效和权限。')
+    error.prepareRejected = action === 'prepare' && ['invalid_request', 'catalog_or_manifest_invalid', 'catalog_unavailable', 'download_paused', 'version_conflict', 'release_in_progress', 'manifest_invalid', 'migration_required'].includes(reply.category)
     throw error
   }
   return reply

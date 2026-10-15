@@ -15,7 +15,7 @@
 
 ## 下一步
 
-按 [方案第 25 节](../plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#25-范围调整与-p4-最终交付2026-10-15) 使用现有本地发布命令，不接 Jenkins、不新增节点或 CI Credentials。保留交互确认、原制品恢复和现有 Chat 运维步骤；已有 Cloud/Web Jenkins 保持原用途。本轮发布回归 Desktop 39 项、Cloud 144 项通过，未执行正式构建、上传或生产故障注入。
+按 [方案第 26 节](../plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#26-当前版目录与独立续签调整2026-10-15) 完成服务器单版本目录迁移，再使用当前版独立续签与可选 Windows 每日维护。新版本仍走本地发布、一次交互确认；不接 Jenkins、不新增节点或 CI Credentials。既有 Cloud/Web Jenkins 与 P1 Chat 运维保持原用途。本批代码与本地合成验证不代替用户现场迁移及任务首次运行。
 
 P2 已从本方案取消，其他能力保持当前配置来源，未来有需求另立项；这不撤销 Managed Phase 2 身份与会话或既有多能力实现。不重复开发 P1/P3，已通过的验收继续有效，变更影响项定向回归；旧版本清理暂不处理。
 

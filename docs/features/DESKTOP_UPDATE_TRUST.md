@@ -77,7 +77,7 @@ node tools/sign_desktop_update.mjs `
 
 轮换时先用旧密钥签发包含新旧公钥的过渡客户端，再切换到新密钥签发。撤销列表只随受信任应用更新，当前没有在线撤销协议；私钥泄露时须暂停下载，发布受控引导安装包并通知旧客户端手动迁移，不能宣称已能远程撤销旧客户端信任。
 
-清单过期会阻止尚未下载或未安装的候选。即使没有新版本，也须在有效期结束前离线重签同一版本的清单，并验证后替换入口清单；客户端已经取得的过期候选需重新检查。续签使用 [现有维护指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)，新版本使用 [Windows 本地发布命令](../guides/DESKTOP_RELEASE_AUTOMATION.md)。用户已取消 Jenkins 新接入，不新增调度任务。
+清单过期会阻止尚未下载或未安装的候选。正式目录现行规则只保留当前版，历史包及原目录留在归档，不再周期续签历史版本。`npm run release:desktop -- --renew` 只刷新当前版时间为29天，版本、签名身份与制品绑定必须保持不变；过期恢复仅在维护中按原签发时间核对原签名，新清单、正常服务和客户端仍检查真实当前时间。客户端已取得的过期候选需重新检查。首次旧目录迁移与暂停恢复使用 [维护指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)，新版本和可选 Windows 每日临期任务见 [Windows 本地发布命令](../guides/DESKTOP_RELEASE_AUTOMATION.md)。用户已取消 Jenkins，新任务仅为本机当前版续签；尚未由代理注册或生产启用。
 
 ## 4. 下载入口与存储对象
 

@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createInterface } from 'node:readline/promises'
+import { parseArguments, RELEASE_ID_PATTERN } from './desktop-release/arguments.mjs'
+import { resumeRenewal, startRenewal } from './desktop-release/renewal.mjs'
 import { checkAndBuild, publishRelease, ReleaseError, requireVersion } from './desktop-release/core.mjs'
 import {
   acquireLock, archiveBuild, callRemote, confirmRelease, defaultConfigPath, describeFile,
@@ -10,27 +13,18 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runs = join(root, 'release-runs')
-const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const ID_PATTERN = RELEASE_ID_PATTERN
 
-/** 参数不接受任意远程命令或关闭验签的开关。 */
-function parseArguments(args) {
-  if (args.length === 1 && args[0] === '--help') return { help: true }
-  const values = new Map()
-  for (let index = 0; index < args.length; index += 2) {
-    const name = args[index]
-    const value = args[index + 1]
-    if (!['--version', '--resume', '--status', '--abort', '--config'].includes(name) || values.has(name) || !value || value.startsWith('--')) {
-      throw new ReleaseError('参数无效，请运行 npm run release:desktop -- --help 查看用法。')
-    }
-    values.set(name, value)
-  }
-  const modes = ['--version', '--resume', '--status', '--abort'].filter((name) => values.has(name))
-  if (modes.length !== 1) throw new ReleaseError('需要且只能指定 version、resume、status、abort 中的一种。')
-  const mode = modes[0].slice(2)
-  const value = values.get(modes[0])
-  if (mode === 'version') requireVersion(value)
-  else if (!ID_PATTERN.test(value)) throw new ReleaseError('事务编号必须来自本命令输出的 UUID。')
-  return { mode, value, config: values.get('--config') ?? defaultConfigPath() }
+/** 仅旧多版本目录迁移需要额外交互确认，定时续签不能代替用户批准。 */
+async function confirmMigration(snapshot) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new ReleaseError('旧目录迁移需要交互终端。')
+  const manifest = JSON.parse(Buffer.from(snapshot.manifest.manifest, 'base64').toString('utf8'))
+  console.log(`迁移后正式目录仅保留 ${snapshot.version}，原目录及历史包保留归档。\n` +
+    `原目录版本数：${snapshot.versionCount}；当前暂停：${snapshot.paused}\n原到期时间：${manifest.expiresAt}\n` +
+    `安装包字节数：${manifest.artifact.size}\nSHA-512：${manifest.artifact.sha512}`)
+  const prompt = createInterface({ input: process.stdin, output: process.stdout })
+  try { return (await prompt.question('输入当前版本号确认迁移，其余输入取消：')).trim() === snapshot.version }
+  finally { prompt.close() }
 }
 
 /** 冻结后的制品须重新验签、算摘要；恢复发布不重建同版本安装包。 */
@@ -108,16 +102,20 @@ async function ensureSigned(directory, state, config, policy) {
 
 /** 本地编排入口；真实服务器行为只由用户主动执行本命令触发。 */
 async function main(args) {
-  const input = parseArguments(args)
+  const input = parseArguments(args, defaultConfigPath())
   if (input.help) {
     console.log('用法：npm run release:desktop -- --version 0.2.5 [--config 仓库外配置文件]\n' +
       '恢复：npm run release:desktop -- --resume 事务UUID\n查询：npm run release:desktop -- --status 事务UUID\n取消/恢复旧目录并暂停：npm run release:desktop -- --abort 事务UUID\n' +
+      '续签当前版：npm run release:desktop -- --renew\n定时临期续签：npm run release:desktop -- --renew --if-due\n旧目录首次迁移：npm run release:desktop -- --renew --migrate-current\n' +
       '默认配置：用户目录/PetDock-release-input/release.config.json\n首次配置见 docs/guides/DESKTOP_RELEASE_AUTOMATION.md。')
     return
   }
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new ReleaseError('本发布命令仅支持可信 Windows x64 构建机。')
   if (input.mode === 'version' && (!process.stdin.isTTY || !process.stdout.isTTY)) throw new ReleaseError('正式发布需要交互终端，禁止自动批准。')
-  const config = await loadConfig(input.config, root)
+  if (input.migration && (!process.stdin.isTTY || !process.stdout.isTTY)) throw new ReleaseError('旧目录迁移需要交互终端。')
+  const restored = ['resume', 'status', 'abort'].includes(input.mode) ? await loadState(input.value) : null
+  const renewal = input.mode === 'renew' || restored?.operation === 'renew'
+  const config = await loadConfig(input.config, root, renewal ? 'renew' : 'release')
   const policy = await loadPolicy(root)
   if (input.mode === 'version') {
     await verifySigningKey(config, policy)
@@ -125,18 +123,30 @@ async function main(args) {
   }
   const unlock = await acquireLock(runs)
   try {
+    const dependencies = { remote: (action, value) => callRemote(config, action, value),
+      verifyHttps: (value, full) => verifyHttps(policy, value, full), confirmMigration, log: (message) => console.log(message) }
+    if (input.mode === 'renew') {
+      await startRenewal(input, config, policy, runs, dependencies)
+      return
+    }
     if (['status', 'abort'].includes(input.mode)) {
-      const state = await loadState(input.value)
+      const state = restored
       const response = await callRemote(config, input.mode, state)
       // 只显示协议允许的公开摘要，不直接转印 SSH 的完整输出。
       if (response.schemaVersion !== 1 || response.releaseId !== state.releaseId || response.version !== state.version) throw new ReleaseError('服务器回应身份不一致。')
       console.log(JSON.stringify({ releaseId: state.releaseId, version: state.version, status: response.status,
-        artifact: { size: response.artifact?.size, sha512: response.artifact?.sha512 }, rollbackVerified: response.rollbackVerified }))
+        artifact: { size: response.artifact?.size, sha512: response.artifact?.sha512 }, rollbackVerified: response.rollbackVerified,
+        operation: response.operation, paused: response.paused, expiresAt: response.expiresAt }))
       if (input.mode === 'abort') {
         if (response.status !== 'aborted') throw new ReleaseError('取消事务尚未确认成功。')
         state.phase = 'aborted'
         await writeJson(join(runs, state.releaseId, 'state.json'), state)
       }
+      return
+    }
+    if (renewal) {
+      await resumeRenewal(restored, policy, { ...dependencies,
+        save: (value) => writeJson(join(runs, value.releaseId, 'state.json'), value) })
       return
     }
     let state = await prepareLocal(input)
@@ -167,6 +177,6 @@ async function main(args) {
 try { await main(process.argv.slice(2)) }
 catch (error) {
   console.error(error instanceof ReleaseError ? error.message : '桌面发布失败，请核对本机配置、依赖和本次记录；底层输出已隐藏。')
-  console.error('冻结制品与记录保存在 release-runs，恢复时使用本次事务 UUID；不重新构建或覆盖正式同版本对象。')
+  console.error('制品、签名及续签记录保存在 release-runs；中断后使用原事务 UUID 查询或恢复，不覆盖同版本对象。')
   process.exitCode = 1
 }

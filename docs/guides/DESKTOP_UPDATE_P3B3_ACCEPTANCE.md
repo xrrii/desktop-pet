@@ -18,7 +18,7 @@ Desktop 已内置以下公开配置，不支持环境变量、Renderer 或 Nacos
 | 公钥 SPKI DER SHA-256 | `3307d64f9d378a546717d0c6b4d120a337ab78e829b64d215c9d3f61a4668ae7` |
 | Portable 固定下载页 | `https://download.petdock.site/download` |
 
-公钥已与仓库外本地 `0.2.2` 信封及正式 HTTPS 信封分别验签匹配。私钥仍留在可信签名机，服务器使用独立 COS 只读身份，Windows 使用仓库外上传身份；客户端只带公钥。历史 `0.2.2` 清单当时的 `expiresAt=2026-10-09T15:12:26Z`，即北京时间 **10 月 9 日 23:12:26**，不能据此判断当前已维护清单的时效。按实际目录在到期前至少两天续签，见 [清单维护指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)。目录中任何保留版本过期都会阻断整个入口；旧版本清理目前暂不处理。
+公钥已与仓库外本地 `0.2.2` 信封及正式 HTTPS 信封分别验签匹配。私钥仍留在可信签名机，服务器使用独立 COS 只读身份，Windows 使用仓库外上传身份；客户端只带公钥。历史 `0.2.2` 清单当时的 `expiresAt=2026-10-09T15:12:26Z`，即北京时间 **10 月 9 日 23:12:26**，不能据此判断当前已维护清单的时效。2026-10-15 后续调整为正式目录仅保留当前版，历史目录归档、COS 包不删除；本机可每日检查，剩余不超过14天续签为29天，见 [清单维护指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)。旧目录须先显式迁移，不能仅部署新服务后直接开放；历史过期清单不再参与正式目录验签。
 
 ## 2. 先收尾服务器与下载页
 
