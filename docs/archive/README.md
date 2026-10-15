@@ -1,6 +1,6 @@
 # 历史文档归档
 
-状态：Archived。整理日期：2026-09-14。现行入口见 [文档索引](../README.md)。归档保留原始计划、日期与验收限制；不作为当前操作命令或待办清单。
+状态：Archived。整理日期：2026-10-15。现行入口见 [文档索引](../README.md)。归档保留原始计划、日期与验收限制；不作为当前操作命令或待办清单。
 
 - [2026-08/plans/P2_11_DESKTOP_MANAGEMENT_ENTRY_PLAN.md](2026-08/plans/P2_11_DESKTOP_MANAGEMENT_ENTRY_PLAN.md)
 - [2026-08/roadmap/AI_ASSISTANT_PROGRESS.md](2026-08/roadmap/AI_ASSISTANT_PROGRESS.md)
@@ -8,3 +8,11 @@
 - [2026-08/validation/MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md](2026-08/validation/MANAGED_SERVICE_BYOK_BASELINE_2026-08-13.md)
 - [2026-09/plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md](2026-09/plans/DESKTOP_SSO_ACCOUNT_SELECTION_PLAN.md)
 - [2026-09/reviews/DESKTOP_SSO_REVIEW.md](2026-09/reviews/DESKTOP_SSO_REVIEW.md)
+
+## 2026-10 Nacos 与桌面自动更新收尾
+
+- [完整实施方案](2026-10/plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md)
+- [P3-B3原始验收与现场复现](2026-10/validation/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md)
+- [本仓收尾前阶段交接](2026-10/roadmap/NACOS_AND_DESKTOP_AUTO_UPDATE_PROGRESS.md)
+
+整体方案已结束，历史待办不再作为当前阶段。日常入口见[现行基线](../features/NACOS_AND_DESKTOP_AUTO_UPDATE.md)。

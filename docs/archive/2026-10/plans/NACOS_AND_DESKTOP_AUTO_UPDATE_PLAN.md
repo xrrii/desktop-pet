@@ -1,6 +1,6 @@
 # Nacos 配置中心与桌面自动更新实施方案
 
-状态：Tracking，更新于 2026-10-15。P1 Chat 与 P3 桌面自动更新已由用户确认验收，详见第 24 节及 [P3-B3 指南 6.3](../guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md#63-p3-验收收尾2026-10-15)。用户取消本方案的 P2 多能力配置迁移，并进一步决定不接入 Jenkins，继续使用 `npm run release:desktop`。P4 按本地发布、故障恢复与运行手册收尾；当前版目录及独立续签的后续调整见第26节。未执行的真实环境专项仍单列，不扩大为全部生产验收通过，不实施前端资源热更新。
+状态：Archived。归档于 2026-10-15。用户确认整体收尾；P1/P3/P4 完成，P2 与 Jenkins 新接入取消。现行规则和日常操作见[最终基线](../../../features/NACOS_AND_DESKTOP_AUTO_UPDATE.md)。以下保留实施过程，历史未验收状态不作为当前待办；原始测试和专项限制不追认。
 
 2026-10-02 版本准备：用户指定 Desktop 源码版本升为 `0.2.2`，并自行执行 `npm run dist` 构建。应用与锁文件的根版本同步更新，Managed 登录从调用方取得实际应用版本，Runtime 优先接收 Main 注入，独立启动读取源码或随包的 `package.json`；不再硬编码客户端版本。第 18～21 节记录当时快照，不能据其历史“正式更新关闭”描述判断当前源码；P3-B3 引导版现状见第 22 节。
 
@@ -55,9 +55,9 @@ Windows 构建使用当前开发电脑，由用户在交互终端主动运行本
 
 当前方案读取的基线：Desktop `785784d6095e00699eeb3b950757db3f665d2edd`；Cloud `46a0614f45df521a1c6e56e75183633f9699aafd`。这些只是方案调查基线，不是本需求的发布版本。
 
-实现入口：Desktop [package.json](../../package.json)、[主进程](../../src/main/index.ts)；Cloud [配置读取](../../../petdock-office/petdock-cloud/services/ai-gateway/app/config.py)、[应用生命周期](../../../petdock-office/petdock-cloud/services/ai-gateway/app/main.py)、[提供商注册表](../../../petdock-office/petdock-cloud/services/ai-gateway/app/providers/registry.py)。
+实现入口：Desktop [package.json](../../../../package.json)、[主进程](../../../../src/main/index.ts)；Cloud [配置读取](../../../../../petdock-office/petdock-cloud/services/ai-gateway/app/config.py)、[应用生命周期](../../../../../petdock-office/petdock-cloud/services/ai-gateway/app/main.py)、[提供商注册表](../../../../../petdock-office/petdock-cloud/services/ai-gateway/app/providers/registry.py)。
 
-涉及公共配置协议、更新查询接口或跨端错误码时，先修改 [Cloud Managed v1 权威契约](../../../petdock-office/petdock-cloud/contracts/managed-service/v1/README.md)，再按现有流程同步 Desktop 快照。本文件中的字段、Data ID 和状态仅是方案草案，不是已存在的接口。
+涉及公共配置协议、更新查询接口或跨端错误码时，先修改 [Cloud Managed v1 权威契约](../../../../../petdock-office/petdock-cloud/contracts/managed-service/v1/README.md)，再按现有流程同步 Desktop 快照。本文件中的字段、Data ID 和状态仅是方案草案，不是已存在的接口。
 
 ## 4. 整体结构与职责
 
@@ -154,7 +154,7 @@ Portable：显示新版本和官方下载入口，第一期不实现原地替换
 
 已确认使用对象存储和独立下载地址，不把正式更新包长期放在当前业务服务器的 20G 剩余磁盘中。2026-10-01 用户确认已建腾讯云轻量对象存储（Lighthouse 版）广州桶。下载域名 `download.petdock.site` 作为自有受限 HTTPS 入口，重定向到私有桶默认 HTTPS 域名；Lighthouse 版不支持自定义源站域名，不能沿用标准 COS 的域名接入假设。上传的 `StorageClass` 省略或使用 `DEFAULT`，不使用 `STANDARD`，也不依赖生命周期和版本控制等高级桶功能。
 
-第一期不开通 CDN、全球加速或额外安全付费套餐。最多约 20 位大陆用户，先验证默认桶域名直接下载的速度与预算。Lighthouse 广州容量 `0.00393333 元/GB/日`、大陆下行 `0.5 元/GB`，按 1024 进制计量，不另收请求费；套餐超出仍按量计费。月预算目标约 10 元，不把容量包误当成包含全部下载流量。2026-10-01 官方核查链接及限制见 [签名与下载边界](../features/DESKTOP_UPDATE_TRUST.md) 第 5 节；正式启用前复核价格。
+第一期不开通 CDN、全球加速或额外安全付费套餐。最多约 20 位大陆用户，先验证默认桶域名直接下载的速度与预算。Lighthouse 广州容量 `0.00393333 元/GB/日`、大陆下行 `0.5 元/GB`，按 1024 进制计量，不另收请求费；套餐超出仍按量计费。月预算目标约 10 元，不把容量包误当成包含全部下载流量。2026-10-01 官方核查链接及限制见 [签名与下载边界](../../../features/DESKTOP_UPDATE_TRUST.md) 第 5 节；正式启用前复核价格。
 
 旧 Setup 约 191.6 MiB，仅作为估算。20 人每月 4 次全量更新约 `14.97 GiB`，最近三版 Setup/Portable 合计约 `1.12 GiB`；按 30 天现价估算容量 `0.13 元`、下行 `7.49 元`，合计约 `7.62 元/月`。重试、新安装、额外 Portable、包增大、现有桶其他用量及入口增量费用另计，不能承诺每月一定小于 10 元。差量默认关闭，节省效果留到实测。
 
@@ -176,7 +176,7 @@ P3 的下载接入与用户验收结果见第 24 节。发布身份与服务器�
 
 ## 11. 分阶段任务与角色编排
 
-按 [角色手册](../guides/multi-agent/README.md) 执行；每次分派附共同约定、角色文件和任务单。同一任务及跨仓子任务总计最多两个代理，包含主代理；主代理始终占一名额，最多一个未结束子代理，子代理禁止派生。下表是顺序角色职责，不代表同时启动全部角色。
+按 [角色手册](../../../guides/multi-agent/README.md) 执行；每次分派附共同约定、角色文件和任务单。同一任务及跨仓子任务总计最多两个代理，包含主代理；主代理始终占一名额，最多一个未结束子代理，子代理禁止派生。下表是顺序角色职责，不代表同时启动全部角色。
 
 | 阶段 | 当前状态与产物 | 主要角色 | 验收要求 |
 | --- | --- | --- | --- |
@@ -209,7 +209,7 @@ P3 的下载接入与用户验收结果见第 24 节。发布身份与服务器�
 
 ## 13. P0 交付与下一步（2026-09-15）
 
-第一批已在 Cloud 实现独立 Nacos Compose、文件式随机凭据初始化、组级只读权限、固定版本 Python SDK 原型及冷备恢复步骤。现行入口：[P0 部署指南](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P0_DEPLOYMENT.md)；实际证据：[P0 验证归档](../../../petdock-office/petdock-cloud/docs/archive/2026-09/reviews/NACOS_P0_VERIFICATION.md)。
+第一批已在 Cloud 实现独立 Nacos Compose、文件式随机凭据初始化、组级只读权限、固定版本 Python SDK 原型及冷备恢复步骤。现行入口：[P0 部署指南](../../../../../petdock-office/petdock-cloud/docs/guides/NACOS_P0_DEPLOYMENT.md)；实际证据：[P0 验证归档](../../../../../petdock-office/petdock-cloud/docs/archive/2026-09/reviews/NACOS_P0_VERIFICATION.md)。
 
 本地验证通过：真实发布/读取/明确拒写、匿名与跨组拒读、监听、原进程断线重连、冷备恢复配置/历史/权限；Windows 与 Linux Python 3.13 的 SDK 13 项测试分别通过，Cloud 根测试 38 项通过。SDK 2.0.11 批量监听在 Server 2.5.4 上需要固定资源的单实例鉴权字段适配；该限制已记录，不能把探针直接复制进 Gateway。
 
@@ -278,7 +278,7 @@ P1-B 已完成 Gateway 侧影子监听底座。固定资源为 Namespace `petdoc
 
 监听器使用锁定的 `nacos-sdk-python==2.0.11`，为 Server 2.5.4 的单资源批量监听补齐顶层鉴权字段；回调只投递到 Gateway 事件循环，队列满时丢弃旧通知并重新读取服务端当前内容。候选按完整 Schema 校验，处理重复、同 revision 冲突、旧 revision、未登记 Secret 引用和错误资源；有效候选只更新影子 candidate revision。网络或 SDK 故障经过 stale 阈值后报告 `stale`，恢复读取后回到 `healthy`。候选、有效 revision、拒绝类别和连接时间通过内网状态端点 `/internal/v1/config/chat/status` 与低基数 Prometheus 指标暴露，不暴露凭据或配置正文。
 
-Cloud 新增 P1-B 部署入口：[Chat Nacos 影子监听部署与验收](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1B_CHAT_SHADOW_DEPLOYMENT.md)。服务器部署需要先让 Nacos P0 栈创建固定共享网络，再使用 `prepare-shadow`、`bootstrap-shadow` 初始化生产 Namespace 和只读账号，发布合成候选后再通过 Jenkins 发布 Gateway。Nacos 端口仍只绑定回环；生产 Compose 通过外部 Docker 网络连接，不新增公网端口。
+Cloud 新增 P1-B 部署入口：[Chat Nacos 影子监听部署与验收](../../../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1B_CHAT_SHADOW_DEPLOYMENT.md)。服务器部署需要先让 Nacos P0 栈创建固定共享网络，再使用 `prepare-shadow`、`bootstrap-shadow` 初始化生产 Namespace 和只读账号，发布合成候选后再通过 Jenkins 发布 Gateway。Nacos 端口仍只绑定回环；生产 Compose 通过外部 Docker 网络连接，不新增公网端口。
 
 本批本地验证：AI Gateway 124 项通过，Ruff 和 Mypy 通过；Cloud Nacos 部署测试 7 项通过，P1-B 影子监听测试 4 项通过。2026-09-21 用户报告服务器影子监听验收通过：状态为 `healthy`，候选 revision 1 有效，`effectiveRevision=0`，指标与状态一致；该结果属于用户现场报告，不替代本地 Linux 容器回归或代理实际生产操作记录。生产真实 Provider 调用和配置源切换仍未执行。下一批是 P1-C：先做影子长期运行与回退演练，再单独评审是否允许生产配置源切换。
 
@@ -286,7 +286,7 @@ Cloud 新增 P1-B 部署入口：[Chat Nacos 影子监听部署与验收](../../
 
 用户报告已完成 P1-C 影子长期运行、故障恢复和影子回退演练，未发现问题；代理未直接操作服务器，也未收到逐项日志归档，因此只记录为用户现场验收。P1-C 不改变生产配置源，Nacos 监听仍只形成候选，生产有效 Chat 配置继续来自 `.env`。
 
-P1-D 已实现 Chat 生产源迁移与显式回退：增加默认值为 `env` 的源选择；选择 `nacos` 时完整候选经现有 Schema、Secret 白名单和 revision 校验后，才在 Gateway 事件循环调用 `ProviderManager.apply()`；运行期间 Nacos 失联保留最后有效快照，不自动回退到 `.env` 或另一 Provider。迁移前须生成与现网一致的 Nacos 完整配置、保留受限 `.env` 回退快照，并提供“旧内容加新 revision”的配置回退和显式切回 `env` 的维护步骤，具体见 Cloud 的 [P1-D 部署指南](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1D_CHAT_SOURCE_MIGRATION.md)。
+P1-D 已实现 Chat 生产源迁移与显式回退：增加默认值为 `env` 的源选择；选择 `nacos` 时完整候选经现有 Schema、Secret 白名单和 revision 校验后，才在 Gateway 事件循环调用 `ProviderManager.apply()`；运行期间 Nacos 失联保留最后有效快照，不自动回退到 `.env` 或另一 Provider。迁移前须生成与现网一致的 Nacos 完整配置、保留受限 `.env` 回退快照，并提供“旧内容加新 revision”的配置回退和显式切回 `env` 的维护步骤，具体见 Cloud 的 [P1-D 部署指南](../../../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1D_CHAT_SOURCE_MIGRATION.md)。
 
 P1-D 已在本地覆盖首次有效配置、无效候选、重复/乱序、旧 Provider 排空、Nacos 失联和默认健康门槛；默认配置和本地测试不触发真实 Provider 请求。2026-09-26 用户报告生产切源、模型热更新、真实 Chat SSE/用量闭合、Nacos revision 回退和显式 `.env` 源回退均通过；代理未直接操作生产服务器或归档逐项日志。P1-D 不扩展 Vision、Web Search、Embedding、Rerank 或桌面更新。
 
@@ -294,7 +294,7 @@ P1-D 已在本地覆盖首次有效配置、无效候选、重复/乱序、旧 P
 
 Cloud 已完成 P1-D 实现：`PETDOCK_CHAT_CONFIG_SOURCE` 默认 `env`，切换为 `nacos` 时不复用 `.env` Provider，而是先以禁用 revision 0 启动；首个有效 Nacos 候选应用后才报告健康并服务 Chat。候选应用复用 P1-A 的完整请求快照、Provider 排空和旧请求租约，失联保留最后有效快照并标记 stale，不隐式回退到 `.env`。
 
-运维命令覆盖 `.env` 脱敏快照、当前 Nacos 配置备份、候选发布、只读验证、Nacos 旧内容新 revision 回退和显式 `env` 源回退。Nacos 只保存逻辑 Secret 引用，真实 Provider Key 仍由服务器 Secret 提供。实现与测试结果记录在 Cloud [进度文档](../../../petdock-office/petdock-cloud/docs/roadmap/MANAGED_SERVICE_PROGRESS.md) 和 [部署指南](../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1D_CHAT_SOURCE_MIGRATION.md)。
+运维命令覆盖 `.env` 脱敏快照、当前 Nacos 配置备份、候选发布、只读验证、Nacos 旧内容新 revision 回退和显式 `env` 源回退。Nacos 只保存逻辑 Secret 引用，真实 Provider Key 仍由服务器 Secret 提供。实现与测试结果记录在 Cloud [进度文档](../../../../../petdock-office/petdock-cloud/docs/roadmap/MANAGED_SERVICE_PROGRESS.md) 和 [部署指南](../../../../../petdock-office/petdock-cloud/docs/guides/NACOS_P1D_CHAT_SOURCE_MIGRATION.md)。
 
 本地验证已完成：AI Gateway 128 项、Cloud 根测试 41 项、Nacos 部署测试 10 项、Ruff、Mypy 34 个源码文件、Managed Service v1 契约快照和差异检查通过。用户随后确认生产切源、模型热更新、真实 Chat SSE/用量闭合及两种回退通过，P1 按用户现场验收结束。旧 `.env` Chat 业务字段清理另行评审；P0 资源与备份专项继续独立留证。
 
@@ -373,7 +373,7 @@ PyInstaller Runtime 重建成功；Windows 入口在日志配置前将 stdout/st
 
 延续 Desktop `2090dab` 的 P3-A 未提交工作区；Cloud `03308af` 和 Web `47b07e9` 核查干净，本批只修改 Desktop。用户确认使用 Lighthouse 版，已创建广州地域桶；本批没有访问该桶、取得凭据、采购资源或修改生产服务。P1 已完成，P2 后置，不开发 P4。
 
-本批闭环：离线工具签发合成安装包清单，真实更新引擎检查独立签名、只在用户命令后完整下载、验证缓存，并在安装前重验。网络使用隔离回环映射，安装器不执行。实现规则、CLI、密钥保管/轮换限制、下载路径及官方价格来源见 [签名与 Lighthouse 下载边界](../features/DESKTOP_UPDATE_TRUST.md)。
+本批闭环：离线工具签发合成安装包清单，真实更新引擎检查独立签名、只在用户命令后完整下载、验证缓存，并在安装前重验。网络使用隔离回环映射，安装器不执行。实现规则、CLI、密钥保管/轮换限制、下载路径及官方价格来源见 [签名与 Lighthouse 下载边界](../../../features/DESKTOP_UPDATE_TRUST.md)。
 
 ### 19.2 已实现
 
@@ -410,7 +410,7 @@ PyInstaller Runtime 重建成功；Windows 入口在日志配置前将 stdout/st
 
 延续 Desktop `2090dab` 的 P3-A/P3-B1 未提交工作区，全部保留；本批新增 Cloud `03308af` 上的 `services/desktop-download`、独立部署模板、开关/脱敏状态和 COS 验收工具。Desktop 只扩展网络冒烟和进度文档，未修改正式更新配置；Web `47b07e9` 未改动。P1 不重复开发、P2 后置、P4 Jenkins 发布整合未开展，未提交/推送或部署生产。
 
-Cloud 子代理负责下载服务，完成后释放名额再由独立 Reviewer 只读审查，始终最多主代理加一个子代理。主代理整合部署、跨仓验收与真实桶操作。现行操作指南：[P3-B2 Lighthouse 下载部署](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_DOWNLOAD_P3B2_DEPLOYMENT.md)。
+Cloud 子代理负责下载服务，完成后释放名额再由独立 Reviewer 只读审查，始终最多主代理加一个子代理。主代理整合部署、跨仓验收与真实桶操作。现行操作指南：[P3-B2 Lighthouse 下载部署](../../../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_DOWNLOAD_P3B2_DEPLOYMENT.md)。
 
 - 独立 FastAPI 只读批准目录、逐请求验 Ed25519，提供固定元数据/签名信封/制品路由；不修改 Spring、AI Gateway 或 Managed v1 契约。
 - 官方 `cos-python-sdk-v5==1.9.44` 对固定广州桶/版本/文件名签 GET/HEAD 短链接，不中转包正文。修正 SDK 起点回拨 60 秒与 Token 不自动进入 URL 的行为，显式签入 STS 参数并约束时效。
@@ -444,7 +444,7 @@ P3-B2 的代码、本地下载闭环及真实 COS 合成对象验收已完成；
 
 用户指定源码版本为 `0.2.2`，由用户自行运行 `npm run dist`。本轮基线 Desktop `71a660d`、Cloud `81cf7d3`；保留历史安装包，不改名旧 EXE，不修改 Managed v1 契约、依赖版本或生产更新信任。
 
-版本以 Desktop 根 `package.json` 为唯一来源，锁文件两处根版本同步。Managed 登录与 Chat 工厂要求调用方显式注入客户端版本，正常装配沿用 `app.getVersion()` 和 `RuntimeConfig`；Runtime 配置优先读取 Main 的 `PETDOCK_CLIENT_VERSION`，独立启动时读取源码或 PyInstaller 随包的同一份 `package.json`。缺失/损坏元数据、非法或显式空注入值均拒绝，不回退固定旧版本。Runtime 构建参数增加元数据资源；Cloud 指南 2.10 也从 Desktop 元数据读取签名版本。后续更新方式见 [开发指南](../guides/DEVELOPMENT.md#windows-打包操作提交前)。
+版本以 Desktop 根 `package.json` 为唯一来源，锁文件两处根版本同步。Managed 登录与 Chat 工厂要求调用方显式注入客户端版本，正常装配沿用 `app.getVersion()` 和 `RuntimeConfig`；Runtime 配置优先读取 Main 的 `PETDOCK_CLIENT_VERSION`，独立启动时读取源码或 PyInstaller 随包的同一份 `package.json`。缺失/损坏元数据、非法或显式空注入值均拒绝，不回退固定旧版本。Runtime 构建参数增加元数据资源；Cloud 指南 2.10 也从 Desktop 元数据读取签名版本。后续更新方式见 [开发指南](../../../guides/DEVELOPMENT.md#windows-打包操作提交前)。
 
 本轮验证：`npm.cmd run typecheck` 通过；Managed 登录与更新适配器 3 文件/40 项定向 Vitest 通过；`python-runtime/.venv/Scripts/python.exe -m pytest -q python-runtime/tests --basetemp temp/pytest-version-dynamic-final` 全套 119 项通过，包含 9 项新增版本来源/随包目录/注入优先级/非法值测试，仅有既有重复 Office ZIP entry 警告。`node --check tools/build_runtime.mjs` 与已安装 PyInstaller 的 `--add-data` 参数解析通过；JSON 结构比对确认锁文件除两处根版本外不变。Cloud 三份部署指南 81 个 Bash、5 个 PowerShell 片段解析通过。独立审查发现 Chat 工厂残留固定默认版本，已改为必传参数并复验、复审通过。
 
@@ -456,7 +456,7 @@ P3-B2 的代码、本地下载闭环及真实 COS 合成对象验收已完成；
 
 本轮开始三仓干净：Desktop `df04e30`、Cloud `f3356cd`、Web `47b07e9`。用户已完成正式 `0.2.2` 的私有 COS 匿名 HEAD 403、签名 HEAD 200、Range 206/4096 字节匹配；随后修复 root 创建 WAL/SHM 的属主问题，确认常驻服务读写正常、正式 HTTPS 元数据/清单 200、制品 HEAD 302、完整 `201242832` 字节包与 SHA-512 一致、暂停 503/恢复 200 和结束状态有效。月度 `monthlyLinks=2/monthlyLinkBytes=201242832` 对应一次 HEAD 和一次 GET，HEAD 计发链次数但不计包字节。以上属于用户现场报告；本轮代理只读正式元数据验签，不操作服务器或 COS。
 
-本批只准备 P3-B3 的可验收客户端与下载页，不重复 P1，不开发 P2、P4、Jenkins 发布登记或采购。主代理整合，release 只读核查与 Reviewer 依次执行，始终最多两个代理。逐步执行入口为 [P3-B3 桌面正式信任与安装更新验收](../guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md)。
+本批只准备 P3-B3 的可验收客户端与下载页，不重复 P1，不开发 P2、P4、Jenkins 发布登记或采购。主代理整合，release 只读核查与 Reviewer 依次执行，始终最多两个代理。逐步执行入口为 [P3-B3 桌面正式信任与安装更新验收](../validation/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md)。
 
 ### 22.2 已实现
 
@@ -514,7 +514,7 @@ Desktop 完整 `npm.cmd run check` 通过：43 文件/317 项 Vitest、30 契约
 
 ### 23.1 已实现
 
-Desktop 增加发布 CLI、仓库外路径配置样例与逐步指南：[桌面一键发布](../guides/DESKTOP_RELEASE_AUTOMATION.md)。流水线检查版本/正式公钥和 SDK，检查通过后完整打包并冻结归档，复用现有签名工具，上传绑定最终 EXE 的 NSIS 对象，通过 stdin JSON 向固定 SSH 入口传送清单。版本、大小和 SHA-512 显示后必须人工输入版本号确认；切换后验证正式 HTTPS 元数据、签名、HEAD 302 和整包摘要，再提交事务。Portable 保留归档，不新增自动安装或公共对象。
+Desktop 增加发布 CLI、仓库外路径配置样例与逐步指南：[桌面一键发布](../../../guides/DESKTOP_RELEASE_AUTOMATION.md)。流水线检查版本/正式公钥和 SDK，检查通过后完整打包并冻结归档，复用现有签名工具，上传绑定最终 EXE 的 NSIS 对象，通过 stdin JSON 向固定 SSH 入口传送清单。版本、大小和 SHA-512 显示后必须人工输入版本号确认；切换后验证正式 HTTPS 元数据、签名、HEAD 302 和整包摘要，再提交事务。Portable 保留归档，不新增自动安装或公共对象。
 
 Cloud 新增官方 SDK 上传工具及固定发布 wrapper/事务管理器。上传使用默认 Lighthouse 存储类型和服务端防覆盖；服务器校验全部已有条目和候选、严格递增追加、保留备份、比较目录/信任/开关摘要、以常驻 UID/GID 验签后才恢复入口。失败尝试回退旧目录且保持暂停；旧目录过期时仍结束回退事务，明确返回 `rollbackVerified=false` 供暂停态维护。发布与运维入口共用 `.operations.lock`，防止切换覆盖运维暂停；不挂 SQLite，不清零费用，不修改 trust，不自动删除过期历史条目。旧清单过期、运维暂停或其他进行中事务均拒绝新发布。
 
@@ -532,7 +532,7 @@ Cloud 最终服务/运维 pytest 144 项通过（新增发布 23 项），新增
 
 本轮基线 Desktop `a55989c`、Cloud `5a8a113`，工作区开始干净。用户安装发布工具时 root `load_catalog` 报批准目录不可用，尚未执行降 UID 验证；现场公开时效检查确认当前版 `0.2.4`，旧 `0.2.2` 已于北京时间 10 月 9 日 23:12:26 过期，`0.2.4` 将于 10 月 11 日 19:34:34 到期。任一保留版本过期使整份目录失败闭合，用户已暂停，月发链 6 次/805104192 字节，额度可用；不将此次报错误记为权限问题。
 
-补充 Cloud [清单续签与过期恢复指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)，更新原巡检与两个发布指南的续签入口。Windows 用原私钥/内置公钥验证旧签名并只刷新时间；Ubuntu 共锁、拒在途事务、比较快照/版本集合/currentVersion/keyId/制品绑定、备份与降 UID 复验后替换，异常恢复原目录并保持暂停。不重建或重传包，不修改信任或预算，不放宽服务时效。
+补充 Cloud [清单续签与过期恢复指南](../../../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)，更新原巡检与两个发布指南的续签入口。Windows 用原私钥/内置公钥验证旧签名并只刷新时间；Ubuntu 共锁、拒在途事务、比较快照/版本集合/currentVersion/keyId/制品绑定、备份与降 UID 复验后替换，异常恢复原目录并保持暂停。不重建或重传包，不修改信任或预算，不放宽服务时效。
 
 新指南 3 个 Bash、1 个 PowerShell、1 段 Node、1 段 Python 语法及提取原文的 6 个离线续签、10 个服务器校验/回退合成场景通过；Windows PowerShell 5.1/7 完整原文各 1 个成功场景通过，SCP 使用替身；未重复业务全套。独立审查发现首次原子写入未被异常回退覆盖，已修复并补充替换后同步失败场景，复审无遗留可确认问题。Windows 的 flock/降 UID 为替身，真实 Linux、SSH、正式私钥、生产续签与恢复均未执行。临时验证脚本和合成密钥/目录保持忽略；下一步用户按新指南刷新两版后重跑原安装指南第 4 节，生产恢复和 NSIS 两机复验继续单列。
 
@@ -554,7 +554,7 @@ Cloud 最终服务/运维 pytest 144 项通过（新增发布 23 项），新增
 
 本轮基线 Desktop `e0b2d80`，保留用户 `package.json`、锁文件与 Runtime context.py 的既有修改。用户确认该电脑安装 `0.2.4`、正式最新为 `0.2.5`；代理通过电脑操作完成检查、下载和一次“重启安装”。北京时间 13:02:35 点击后 Main/Runtime 退出，13:02:37 启动的 Setup 持续运行，超过 64 秒没有可见安装窗口；未第二次启动安装器，未完成安装。
 
-只读检查实际安装的 `0.2.4` Main 确认仍仅等待 `spawn`、传递 `windowsHide: true`，没有上次修复的窗口观察逻辑。缓存 Setup 与原 `0.2.5` 冻结制品大小及 SHA-512 一致，`0.2.5` 归档 Main 包含窗口观察及启动确认。现场证明旧版问题可复现、修复未进入发起升级的客户端，尚不能判修复版有效或无效。复现后核对 PID、路径及启动时间并结束本次无窗口 Setup，缓存保留。先手动安装可信 `0.2.5`，再由其升级到获批的更高正式版本，执行 [NSIS 复验步骤](../guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md)；两机、首次/缓存、UAC 与数据/Runtime 验收继续待办。未修改应用代码、版本、正式对象或服务器配置，未连接生产 SSH。
+只读检查实际安装的 `0.2.4` Main 确认仍仅等待 `spawn`、传递 `windowsHide: true`，没有上次修复的窗口观察逻辑。缓存 Setup 与原 `0.2.5` 冻结制品大小及 SHA-512 一致，`0.2.5` 归档 Main 包含窗口观察及启动确认。现场证明旧版问题可复现、修复未进入发起升级的客户端，尚不能判修复版有效或无效。复现后核对 PID、路径及启动时间并结束本次无窗口 Setup，缓存保留。先手动安装可信 `0.2.5`，再由其升级到获批的更高正式版本，执行 [NSIS 复验步骤](../validation/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md)；两机、首次/缓存、UAC 与数据/Runtime 验收继续待办。未修改应用代码、版本、正式对象或服务器配置，未连接生产 SSH。
 
 ## 24. P3 验收收尾与后续阶段（2026-10-15）
 
@@ -621,7 +621,7 @@ P4 的本地实现与定向回归交付已具备；按调整后范围，不再�
 
 ### 26.2 部署、恢复与限制
 
-先按 Cloud [当前版清单续签与迁移指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)执行：Ubuntu 暂停/备份实际运行镜像及源码 → 既有 Git 脚本同步并重建下载栈 → Windows 显式迁移 → Ubuntu 身份与 HTTPS 验收后恢复 → Windows 安装可选任务。新镜像遇旧多版本目录会拒读，不得跳过迁移先开放；不能只升级 Windows 或只 Git 拉取宿主脚本。Windows 详细步骤见 [发布指南第8～9节](../guides/DESKTOP_RELEASE_AUTOMATION.md#8-只续签当前版windows)。
+先按 Cloud [当前版清单续签与迁移指南](../../../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)执行：Ubuntu 暂停/备份实际运行镜像及源码 → 既有 Git 脚本同步并重建下载栈 → Windows 显式迁移 → Ubuntu 身份与 HTTPS 验收后恢复 → Windows 安装可选任务。新镜像遇旧多版本目录会拒读，不得跳过迁移先开放；不能只升级 Windows 或只 Git 拉取宿主脚本。Windows 详细步骤见 [发布指南第8～9节](../../../guides/DESKTOP_RELEASE_AUTOMATION.md#8-只续签当前版windows)。
 
 续签原本暂停时仍暂停，公网恢复必须另行验收；已开放时只复验元数据/签名，不每天下载完整 EXE。旧客户端下载旧地址失败需重新检查；已签发 COS 短链接继续到自身到期。历史备份过期时不能直接恢复开放。发版冻结清单与原事务恢复规则保持，已完成发版在后续续签后用 `--status` 查历史，不把旧 `--resume` 当作当前目录巡检。
 
@@ -636,3 +636,11 @@ P4 的本地实现与定向回归交付已具备；按调整后范围，不再�
 最终静态检查：14份修改文档UTF-8无BOM，166个本地链接、39个锚点通过；13段PowerShell、11段Bash及Cloud指南4段嵌入Python语法通过；受影响5个Python文件Ruff、Node入口语法和三仓差异检查通过。临时测试目录/日志保持忽略，新增源码和测试保留追踪候选，不将凭据、制品或测试输出纳入交付。
 
 未执行正式构建、读取正式签名私钥/COS凭据、上传、生产SSH、服务器迁移或注册本机定时任务；这些由用户按指南执行。保留用户版本文件及其他工作区修改，不把开发验证写为生产启用。
+
+## 27. 整体收尾与文档归档（2026-10-15）
+
+用户在当前版目录与独立续签调整提交推送后确认“没问题了”，要求整个方案收尾。P0/P1/P3/P4 以已有实现、验证与用户确认关闭，P2 多能力迁移及 Jenkins 新接入取消，后续不再列计划开发阶段。基线为 Desktop `eb901e7`、Cloud `6cf0b65`、Web `619c14d`；本地用户 0.2.6 升版及 Runtime 修改不属于本次归档。
+
+完整方案、原 P3-B3 验收过程及三仓阶段交接快照迁入 2026-10 归档；现行规则提取到[最终基线](../../../features/NACOS_AND_DESKTOP_AUTO_UPDATE.md)，发布、续签、Chat 回退、下载恢复和后续发行验收继续维护。历史测试结果不改写为本轮重跑，未提供的生产专项或定时任务注册结果不补写。本次仅整理文档，无契约、源码或生产资源变更。
+
+本轮静态验收通过：25份文档的UTF-8无BOM、277个本地链接、30个锚点、13段PowerShell及71段Bash语法、三仓差异检查。原方案与P3-B3全文及代码片段、三仓阶段快照均完整保留；现行运维命令与原版本一致，下载手册原50个代码片段在现行及归档中保留。源码/构建入口未发现旧文档路径引用，敏感内容扫描通过，独立只读审查未发现可确认问题。上述为文档静态检查，不代表实际执行部署或再次完成业务验收。

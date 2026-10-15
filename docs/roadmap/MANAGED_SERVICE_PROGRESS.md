@@ -1,6 +1,6 @@
 # desktop-pet 当前进度与交接
 
-状态：Tracking。更新时间：2026-10-15。当前入口只保留现状、下一步和证据来源，旧阶段流水账见归档。
+状态：Tracking。更新时间：2026-10-15。已结束方案的过程见归档，当前页只保留现状与日常交接。
 
 ## 当前状态
 
@@ -10,29 +10,23 @@
 | Desktop SSO | 已完成开发与本地 QA；用户随后确认成功上线。原 QA 的测试限制仍保留 |
 | 官网管理与统计 | 功能已实现；原计划的生产统计专项验收限制不补写为已通过，采集状态以生产实际配置为准 |
 | Jenkins | 用户已搭建并使用；默认分支与制品复用改动已推送，上传环境变量修复提交为 `46a0614`；修复后的生产重跑结果未在本次整理中确认 |
-| Nacos 与桌面自动更新 | P1 Chat、P3 已由用户确认完成；P2 与 Jenkins 新接入取消。P4 沿用本地发布命令，实现及定向回归完成；未确认现场专项与持续维护单列 |
+| Nacos 与桌面自动更新 | 已按用户确认整体完成；P1/P3/P4 关闭，P2 多能力迁移与 Jenkins 新接入取消，进入日常运维 |
 | 正式支付、按量结算 | 仍为延后范围，不因为维护功能上线而标记完成 |
 
-## 下一步
+## 日常维护与后续需求
 
-按 [方案第 26 节](../plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#26-当前版目录与独立续签调整2026-10-15) 完成服务器单版本目录迁移，再使用当前版独立续签与可选 Windows 每日维护。新版本仍走本地发布、一次交互确认；不接 Jenkins、不新增节点或 CI Credentials。既有 Cloud/Web Jenkins 与 P1 Chat 运维保持原用途。本批代码与本地合成验证不代替用户现场迁移及任务首次运行。
+Nacos 与桌面自动更新方案已整体收尾，现行范围和操作入口见[最终基线](../features/NACOS_AND_DESKTOP_AUTO_UPDATE.md)，不再以阶段“下一步”要求重复开发或重复迁移。
 
-P2 已从本方案取消，其他能力保持当前配置来源，未来有需求另立项；这不撤销 Managed Phase 2 身份与会话或既有多能力实现。不重复开发 P1/P3，已通过的验收继续有效，变更影响项定向回归；旧版本清理暂不处理。
+- 新桌面版本继续按 [Windows 发布指南](../guides/DESKTOP_RELEASE_AUTOMATION.md)执行，清单续签及可选每日维护使用同一工具；发行回归见[验收清单](../guides/DESKTOP_UPDATE_ACCEPTANCE.md)。
 
-P3 的现场结论来自用户确认，详见 [验收指南 6.3](../guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md#63-p3-验收收尾2026-10-15)。清单/TLS 续期、真实账单与预算巡检继续维护；Ed25519 不消除 Windows 未知发布者提示，约 10 元/月不是硬封顶。P0 资源、SSH 和独立备份恢复专项不由本次 P3 确认扩展为完成；正式收费也不自动进入下一任务。
+清单/TLS/凭据、维护任务运行结果、真实账单及预算继续巡检。Ed25519 不消除 Windows 未知发布者提示，约10元/月不是硬封顶，历史 COS 对象不自动清理。可选任务按需启用，用户整体确认不补写任务注册细节。
 
-## P1-A 验证与交接（2026-09-20）
-
-Cloud 实现提交：`d684453`。Chat 已具备严格完整配置、Secret 白名单、请求预算/超时/Provider 同快照、旧代排空与取消清理。生产仍用 `.env`，未接 Nacos 配置源，也未改其他模型能力或桌面更新。API Key 文件仍适配为 `secret://chat/default`。
-
-Cloud Gateway 120 项、根测试 38 项通过；Ruff、Mypy 33 文件通过，v1 契约 57 文件 SHA-256 一致。独立审查及 Python 3.13 停机排空修复复核完成。详细命令、候选格式及未执行项见 [实施方案第 14 节](../plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md#14-p1-a-配置与请求生命周期交接2026-09-20)。
-
-下一批只接监听与影子校验、重复/乱序保护和 stale 状态；生产源迁移、真实流式切换与显式回退步骤在后续单独交付。本批服务器无需改 `.env` 或重启 Nacos；如发布 Gateway 镜像，仍需现场验证健康、能力状态、合成 Chat SSE/用量和停机。尚未执行生产部署、真实上游调用或 Linux 容器内本批回归。
+P2 仅取消本方案的 Nacos 多能力迁移，不撤销已有 Managed Phase 2～4。其他能力迁移、正式收费或历史对象清理有需求时另立项；原资源共存、SSH 和独立备份恢复等专项限制保留在归档，不扩写为本轮验收通过。
 
 ## 阅读入口与维护
 
 - [文档索引](../README.md)
-- [Jenkins 发布与升级](../../../petdock-office/petdock-cloud/docs/guides/JENKINS_SINGLE_SERVER_DEPLOYMENT.md)
-- [原阶段进度与验收全文](../archive/2026-08/roadmap/MANAGED_SERVICE_PROGRESS.md)
+- [本方案收尾前阶段交接](../archive/2026-10/roadmap/NACOS_AND_DESKTOP_AUTO_UPDATE_PROGRESS.md)
+- [原 Managed 阶段进度与验收全文](../archive/2026-08/roadmap/MANAGED_SERVICE_PROGRESS.md)
 
-新增进度必须区分“实现完成”“本地验证”“用户报告上线”和“代理实际生产验收”。长篇执行记录进入日期归档；现行协议仍以 Cloud contracts 为权威。
+新增记录区分实现、本地验证、用户确认和代理实际操作；现行协议仍以 Cloud Managed Service v1 契约为权威，本轮未修改契约或重新生成快照。

@@ -1,6 +1,6 @@
 # 桌面更新签名与 Lighthouse 下载边界
 
-状态：Active。更新日期：2026-10-15。P3 正式信任、分发、客户端安装更新和上线维护已按用户确认验收收尾。阶段进度见 [实施方案](../plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md) 第 24 节，用户确认与后续复验步骤见 [P3-B3 验收指南](../guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md) 6.3；本轮未由代理重新执行生产验收。
+状态：Active。更新于2026-10-15。整个方案已按用户确认完成，本文维护客户端签名、更新行为和Lighthouse分发边界；最终范围及日常入口见[现行基线](NACOS_AND_DESKTOP_AUTO_UPDATE.md)，后续发行使用[验收清单](../guides/DESKTOP_UPDATE_ACCEPTANCE.md)。历史开发证据见[方案归档](../archive/2026-10/plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md)。
 
 ## 1. 已确认的分发选择
 
@@ -54,7 +54,7 @@
 
 此边界防护远程分发内容替换，不防护已能以当前用户权限修改应用或在验证后替换本机文件的攻击者。系统时钟正确性和首次引导安装包的可信传递仍是前提。
 
-普通 NSIS 使用显式可见启动标志，确认本次 PID 存在可见顶层窗口后才请求退出当前应用，不把 `spawn` 或固定存活延时作为窗口就绪。观察使用系统 Windows PowerShell 与 Win32 查询，禁用或受限时验证失败，不降低检查门槛。提前退出保留当前应用；窗口观察失败先结束本次安装器，无法确认结束则保持任务互锁直至真实退出，不自动再次启动安装器。helper 的退出 0 仍仅代表接受启动，不等同窗口或安装完成。真实 UAC、NSIS 时序与数据保留须按 [验收指南](../guides/DESKTOP_UPDATE_P3B3_ACCEPTANCE.md#61-首次重启安装没有窗口的修复复验windows) 留证。日志仅记录固定阶段、PID、退出码，不记录命令、路径、链接或底层异常。
+普通 NSIS 使用显式可见启动标志，确认本次 PID 存在可见顶层窗口后才请求退出当前应用，不把 `spawn` 或固定存活延时作为窗口就绪。观察使用系统 Windows PowerShell 与 Win32 查询，禁用或受限时验证失败，不降低检查门槛。提前退出保留当前应用；窗口观察失败先结束本次安装器，无法确认结束则保持任务互锁直至真实退出，不自动再次启动安装器。helper 的退出 0 仍仅代表接受启动，不等同窗口或安装完成。真实 UAC、NSIS 时序与数据保留须按 [验收指南](../guides/DESKTOP_UPDATE_ACCEPTANCE.md#3-首次安装窗口异常) 留证。日志仅记录固定阶段、PID、退出码，不记录命令、路径、链接或底层异常。
 
 ## 3. 离线签名工具
 
@@ -77,11 +77,11 @@ node tools/sign_desktop_update.mjs `
 
 轮换时先用旧密钥签发包含新旧公钥的过渡客户端，再切换到新密钥签发。撤销列表只随受信任应用更新，当前没有在线撤销协议；私钥泄露时须暂停下载，发布受控引导安装包并通知旧客户端手动迁移，不能宣称已能远程撤销旧客户端信任。
 
-清单过期会阻止尚未下载或未安装的候选。正式目录现行规则只保留当前版，历史包及原目录留在归档，不再周期续签历史版本。`npm run release:desktop -- --renew` 只刷新当前版时间为29天，版本、签名身份与制品绑定必须保持不变；过期恢复仅在维护中按原签发时间核对原签名，新清单、正常服务和客户端仍检查真实当前时间。客户端已取得的过期候选需重新检查。首次旧目录迁移与暂停恢复使用 [维护指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)，新版本和可选 Windows 每日临期任务见 [Windows 本地发布命令](../guides/DESKTOP_RELEASE_AUTOMATION.md)。用户已取消 Jenkins，新任务仅为本机当前版续签；尚未由代理注册或生产启用。
+清单过期会阻止尚未下载或未安装的候选。正式目录现行规则只保留当前版，历史包及原目录留在归档，不再周期续签历史版本。`npm run release:desktop -- --renew` 只刷新当前版时间为29天，版本、签名身份与制品绑定必须保持不变；过期恢复仅在维护中按原签发时间核对原签名，新清单、正常服务和客户端仍检查真实当前时间。客户端已取得的过期候选需重新检查。首次旧目录迁移与暂停恢复使用 [维护指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_UPDATE_MANIFEST_RENEWAL.md)，新版本和可选 Windows 每日临期任务见 [Windows 本地发布命令](../guides/DESKTOP_RELEASE_AUTOMATION.md)。用户已取消Jenkins新接入，任务仅为本机当前版续签，按需启用并实际核对运行结果。
 
 ## 4. 下载入口与存储对象
 
-Lighthouse 版不支持自定义源站域名。`download.petdock.site` 使用自有 HTTPS 受限入口，由入口读取批准版本登记并签发短时只读 URL，302 到确切的桶默认域名；大文件由对象存储直接下发。P3-B2 正式 `0.2.2` 元数据、签名信封、制品与整包大小/SHA-512 已由用户现场确认，见 [部署与验收指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_DOWNLOAD_P3B2_DEPLOYMENT.md)。本批新增 `/download` 仍需部署新镜像和两层白名单，不能把源码新增页面当成已上线。
+Lighthouse 版不支持自定义源站域名。`download.petdock.site` 使用自有 HTTPS 受限入口，由入口读取批准版本登记并签发短时只读 URL，302 到确切的桶默认域名；大文件由对象存储直接下发。正式元数据、清单、制品整包与暂停恢复已由用户现场确认，后续新发版仍按[发布指南](../guides/DESKTOP_RELEASE_AUTOMATION.md)验收，下载栈恢复见[部署指南](../../../petdock-office/petdock-cloud/docs/guides/DESKTOP_DOWNLOAD_P3B2_DEPLOYMENT.md)。下载页展示当前已验签的NSIS安装版，Portable只提示进入固定页。
 
 以客户端源 `https://download.petdock.site/` 为例：
 
@@ -98,9 +98,7 @@ Lighthouse 版不支持自定义源站域名。`download.petdock.site` 使用自
 
 COS URL 必须具有单一、格式正确的 SDK 查询签名字段，最多 30 分钟有效期，可包含临时凭据的 `x-cos-security-token`。客户端检查格式和边界，实际 COS 授权由存储端验证；URL 本身不作为发布者信任凭证。每操作最多 12 个请求，元数据请求截止 15 秒，制品请求截止 30 分钟，并限制响应大小。日志与界面不记录带签名 URL 或底层异常。
 
-本批 Node 回环验证完整下载、HEAD/Range、403 后主动重试经过入口取新链接及越界拒绝；`npm.cmd run test:updates:transport` 另用真实 Electron net 验证本机原生重定向、完整下载、缓存篡改、响应上限和超时，实际应用/会话目录也放在临时目录并清理，不启动安装器。两者的 COS `q-signature` 均为合成值，不是真实 SDK 授权。完整下载期间断线或链接过期后，需要重新检查并主动重试；未实现自动断点续传、差量或 blockmap。
-
-上段保留 P3-B1 证据。P3-B2 的 `--cloud-python` 模式使用真实 Cloud 服务与官方 SDK 1.9.44，覆盖普通/STS Token 参数、GET/HEAD/Range、发链预算及热暂停，COS 正文仍为回环。另经用户授权，在真实桶临时上传 46 字节合成对象，验证匿名拒读、HEAD/Range 和摘要一致、短链接到期拒读及新签恢复，随后删除。这些开发证据不单独证明生产身份权限或客户端安装结果。后续正式 HTTPS 与暂停/恢复、NSIS 两机升级和关键场景、费用告警及维护项分别按用户现场确认完成，最终结论见验收指南 6.3。
+每次重试重新经过受限入口获取短链。当前未实现自动断点续传、差量或blockmap；完整下载断线或链接过期后应重新检查并主动重试。历史Node/Electron/Cloud SDK回环及真实合成对象证据见[方案归档](../archive/2026-10/plans/NACOS_AND_DESKTOP_AUTO_UPDATE_PLAN.md)，后续发行按[验收清单](../guides/DESKTOP_UPDATE_ACCEPTANCE.md)复验，不将开发回环等同生产权限或安装结果。
 
 ## 5. Lighthouse 接入与费用防护运维基线
 
@@ -108,7 +106,7 @@ COS URL 必须具有单一、格式正确的 SDK 查询签名字段，最多 30 
 
 | 项目 | 当前基线与持续维护 |
 | --- | --- |
-| 地域/桶 | 已确认广州 `petdock-1467993618`；合成对象已删除，正式 0.2.2 私有对象已由用户验收，未核查全部桶对象/ACL |
+| 地域/桶 | 已确认广州 `petdock-1467993618`；合成对象已删除，正式私有对象已由用户验收；历史证据不代表全部桶对象/ACL持续合规 |
 | SDK | Lighthouse 支持 COS SDK；上传 `StorageClass` 省略或用 `DEFAULT`，不能套用 `STANDARD` |
 | 高级功能 | 不依赖标准 COS 的生命周期、版本控制和自定义源站域名；版本保留用明确对象清单人工管理 |
 | 下载权限 | 独立最小权限身份，只允许读取批准 `releases/` 对象；凭据通过服务器 Secret 配置，禁止进入聊天 |
