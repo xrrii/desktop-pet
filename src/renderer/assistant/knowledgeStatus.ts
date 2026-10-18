@@ -4,7 +4,7 @@ import type { AssistantKnowledgeLibrary } from '../../shared/assistant'
 export function knowledgeStatusText(library: AssistantKnowledgeLibrary): string {
   switch (library.status) {
     case 'indexing':
-      return `正在索引 ${library.processedFiles}/${library.totalFiles}`
+      return library.pauseRequested ? '正在暂停 · 等待当前步骤结束' : `正在索引 ${library.processedFiles}/${library.totalFiles}`
     case 'paused':
       return `已暂停 · ${library.documentCount} 个文档`
     case 'ready': {
@@ -22,6 +22,9 @@ export function knowledgeStatusText(library: AssistantKnowledgeLibrary): string 
 
 /** 根据持久化覆盖率解释降级原因；旧记录无原因时不猜测额度不足。 */
 export function knowledgeIndexNotice(library: AssistantKnowledgeLibrary): string | null {
+  if (library.status === 'indexing' && library.pauseRequested) {
+    return '已请求暂停，当前已发出的批次完成或超时后停止；已完成片段会保留，继续索引时复用。'
+  }
   const index = library.embeddingIndex
   if (!index || index.mode !== 'semantic' || !index.requiresRebuild) return null
   const coverage = `语义索引已完成 ${index.readyDocuments}/${index.totalDocuments} 个文档。`
@@ -44,7 +47,7 @@ export function knowledgeIndexNotice(library: AssistantKnowledgeLibrary): string
 
 /** 把暂停、补建和普通增量刷新显示为明确的操作。 */
 export function knowledgeIndexAction(library: AssistantKnowledgeLibrary): string {
-  if (library.status === 'indexing') return '暂停索引'
+  if (library.status === 'indexing') return library.pauseRequested ? '正在暂停…' : '暂停索引'
   if (library.embeddingIndex?.requiresRebuild) return '补建语义索引'
   return library.status === 'ready' ? '刷新索引' : '继续索引'
 }

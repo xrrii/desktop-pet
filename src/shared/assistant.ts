@@ -318,6 +318,8 @@ export interface AssistantKnowledgeLibrary {
   name: string
   displayPath: string
   status: KnowledgeLibraryStatus
+  /** 暂停请求已受理但后台仍在安全收尾，此时继续计为活动任务。 */
+  pauseRequested?: boolean
   documentCount: number
   chunkCount: number
   processedFiles: number

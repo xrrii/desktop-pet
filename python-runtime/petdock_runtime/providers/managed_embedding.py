@@ -2,22 +2,28 @@
 
 from __future__ import annotations
 
-import json
 import base64
 import binascii
+import json
 import logging
-from threading import RLock
+import time
 import uuid
-from typing import Any
+from threading import Lock, RLock
+from typing import Any, Callable
 
 import httpx
 
 from ..managed.session import ManagedSessionLease, ManagedSessionStore
-from .embeddings import EmbeddingDescriptor, EmbeddingProvider, _normalize, _validate_vectors
+from .embeddings import (
+    EmbeddingDescriptor,
+    _normalize,
+    _validate_vectors,
+    check_embedding_pause,
+    embedding_batch_ranges,
+)
 
 
-# 与 Managed v1 Embedding 路由的条数和总字符预算保持一致。
-MAX_BATCH_ITEMS = 128
+# 保留公开协议的单项硬上限；正常建库使用下方更小的计算预算。
 MAX_BATCH_INPUT_UNITS = 50_000
 LOGGER = logging.getLogger("petdock.providers.managed_embedding")
 
@@ -33,6 +39,10 @@ class ManagedEmbeddingError(RuntimeError):
 
 class ManagedEmbeddingProvider:
     """同步批量调用 Cloud Embedding 路由，供知识库索引线程使用。"""
+
+    # 公开 128 条/50000 字符是协议上限，不能作为单机 CPU 推理的目标批量。
+    document_batch_size = 32
+    document_batch_input_units = 12_000
 
     def __init__(
         self,
@@ -64,6 +74,7 @@ class ManagedEmbeddingProvider:
         )
         self._client = httpx.Client(timeout=httpx.Timeout(50.0, connect=10.0), follow_redirects=False)
         self._state_lock = RLock()
+        self._request_lock = Lock()
         self._quota_rejected_input_units: int | None = None
 
     def reset_degraded(self) -> None:
@@ -93,22 +104,20 @@ class ManagedEmbeddingProvider:
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """按条数与总字符预算分批，顺序合并向量；失败不自动重放已结算批次。"""
+        return self.embed_documents_cancellable(texts, None)
+
+    def embed_documents_cancellable(
+        self, texts: list[str], should_stop: Callable[[], bool] | None,
+    ) -> list[list[float]]:
+        """允许索引在等待本机发送门禁或下一个批次前暂停，保留普通查询调用接口。"""
+        check_embedding_pause(should_stop)
         # 先检查全部单项，避免遇到不可分割的超长文本时已有前序批次消耗额度。
         if any(not text.strip() or len(text) > MAX_BATCH_INPUT_UNITS for text in texts):
             raise ManagedEmbeddingError("embedding_provider_invalid_input")
         vectors: list[list[float]] = []
-        batch: list[str] = []
-        batch_units = 0
-        for text in texts:
-            units = self.count_tokens(text)
-            if batch and (len(batch) >= MAX_BATCH_ITEMS or batch_units + units > MAX_BATCH_INPUT_UNITS):
-                vectors.extend(self._embed(batch))
-                batch = []
-                batch_units = 0
-            batch.append(text)
-            batch_units += units
-        if batch:
-            vectors.extend(self._embed(batch))
+        for start, end in embedding_batch_ranges(self, texts):
+            check_embedding_pause(should_stop)
+            vectors.extend(self._embed(texts[start:end], should_stop))
         return vectors
 
     def embed_query(self, text: str) -> list[float]:
@@ -123,7 +132,26 @@ class ManagedEmbeddingProvider:
         """关闭 HTTP 客户端。"""
         self._client.close()
 
-    def _embed(self, texts: list[str]) -> list[list[float]]:
+    def _embed(self, texts: list[str], should_stop: Callable[[], bool] | None = None) -> list[list[float]]:
+        """按网络批次串行发送，避免同一桌面多个库把请求同时排进服务端单并发队列。"""
+        waiting_at = time.monotonic()
+        while True:
+            check_embedding_pause(should_stop)
+            if self._request_lock.acquire(timeout=0.1):
+                break
+        try:
+            check_embedding_pause(should_stop)
+            LOGGER.info(
+                "官方 Embedding 批次开始 items=%s inputUnits=%s localWaitMs=%s",
+                len(texts), sum(self.count_tokens(text) for text in texts),
+                round((time.monotonic() - waiting_at) * 1000),
+            )
+            # 等到真正发送时再取 Lease，避免在本机排队期间会话已经轮换。
+            return self._embed_locked(texts, should_stop)
+        finally:
+            self._request_lock.release()
+
+    def _embed_locked(self, texts: list[str], should_stop: Callable[[], bool] | None = None) -> list[list[float]]:
         """仅在 401 且已有新 Lease 时重试当前批次一次，绝不重放前序成功批次。"""
         # Cloud 校验后会剔除首尾空白，熔断阈值也按实际预占规模比较。
         input_units = sum(max(1, len(text.strip())) for text in texts)
@@ -139,6 +167,7 @@ class ManagedEmbeddingProvider:
             # 只补发明确被认证拒绝的当前请求；超时、5xx、额度拒绝不自动重试。
             refreshed = self._session.lease()
             if refreshed is not None and refreshed.access_token != lease.access_token:
+                check_embedding_pause(should_stop)
                 LOGGER.info("官方 Embedding 会话已轮换，恢复当前被拒批次 requestId=%s", request_id)
                 response = self._post_batch(texts, refreshed, trace_id, request_id)
         if response.status_code != 200:
@@ -185,14 +214,25 @@ class ManagedEmbeddingProvider:
             "X-PetDock-Device-Id": _device_id_from_token(lease.access_token, self._device_id),
             "Accept": "application/json",
         }
+        started_at = time.monotonic()
+        outcome = "transport_error"
         try:
-            return self._client.post(self._url, headers=headers, json={
+            response = self._client.post(self._url, headers=headers, json={
                 "descriptorId": "embedding-standard", "input": texts,
             })
+            outcome = str(response.status_code)
+            return response
         except httpx.TimeoutException as error:
+            outcome = "transport_timeout"
             raise ManagedEmbeddingError("embedding_provider_timeout") from error
         except httpx.HTTPError as error:
             raise ManagedEmbeddingError("embedding_provider_unavailable") from error
+        finally:
+            LOGGER.info(
+                "官方 Embedding 批次传输结束 requestId=%s items=%s inputUnits=%s status=%s durationMs=%s",
+                request_id, len(texts), sum(self.count_tokens(text) for text in texts), outcome,
+                round((time.monotonic() - started_at) * 1000),
+            )
 
 
 def _response_error(body: bytes) -> str:

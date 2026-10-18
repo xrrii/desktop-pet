@@ -110,9 +110,9 @@ def _embedding_response(vectors: list[list[float]]) -> httpx.Response:
     })
 
 
-@pytest.mark.parametrize("lengths", [[448] * 130, [1] * 130, [50_000, 1]])
-def test_managed_embedding_batches_by_items_and_total_characters(lengths: list[int]) -> None:
-    """同时遵守服务端条数、总字符限制，并保持跨批次向量顺序。"""
+@pytest.mark.parametrize("lengths,expected_batches", [([448] * 130, 5), ([1] * 130, 5), ([50_000, 1], 2)])
+def test_managed_embedding_batches_by_items_and_total_characters(lengths: list[int], expected_batches: int) -> None:
+    """正常请求使用较小计算批次，单项保留协议兼容，并保持跨批次向量顺序。"""
     calls = []
     cursor = 0
 
@@ -133,7 +133,7 @@ def test_managed_embedding_batches_by_items_and_total_characters(lengths: list[i
         vectors = provider.embed_documents(texts)
     finally:
         provider.close()
-    assert len(calls) == 2
+    assert len(calls) == expected_batches
     assert [text for batch in calls for text in batch] == texts
     assert vectors == [
         pytest.approx([(index + 1) / math.hypot(index + 1, 1), 1 / math.hypot(index + 1, 1)])
@@ -284,10 +284,10 @@ def test_managed_embedding_session_rotation_retries_only_rejected_batch_once() -
 
     provider = _batch_provider(handler)
     try:
-        assert len(provider.embed_documents(["合成资料"] * 130)) == 130
+        assert len(provider.embed_documents(["合成资料"] * 33)) == 33
         assert len(calls) == 3
-        assert json.loads(calls[0].content)["input"] == ["合成资料"] * 128
-        assert json.loads(calls[1].content)["input"] == json.loads(calls[2].content)["input"] == ["合成资料"] * 2
+        assert json.loads(calls[0].content)["input"] == ["合成资料"] * 32
+        assert json.loads(calls[1].content)["input"] == json.loads(calls[2].content)["input"] == ["合成资料"]
         assert calls[1].headers["X-PetDock-Request-Id"] == calls[2].headers["X-PetDock-Request-Id"]
         assert calls[1].headers["X-PetDock-Attempt-Id"] != calls[2].headers["X-PetDock-Attempt-Id"]
         assert calls[2].headers["Authorization"] == "Bearer synthetic-new-runtime-token"

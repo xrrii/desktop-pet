@@ -190,6 +190,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const managedAccountEmail = requireElement<HTMLElement>('#managed-account-email')
   const managedDeviceName = requireElement<HTMLElement>('#managed-device-name')
   const managedLogin = requireElement<HTMLButtonElement>('#managed-login')
+  const managedCancelLogin = requireElement<HTMLButtonElement>('#managed-cancel-login')
   const managedLogout = requireElement<HTMLButtonElement>('#managed-logout')
   const managedRevokeDevice = requireElement<HTMLButtonElement>('#managed-revoke-device')
   const managedOpenPortal = requireElement<HTMLButtonElement>('#managed-open-portal')
@@ -276,6 +277,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let modelBusy = false
   let managedAuthStatus: ManagedAuthStatus | null = null
   let managedAuthBusy = false
+  let managedLoginCancelBusy = false
   let managedPortalBusy = false
   let managedUsageBusy = false
   let managedUsage: ManagedUsageSummary | null = null
@@ -293,6 +295,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   let embeddingBusy = false
   let pendingEmbeddingAction: PendingEmbeddingAction | null = null
   let knowledgePoll: number | null = null
+  const knowledgeIndexRequests = new Set<string>()
   let pendingKnowledgeDelete: AssistantKnowledgeLibrary | null = null
   const selectedKnowledgeIds = new Set<string>()
   let memoryTab: 'conversations' | 'memories' | 'toolLogs' = 'conversations'
@@ -528,11 +531,16 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   })
   serviceModeManaged.addEventListener('click', () => void changeServiceMode('managed'))
   serviceModeByok.addEventListener('click', () => void changeServiceMode('byok'))
-  managedUsageRefresh.addEventListener('click', () => void loadManagedUsageSummary())
+  managedUsageRefresh.addEventListener('click', () => {
+    cancelManagedPortalReturnRefresh()
+    clearError()
+    void loadManagedUsageSummary()
+  })
   managedVisionEnabled.addEventListener('change', () => void changeManagedVision())
   managedRerankEnabled.addEventListener('change', () => void changeManagedRerank())
   modelClearKey.addEventListener('click', () => void clearModelKey())
   managedLogin.addEventListener('click', () => void startManagedLogin())
+  managedCancelLogin.addEventListener('click', () => void cancelManagedLogin())
   managedLogout.addEventListener('click', () => void logoutManaged())
   managedRevokeDevice.addEventListener('click', () => void revokeManagedCurrentDevice())
   managedOpenPortal.addEventListener('click', () => void openManagedPortal('overview'))
@@ -762,7 +770,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     managedDeviceName.textContent = device
       ? `当前设备：${device.displayName} · ${device.status === 'active' ? '正常' : '已撤销'}`
       : ''
-    managedAccountStatus.textContent = managedStatusLabel(status)
+    managedAccountStatus.textContent = managedLoginCancelBusy ? '正在取消登录…' : managedStatusLabel(status)
     const authenticated = status.state === 'authenticated' && status.sessionSyncState === 'ready'
     if (!authenticated) {
       managedUsageRequestVersion += 1
@@ -772,12 +780,16 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     const synchronizing = status.sessionSyncState === 'syncing' || status.sessionSyncState === 'logging_out'
     const retainedSession = status.sessionSyncState === 'failed'
-    const loginEligible = status.state === 'idle' || status.state === 'reauth_required'
+    const loginEligible = ['idle', 'reauth_required', 'cancelled', 'timed_out', 'failed', 'offline', 'disabled', 'unsupported_client'].includes(status.state)
     managedLogin.hidden = authenticated || retainedSession || synchronizing || !loginEligible
-    managedLogin.disabled = managedAuthBusy || !status.managedLoginEnabled || !loginEligible
+    managedLogin.disabled = managedAuthBusy || managedLoginCancelBusy || !status.managedLoginEnabled || !loginEligible
+    managedCancelLogin.hidden = !managedLoginCancelBusy && !['preparing', 'waiting_callback'].includes(status.state)
+    managedCancelLogin.disabled = managedLoginCancelBusy
+    managedCancelLogin.textContent = managedLoginCancelBusy ? '正在取消…' : '取消登录'
     managedLogout.disabled = managedAuthBusy || (!authenticated && !retainedSession)
     managedRevokeDevice.disabled = managedAuthBusy || !authenticated || !device || device.status !== 'active'
     managedOpenPortal.disabled = managedPortalBusy
+    renderManagedUsageRefreshState()
     renderServiceMode()
     if (settingsMode) {
       void refreshCapabilityView()
@@ -802,6 +814,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
   /** 渲染互斥服务模式及对应设置面板，不展示 Provider 或内部模型信息。 */
   function renderServiceMode(): void {
+    renderManagedUsageRefreshState()
     const chat = capabilitySettings?.capabilities.chat
     const embedding = capabilitySettings?.capabilities.embedding
     const webSearch = capabilitySettings?.capabilities.web_search
@@ -866,19 +879,22 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (!managedAuthStatus || managedAuthStatus.state !== 'authenticated') return
     const requestVersion = managedUsageRequestVersion
     managedUsageBusy = true
-    managedUsageStatus.textContent = '正在读取额度…'
+    managedUsageStatus.textContent = '正在刷新官方能力与额度…'
+    renderManagedUsageRefreshState()
     try {
-      managedUsage = await window.desktopPet.getManagedUsageSummary()
-      if (!managedUsage) {
-        clearManagedUsageDisplay()
-        managedUsageStatus.textContent = '当前账号尚未开通套餐或暂无可用额度。'
-        return
-      }
+      const usage = await window.desktopPet.getManagedUsageSummary()
       if (
         requestVersion !== managedUsageRequestVersion ||
         !managedAuthStatus ||
-        managedAuthStatus.state !== 'authenticated'
+        managedAuthStatus.state !== 'authenticated' ||
+        selectedServiceMode() !== 'managed'
       ) {
+        return
+      }
+      managedUsage = usage
+      if (!managedUsage) {
+        clearManagedUsageDisplay()
+        managedUsageStatus.textContent = '已刷新：当前账号尚未开通套餐或暂无可用额度。'
         return
       }
       const chat = managedUsage.capabilities.chat
@@ -896,20 +912,25 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       managedUsageRerank.textContent = managedUsage.capabilities.rerank
         ? formatManagedCapabilityUsage(managedUsage.capabilities.rerank)
         : '未授权'
-      managedUsageStatus.textContent = ''
+      managedUsageStatus.textContent = `已刷新 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`
     } catch (error) {
-      managedUsage = null
-      clearManagedUsageDisplay()
       const sessionEnded =
         requestVersion !== managedUsageRequestVersion ||
         !managedAuthStatus ||
-        managedAuthStatus.state !== 'authenticated'
-      if (!sessionEnded && !isAuthenticationRequiredError(error)) {
+        managedAuthStatus.state !== 'authenticated' ||
+        selectedServiceMode() !== 'managed'
+      if (sessionEnded) return
+      managedUsage = null
+      clearManagedUsageDisplay()
+      if (!isAuthenticationRequiredError(error)) {
         managedUsageStatus.textContent = '暂时无法读取额度，请稍后重试。'
         showError(error)
+      } else {
+        managedUsageStatus.textContent = '登录状态暂不可用，请检查登录状态后重试。'
       }
     } finally {
       managedUsageBusy = false
+      renderManagedUsageRefreshState()
       if (
         requestVersion !== managedUsageRequestVersion &&
         managedAuthStatus?.state === 'authenticated' &&
@@ -918,6 +939,17 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         void loadManagedUsageSummary()
       }
     }
+  }
+
+  /** 刷新是独立读取操作，无套餐仍允许重新查询；统一更新开始、结束及禁用原因。 */
+  function renderManagedUsageRefreshState(): void {
+    const authenticated = managedAuthStatus?.state === 'authenticated' && managedAuthStatus.sessionSyncState === 'ready'
+    managedUsageRefresh.disabled = managedUsageBusy || selectedServiceMode() !== 'managed' || !authenticated
+    managedUsageRefresh.setAttribute('aria-busy', String(managedUsageBusy))
+    managedUsageRefresh.lastElementChild!.textContent = managedUsageBusy ? '刷新中…' : '刷新'
+    managedUsageRefresh.title = managedUsageBusy ? '正在刷新官方能力与额度'
+      : !authenticated ? '登录并完成账号同步后可刷新官方能力与额度' : '刷新官方能力与额度'
+    managedUsageRefresh.setAttribute('aria-label', managedUsageRefresh.title)
   }
 
   /** 切换服务器本地 Rerank；失败时恢复开关并保留本地排序。 */
@@ -1140,7 +1172,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   /** 受控识别会抢占自动刷新的 Managed 显式操作入口。 */
   function isManagedAuthActionTarget(target: EventTarget | null): boolean {
     const element = target instanceof Element ? target : null
-    return Boolean(element?.closest('#managed-login, #managed-logout, #managed-revoke-device, #managed-open-portal'))
+    return Boolean(element?.closest('#managed-login, #managed-cancel-login, #managed-usage-refresh, #managed-logout, #managed-revoke-device, #managed-open-portal'))
   }
 
   /** 将 Main 稳定状态转换为设置页短文案。 */
@@ -1158,6 +1190,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       return '已登录'
     }
     if (status.state === 'waiting_callback') return '等待浏览器授权'
+    if (status.state === 'cancelled') return '登录已取消，可重新登录'
+    if (status.state === 'timed_out') return '登录等待超时，请重新登录'
+    if (status.state === 'failed' && status.errorCode === 'oauth_authorization_denied') return '浏览器授权未完成，可重新登录'
+    if (status.state === 'failed' && status.errorCode?.startsWith('oauth_')) return '登录失败，可重新登录'
     if (status.state === 'preparing' || status.state === 'exchanging_code') return '正在登录'
     if (status.state === 'offline') return '服务暂不可用'
     if (status.state === 'reauth_required') return '需要重新登录'
@@ -1171,8 +1207,9 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
 
   /** 从设置页发起 Main 托管的 PKCE 登录。 */
   async function startManagedLogin(): Promise<void> {
-    if (managedAuthBusy) return
+    if (managedAuthBusy || managedLoginCancelBusy) return
     cancelManagedPortalReturnRefresh()
+    clearError()
     managedAuthBusy = true
     try {
       renderManagedAuthStatus(managedAuthStatus || await window.desktopPet.getManagedAuthStatus())
@@ -1181,6 +1218,23 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       showError(error)
     } finally {
       managedAuthBusy = false
+      if (managedAuthStatus) renderManagedAuthStatus(managedAuthStatus)
+    }
+  }
+
+  /** 允许在等待系统浏览器时独立取消，不能受整段登录 Promise 的忙碌锁阻挡。 */
+  async function cancelManagedLogin(): Promise<void> {
+    if (managedLoginCancelBusy) return
+    cancelManagedPortalReturnRefresh()
+    managedLoginCancelBusy = true
+    clearError()
+    if (managedAuthStatus) renderManagedAuthStatus(managedAuthStatus)
+    try {
+      renderManagedAuthStatus(await window.desktopPet.cancelManagedLogin())
+    } catch (error) {
+      showError(error)
+    } finally {
+      managedLoginCancelBusy = false
       if (managedAuthStatus) renderManagedAuthStatus(managedAuthStatus)
     }
   }
@@ -1742,7 +1796,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     serviceModeByok.disabled = modelBusy
     const subscriptionUnavailable = managedAuthStatus?.state === 'authenticated' &&
       managedAuthStatus.managedSubscriptionActive === false
-    managedUsageRefresh.disabled = modelBusy || managedUsageBusy || subscriptionUnavailable
+    renderManagedUsageRefreshState()
     managedEmbeddingEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
     managedVisionEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
     managedRerankEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
@@ -2334,7 +2388,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       return
     }
 
-    libraries.forEach((library) => {
+    libraries.forEach((snapshotLibrary) => {
+      // RPC 返回前也立即反馈暂停；轮询不得覆盖这段等待中的操作状态。
+      const requestPending = knowledgeIndexRequests.has(snapshotLibrary.id)
+      const library = requestPending && snapshotLibrary.status === 'indexing'
+        ? { ...snapshotLibrary, pauseRequested: true } : snapshotLibrary
       const row = document.createElement('article')
       row.className = 'knowledge-row'
       row.dataset.status = library.status
@@ -2379,9 +2437,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       indexAction.type = 'button'
       indexAction.className = 'icon-button'
       const isIndexing = library.status === 'indexing'
+      const isPausing = isIndexing && library.pauseRequested === true
       const needsRebuild = !isIndexing && library.embeddingIndex?.requiresRebuild === true
-      indexAction.textContent = isIndexing ? 'Ⅱ' : needsRebuild ? '补建语义索引' : '↻'
-      indexAction.classList.toggle('knowledge-rebuild-button', needsRebuild)
+      indexAction.textContent = isPausing ? '正在暂停…' : isIndexing ? 'Ⅱ' : needsRebuild ? '补建语义索引' : '↻'
+      indexAction.classList.toggle('knowledge-rebuild-button', needsRebuild || isPausing)
+      indexAction.disabled = requestPending || isPausing
       indexAction.title = knowledgeIndexAction(library)
       indexAction.setAttribute('aria-label', `${indexAction.title}${library.name}`)
       indexAction.addEventListener('click', () => void toggleKnowledgeIndex(library))
@@ -2663,7 +2723,11 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
   }
 
+  /** 立即展示操作反馈，暂停是否结束仍以 Runtime 的真实任务状态为准。 */
   async function toggleKnowledgeIndex(library: AssistantKnowledgeLibrary): Promise<void> {
+    if (knowledgeIndexRequests.has(library.id) || (library.status === 'indexing' && library.pauseRequested)) return
+    knowledgeIndexRequests.add(library.id)
+    renderKnowledgeView()
     try {
       if (library.status === 'indexing') {
         await window.desktopPet.pauseAssistantKnowledgeIndex(library.id)
@@ -2671,10 +2735,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
         await window.desktopPet.startAssistantKnowledgeIndex(library.id)
       }
       knowledgeSnapshot = await window.desktopPet.getAssistantKnowledge()
-      renderKnowledgeView()
-      scheduleKnowledgePoll()
     } catch (error) {
       showError(error)
+    } finally {
+      knowledgeIndexRequests.delete(library.id)
+      renderKnowledgeView()
+      scheduleKnowledgePoll()
     }
   }
 

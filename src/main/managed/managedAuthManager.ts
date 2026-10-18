@@ -58,6 +58,7 @@ export class ManagedAuthManager {
   private activeRefresh: Promise<ManagedAuthStatus> | null = null
   private activeSessionCommand: Promise<ManagedAuthStatus> | null = null
   private loopback: ManagedOAuthLoopbackSession | null = null
+  private loginPreparation: AbortController | null = null
   private cancelRequested = false
   private disposed = false
   private accessToken: string | null = null
@@ -278,9 +279,12 @@ export class ManagedAuthManager {
       return this.startRefreshTask(() => this.persistPendingSession())
     }
     this.cancelRequested = false
-    this.activeLogin = this.runLogin().finally(() => {
+    const preparation = new AbortController()
+    this.loginPreparation = preparation
+    this.activeLogin = this.runLogin(preparation.signal).finally(() => {
       this.activeLogin = null
       this.loopback = null
+      this.loginPreparation = null
       this.cancelRequested = false
     })
     return this.activeLogin
@@ -358,15 +362,15 @@ export class ManagedAuthManager {
     return this.activeSessionCommand
   }
 
-  /** 取消当前浏览器授权并清理 loopback 监听器。 */
-  cancel(): ManagedAuthStatus {
-    if (this.activeLogin) {
-      this.cancelRequested = true
-      this.loopback?.cancel()
-      if (!this.loopback) {
-        this.setStatus({ state: 'cancelled', errorCode: 'oauth_cancelled' })
-      }
-    }
+  /** 取消准备或浏览器等待，待旧任务释放监听器后返回；换码及落盘阶段安全完成。 */
+  async cancel(): Promise<ManagedAuthStatus> {
+    const login = this.activeLogin
+    if (!login || !['preparing', 'waiting_callback'].includes(this.status.state)) return this.getStatus()
+    this.cancelRequested = true
+    this.loginPreparation?.abort()
+    this.loopback?.cancel()
+    logInfo('桌面登录已接收取消请求', { stage: this.status.state })
+    await login
     return this.getStatus()
   }
 
@@ -374,6 +378,7 @@ export class ManagedAuthManager {
   dispose(): void {
     this.disposed = true
     this.cancelRequested = true
+    this.loginPreparation?.abort()
     this.loopback?.dispose()
     this.loopback = null
     this.activeLogin = null
@@ -403,40 +408,35 @@ export class ManagedAuthManager {
   }
 
   /** 执行 Feature Flag、Discovery、浏览器授权、回调校验和 Token Exchange。 */
-  private async runLogin(): Promise<ManagedAuthStatus> {
+  private async runLogin(signal: AbortSignal): Promise<ManagedAuthStatus> {
     this.setStatus({
       state: 'preparing',
       errorCode: null,
       managedServiceSelected: this.currentLocalServiceSelection()
     })
-    const features = await this.featureFlags.refresh()
-    if (this.cancelRequested) {
-      this.setStatus({ state: 'cancelled', errorCode: 'oauth_cancelled' })
-      return this.getStatus()
-    }
-    this.applyFeatureSnapshot(features, 'preparing')
-    if (!features.managedLoginEnabled) {
-      return this.getStatus()
-    }
-    if (!this.tokenStore.isAvailable()) {
-      this.setStatus({ state: 'failed', errorCode: 'managed_token_storage_unavailable' })
-      logError('managed OAuth login failed', { errorCode: 'managed_token_storage_unavailable' })
-      return this.getStatus()
-    }
-
     try {
+      const features = await waitForLoginPreparation(this.featureFlags.refresh(), signal)
+      this.applyFeatureSnapshot(features, 'preparing')
+      if (!features.managedLoginEnabled) return this.getStatus()
+      if (!this.tokenStore.isAvailable()) {
+        this.setStatus({ state: 'failed', errorCode: 'managed_token_storage_unavailable' })
+        logError('managed OAuth login failed', { errorCode: 'managed_token_storage_unavailable' })
+        return this.getStatus()
+      }
       this.loopback = await ManagedOAuthLoopbackSession.listen()
       const callbackPromise = this.loopback.waitForCallback()
       // Discovery 或浏览器打开失败时仍需消费拒绝，避免应用退出阶段产生未处理 Promise。
       void callbackPromise.catch(() => undefined)
-      const preparation = await this.oauthClient.prepare(this.loopback.redirectUri)
+      if (this.cancelRequested) throw new ManagedOAuthLoopbackError('cancelled', 'OAuth 登录已取消。')
+      const preparation = await waitForLoginPreparation(this.oauthClient.prepare(this.loopback.redirectUri), signal)
       if (this.cancelRequested) {
         throw new ManagedOAuthLoopbackError('cancelled', 'OAuth 登录已取消。')
       }
       this.loopback.setExpectedState(preparation.state)
       this.setStatus({ state: 'waiting_callback', errorCode: null })
-      await this.openExternal(preparation.authorizationUrl.href)
+      await waitForLoginPreparation(this.openExternal(preparation.authorizationUrl.href), signal)
       const callbackUrl = await callbackPromise
+      if (this.cancelRequested) throw new ManagedOAuthLoopbackError('cancelled', 'OAuth 登录已取消。')
       logInfo('managed OAuth callback received', {
         result: callbackUrl.searchParams.has('code') ? 'code' : 'error'
       })
@@ -461,10 +461,14 @@ export class ManagedAuthManager {
       this.accessTokenExpiresAt = null
       this.refreshToken = null
       this.setStatus({ state: mapped.state, errorCode: mapped.errorCode })
-      logError('managed OAuth login failed', {
-        errorCode: mapped.errorCode,
-        stage: error instanceof ManagedOidcClientError ? error.stage : 'unknown'
-      })
+      if (mapped.state === 'cancelled') {
+        logInfo('桌面登录已取消，旧回调监听已停止')
+      } else {
+        logError('managed OAuth login failed', {
+          errorCode: mapped.errorCode,
+          stage: error instanceof ManagedOidcClientError ? error.stage : 'unknown'
+        })
+      }
       return this.getStatus()
     } finally {
       this.loopback?.dispose()
@@ -1107,6 +1111,22 @@ export class ManagedAuthManager {
         : features.managedLoginEnabled ? null : features.errorCode
     })
   }
+}
+
+/** 只取消尚未涉及凭据写入的登录准备等待，迟到的结果不再推进旧流程。 */
+function waitForLoginPreparation<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  const cancelled = () => new ManagedOAuthLoopbackError('cancelled', 'OAuth 登录已取消。')
+  if (signal.aborted) {
+    void operation.catch(() => undefined)
+    return Promise.reject(cancelled())
+  }
+  let onAbort!: () => void
+  const interruption = new Promise<T>((_resolve, reject) => {
+    onAbort = () => reject(cancelled())
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  // race 会消费底层操作的迟到拒绝；取消后也要移除监听，避免长期持有旧登录流程。
+  return Promise.race([operation, interruption]).finally(() => signal.removeEventListener('abort', onAbort))
 }
 
 /** 判断服务端是否允许至少一项官方能力，决定是否需要保留 Runtime Lease。 */

@@ -209,6 +209,26 @@ button:disabled {
   font-size: 11px;
 }
 
+.managed-usage-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.managed-usage-refresh[aria-busy="true"] > span:first-child {
+  animation: managed-usage-refresh-spin 1s linear infinite;
+}
+
+@keyframes managed-usage-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .managed-usage-refresh[aria-busy="true"] > span:first-child { animation: none; }
+}
+
 .managed-usage-values {
   display: flex;
   gap: 16px;

@@ -6,7 +6,7 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Callable, Iterator, Literal, Protocol
 
 from ..config import RuntimeConfig
 
@@ -75,6 +75,33 @@ class EmbeddingProvider(Protocol):
     def count_tokens(self, text: str) -> int:
         """返回 Chunk 边界判断使用的 Token 数。"""
         ...
+
+
+class EmbeddingIndexPaused(Exception):
+    """协作暂停索引，区别于模型失败，不触发重试、错误记录或降级建库。"""
+
+
+def check_embedding_pause(should_stop: Callable[[], bool] | None) -> None:
+    """只在安全边界响应暂停，不中断正在执行且用量尚未确定的网络调用。"""
+    if should_stop is not None and should_stop():
+        raise EmbeddingIndexPaused("索引已请求暂停")
+
+
+def embedding_batch_ranges(embedding: EmbeddingProvider, texts: list[str]) -> Iterator[tuple[int, int]]:
+    """按适配器的计算预算划分连续区间，让每次推理结果能单独持久化。"""
+    max_items = getattr(embedding, "document_batch_size", 128)
+    max_units = getattr(embedding, "document_batch_input_units", None)
+    start = 0
+    units = 0
+    for index, text in enumerate(texts):
+        item_units = embedding.count_tokens(text) if max_units is not None else 0
+        if index > start and (index - start >= max_items or (max_units is not None and units + item_units > max_units)):
+            yield start, index
+            start, units = index, 0
+        # 预算用于拆批，单项是否违反协议硬上限仍由对应 Provider 预校验。
+        units += item_units
+    if start < len(texts):
+        yield start, len(texts)
 
 
 class LocalHashEmbedding:

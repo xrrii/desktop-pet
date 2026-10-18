@@ -305,6 +305,13 @@ class KnowledgeStore:
         if total_files is not None:
             updates.append("total_files=?")
             values.append(total_files)
+        if status == "paused":
+            # 暂停只影响推理，不应让已经登记的分块因旧统计为零而无法本地检索。
+            updates.extend([
+                "document_count=(SELECT COUNT(*) FROM documents WHERE library_id=?)",
+                "chunk_count=(SELECT COUNT(*) FROM document_chunks WHERE library_id=?)",
+            ])
+            values.extend([library_id, library_id])
         values.append(library_id)
         with self._lock, self._connection:
             self._connection.execute(

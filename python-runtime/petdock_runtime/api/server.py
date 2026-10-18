@@ -610,10 +610,10 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         library_id: str,
         authorization: str | None = Header(default=None),
     ) -> dict[str, bool]:
-        """在当前文件完成后暂停索引。"""
+        """快速确认暂停请求，实际停止状态由知识库快照返回。"""
         authorize(authorization)
         try:
-            return {"paused": await knowledge.pause_index(library_id)}
+            return {"accepted": await knowledge.pause_index(library_id)}
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Knowledge library not found") from error
 

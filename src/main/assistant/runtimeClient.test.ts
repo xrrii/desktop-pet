@@ -10,6 +10,23 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('Runtime 知识库暂停确认', () => {
+  it.each([
+    [{ accepted: true }, true],
+    [{ accepted: false, paused: true }, false],
+    [{ accepted: true, paused: false }, true],
+    [{ paused: true }, true],
+    [{ paused: false }, false],
+    [{}, false]
+  ])('优先使用受理结果并兼容旧 Runtime 的暂停响应', async (value, expected) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(value)))
+    vi.stubGlobal('fetch', fetcher)
+    await expect(runtimeClient().pauseKnowledgeIndex('synthetic/library')).resolves.toBe(expected)
+    expect(String(fetcher.mock.calls[0][0])).toBe('http://127.0.0.1:3210/v1/knowledge/library/synthetic%2Flibrary/pause')
+    expect(fetcher.mock.calls[0][1]?.method).toBe('POST')
+  })
+})
+
 describe('Runtime 更新互锁', () => {
   it.each([
     [{ accepted: true, activeRequests: 0, chatTasks: 0, knowledgeTasks: 0, memoryTasks: 0 }, true],

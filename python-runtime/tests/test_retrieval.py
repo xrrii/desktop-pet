@@ -316,7 +316,7 @@ def test_primary_index_failure_keeps_hash_fallback_searchable(tmp_path) -> None:
         primary = ChromaVectorStore(":memory:", primary_embedding, "test_primary_failure")
         fallback = ChromaVectorStore(":memory:", LocalHashEmbedding(), "test_hash_fallback")
 
-        def fail_primary_upsert(_records) -> None:
+        def fail_primary_upsert(_records, **_options) -> None:
             """模拟在线服务在建索引期间不可用。"""
             raise RuntimeError("primary unavailable")
 

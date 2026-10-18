@@ -1,6 +1,6 @@
 {
   "name": "petdock",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "A transparent Electron desktop pet dock powered by spritesheet atlases.",
   "author": "xrrii",
   "license": "MIT",

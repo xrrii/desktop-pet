@@ -44,6 +44,31 @@ describe('知识库索引状态', () => {
     expect(knowledgeIndexAction(item)).toBe('暂停索引')
   })
 
+  it('暂停受理后解释等待批次与断点保留，不再显示模型历史故障', () => {
+    const item = library()
+    item.status = 'indexing'
+    item.pauseRequested = true
+    expect(knowledgeStatusText(item)).toContain('正在暂停')
+    expect(knowledgeIndexAction(item)).toBe('正在暂停…')
+    expect(knowledgeIndexNotice(item)).toContain('已发出的批次')
+    expect(knowledgeIndexNotice(item)).toContain('已完成片段会保留')
+    expect(knowledgeIndexNotice(item)).not.toContain('额度不足')
+    item.status = 'paused'
+    delete item.pauseRequested
+    expect(knowledgeStatusText(item)).toContain('已暂停')
+    expect(knowledgeIndexAction(item)).toBe('补建语义索引')
+    item.embeddingIndex!.requiresRebuild = false
+    expect(knowledgeIndexAction(item)).toBe('继续索引')
+  })
+
+  it('主动使用本地检索时也显示暂停反馈', () => {
+    const item = library()
+    item.status = 'indexing'
+    item.pauseRequested = true
+    delete item.embeddingIndex
+    expect(knowledgeIndexNotice(item)).toContain('已请求暂停')
+  })
+
   it('完整语义索引和主动使用本地检索时不告警', () => {
     const item = library()
     item.embeddingIndex!.requiresRebuild = false

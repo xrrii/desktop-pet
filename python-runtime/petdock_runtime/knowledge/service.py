@@ -16,7 +16,12 @@ from ..documents.chunking import (
     split_document,
 )
 from ..documents.parser import DocumentParseError, DocumentParserRegistry
-from ..providers.embeddings import EmbeddingProvider, LocalHashEmbedding
+from ..providers.embeddings import (
+    EmbeddingIndexPaused,
+    EmbeddingProvider,
+    LocalHashEmbedding,
+    check_embedding_pause,
+)
 from ..providers.rerank import RerankProvider
 from ..rag.planner import retrieval_query_terms, retrieval_terms
 from ..rag.scoring import content_similarity, normalized_similarity
@@ -137,6 +142,12 @@ class _IndexControl:
     """保存跨线程可见的暂停信号。"""
 
     stop: threading.Event
+    cancel_batches: threading.Event = field(default_factory=threading.Event)
+
+    def request_pause(self) -> None:
+        """用户暂停、退出或删除时停止后续批次；认证降级仍可只停止后续文件。"""
+        self.cancel_batches.set()
+        self.stop.set()
 
 
 @dataclass
@@ -182,11 +193,16 @@ class KnowledgeService:
 
     def snapshot(self) -> dict[str, list[dict[str, Any]]]:
         """返回任务状态和当前模型的真实索引覆盖率，区别就绪与语义完整。"""
-        return self.store.snapshot(
+        snapshot = self.store.snapshot(
             self.vectors.descriptor.signature,
             self.fallback_vectors.descriptor.signature if self.fallback_vectors else None,
             semantic=self.vectors.descriptor.id != LocalHashEmbedding.name,
         )
+        for library in snapshot["libraries"]:
+            control = self._controls.get(str(library["id"]))
+            if library["status"] == "indexing" and control is not None and control.stop.is_set():
+                library["pauseRequested"] = True
+        return snapshot
 
     def reset_embedding_degradation(self) -> None:
         """在官方会话或能力快照更新后清除本次 Runtime 的 Hash 降级标记。"""
@@ -246,14 +262,14 @@ class KnowledgeService:
         return started
 
     async def pause_index(self, library_id: str) -> bool:
-        """请求暂停并等待当前文件处理结束，保证状态已落库后再返回。"""
+        """立即确认暂停请求；后台在当前批次落库后停止，快照负责确认最终暂停。"""
         task = self._tasks.get(library_id)
         control = self._controls.get(library_id)
         if not task or task.done() or not control:
             self.store.get_library(library_id)
             return False
-        control.stop.set()
-        await asyncio.shield(task)
+        control.request_pause()
+        LOGGER.info("知识库已接收暂停请求，等待当前处理步骤结束 library=%s", library_id)
         return True
 
     async def delete_library(self, library_id: str) -> bool:
@@ -261,7 +277,7 @@ class KnowledgeService:
         task = self._tasks.get(library_id)
         control = self._controls.get(library_id)
         if task and not task.done() and control:
-            control.stop.set()
+            control.request_pause()
             await asyncio.shield(task)
         await asyncio.to_thread(self.vectors.delete_library, library_id)
         if self.fallback_vectors:
@@ -292,7 +308,7 @@ class KnowledgeService:
                 continue
             control = self._controls.get(library_id)
             if control:
-                control.stop.set()
+                control.request_pause()
             pending.append(task)
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
@@ -379,9 +395,11 @@ class KnowledgeService:
                     self.store.set_progress(library_id, "indexing", processed, len(files))
                     continue
                 content = parsed.plain_text
+                check_embedding_pause(control.cancel_batches.is_set)
                 content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
                 chunks: list[tuple[str, int, dict[str, object]]] = []
                 for block in parsed.blocks:
+                    check_embedding_pause(control.cancel_batches.is_set)
                     chunks.extend(
                         (chunk, token_count, block.location.as_dict())
                         for chunk, token_count in split_document(
@@ -419,6 +437,9 @@ class KnowledgeService:
                 library_id, len(files), coverage["mode"], coverage["readyDocuments"], coverage["totalDocuments"],
                 coverage["fallbackDocuments"], coverage["requiresRebuild"],
             )
+        except EmbeddingIndexPaused:
+            self.store.set_progress(library_id, "paused")
+            LOGGER.info("知识库已在批次边界暂停，保留已完成片段 library=%s", library_id)
         except Exception as error:
             LOGGER.error("知识库索引失败 library=%s error=%s", library_id, error.__class__.__name__)
             try:
@@ -431,12 +452,16 @@ class KnowledgeService:
         control: _IndexControl | None = None,
     ) -> str:
         """独立写入活动和 Hash 影子索引，主索引失败时允许降级完成。"""
+        should_stop = control.cancel_batches.is_set if control is not None else None
+        check_embedding_pause(should_stop)
         primary_error: Exception | None = None
         if self._is_embedding_degraded(library_id):
             LOGGER.debug("官方 Embedding 已熔断，直接写入 Hash 影子索引 library=%s", library_id)
         else:
             try:
-                self.vectors.upsert(records)
+                self.vectors.upsert(records, reuse_existing=True, should_stop=should_stop)
+            except EmbeddingIndexPaused:
+                raise
             except Exception as error:
                 primary_error = error
                 code = getattr(error, "code", None)
@@ -458,8 +483,10 @@ class KnowledgeService:
         fallback_written = False
         if self.fallback_vectors:
             try:
-                self.fallback_vectors.upsert(records)
+                self.fallback_vectors.upsert(records, reuse_existing=True, should_stop=should_stop)
                 fallback_written = True
+            except EmbeddingIndexPaused:
+                raise
             except Exception:
                 LOGGER.exception("Hash 影子向量索引写入失败")
 

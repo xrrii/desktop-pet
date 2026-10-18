@@ -79,6 +79,134 @@ class FakeTokenStore implements ManagedTokenStore {
 }
 
 describe('ManagedAuthManager', () => {
+  it('浏览器未回调时取消会关闭旧监听器，并允许重新登录', async () => {
+    const tokenStore = new FakeTokenStore()
+    const redirects: string[] = []
+    let completeLogin = false
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      featureFlags: new FakeFeatureFlags() as never,
+      tokenStore,
+      oauthClient: {
+        /** 为每次合成登录记录独立监听地址，验证旧回调已失效。 */
+        async prepare(redirectUri) {
+          redirects.push(redirectUri)
+          return {
+            authorizationUrl: new URL(`${policy.issuer}authorize`), state: 'synthetic-cancel-state',
+            /** 只在主动完成第二次授权时签发合成凭据。 */
+            async exchange() { return tokenSet('synthetic-access', 'synthetic-refresh') }
+          }
+        },
+        /** 登录重试不得误用恢复会话链路。 */
+        async refresh() { throw new Error('不应刷新合成登录') }
+      },
+      openExternal: async () => {
+        if (completeLogin) await fetch(`${redirects.at(-1)}?code=synthetic-code&state=synthetic-cancel-state`)
+      }
+    })
+    try {
+      const first = manager.login()
+      await vi.waitFor(() => expect(manager.getStatus().state).toBe('waiting_callback'))
+      await expect(Promise.resolve(manager.cancel())).resolves.toMatchObject({ state: 'cancelled' })
+      await expect(first).resolves.toMatchObject({ state: 'cancelled' })
+      expect(tokenStore.saved).toEqual([])
+      await expect(fetch(`${redirects[0]}?code=late-code&state=synthetic-cancel-state`)).rejects.toThrow()
+      completeLogin = true
+      await expect(manager.login()).resolves.toMatchObject({ state: 'authenticated' })
+      expect(tokenStore.saved).toEqual(['synthetic-refresh'])
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('登录准备请求尚未返回时也可取消，迟到的结果不能再次打开浏览器', async () => {
+    let finishFeatures!: (snapshot: ManagedFeatureSnapshot) => void
+    const featureFlags = { refresh: vi.fn(() => new Promise<ManagedFeatureSnapshot>((resolve) => { finishFeatures = resolve })) }
+    const openExternal = vi.fn(async () => undefined)
+    const manager = new ManagedAuthManager(policy, '0.2.0', { featureFlags: featureFlags as never, openExternal })
+    try {
+      const login = manager.login()
+      const finished = vi.fn()
+      void login.then(finished)
+      await Promise.resolve(manager.cancel())
+      await vi.waitFor(() => expect(finished).toHaveBeenCalledOnce(), { timeout: 300 })
+      await expect(login).resolves.toMatchObject({ state: 'cancelled' })
+      finishFeatures(await new FakeFeatureFlags().refresh())
+      await Promise.resolve()
+      expect(openExternal).not.toHaveBeenCalled()
+      expect(manager.getStatus().state).toBe('cancelled')
+    } finally {
+      finishFeatures(await new FakeFeatureFlags().refresh())
+      manager.dispose()
+    }
+  })
+
+  it('取消 Discovery 等待后释放监听器，迟到的授权准备结果不会打开浏览器', async () => {
+    let redirect = ''
+    let finishPreparation!: (value: ManagedAuthorizationPreparation) => void
+    const openExternal = vi.fn(async () => undefined)
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      featureFlags: new FakeFeatureFlags() as never, tokenStore: new FakeTokenStore(), openExternal,
+      oauthClient: {
+        /** 保留待完成的匿名 Discovery，模拟用户取消时网络仍未返回。 */
+        prepare: (uri) => {
+          redirect = uri
+          return new Promise((resolve) => { finishPreparation = resolve })
+        },
+        /** 该回归只检查登录准备，不调用 Token 刷新。 */
+        async refresh() { throw new Error('不应刷新合成登录') }
+      }
+    })
+    try {
+      const login = manager.login()
+      await vi.waitFor(() => expect(redirect).not.toBe(''))
+      await expect(manager.cancel()).resolves.toMatchObject({ state: 'cancelled' })
+      await expect(login).resolves.toMatchObject({ state: 'cancelled' })
+      await expect(fetch(`${redirect}?code=late&state=synthetic`)).rejects.toThrow()
+      finishPreparation({
+        authorizationUrl: new URL(`${policy.issuer}authorize`), state: 'synthetic',
+        /** 已取消流程不允许进入凭据交换。 */
+        exchange: vi.fn().mockRejectedValue(new Error('不应交换旧授权'))
+      })
+      await Promise.resolve()
+      expect(openExternal).not.toHaveBeenCalled()
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('授权码已进入交换阶段时不取消凭据落盘，保持真实最终登录状态', async () => {
+    let finishExchange!: (tokens: ManagedTokenSet) => void
+    const tokenStore = new FakeTokenStore()
+    let redirect = ''
+    const manager = new ManagedAuthManager(policy, '0.2.0', {
+      featureFlags: new FakeFeatureFlags() as never, tokenStore,
+      oauthClient: {
+        /** 提供可以主动控制换码完成时机的合成授权。 */
+        async prepare(uri) {
+          redirect = uri
+          return {
+            authorizationUrl: new URL(`${policy.issuer}authorize`), state: 'synthetic-exchanging',
+            /** 阻塞已开始的凭据交换，验证取消不会丢失随后签发的 Refresh Token。 */
+            exchange: () => new Promise((resolve) => { finishExchange = resolve })
+          }
+        },
+        /** 测试中只通过授权码建立会话。 */
+        async refresh() { throw new Error('不应刷新合成登录') }
+      },
+      openExternal: async () => { await fetch(`${redirect}?code=synthetic&state=synthetic-exchanging`) }
+    })
+    try {
+      const login = manager.login()
+      await vi.waitFor(() => expect(manager.getStatus().state).toBe('exchanging_code'))
+      await expect(manager.cancel()).resolves.toMatchObject({ state: 'exchanging_code' })
+      finishExchange(tokenSet('synthetic-access', 'synthetic-refresh'))
+      await expect(login).resolves.toMatchObject({ state: 'authenticated' })
+      expect(tokenStore.saved).toEqual(['synthetic-refresh'])
+    } finally {
+      manager.dispose()
+    }
+  })
+
   it('登录前可以通过匿名 Feature Flag 刷新入口状态', async () => {
     const manager = new ManagedAuthManager(policy, '0.2.0', {
       featureFlags: new FakeFeatureFlags() as never

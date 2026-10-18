@@ -40,6 +40,7 @@
               </div>
               <div class="settings-actions">
                 <button id="managed-login" class="secondary-button" type="button">登录</button>
+                <button id="managed-cancel-login" class="secondary-button" type="button" hidden>取消登录</button>
                 <button id="managed-logout" class="secondary-button" type="button" disabled>退出登录</button>
                 <button id="managed-revoke-device" class="secondary-button" type="button" disabled>撤销此设备</button>
                 <button id="managed-open-portal" class="secondary-button" type="button">前往官网管理</button>
@@ -48,7 +49,7 @@
             <section id="managed-usage-summary" class="managed-usage-summary" aria-label="官方能力与额度">
               <div class="settings-section-heading">
                 <strong>官方能力</strong>
-                <button id="managed-usage-refresh" class="icon-button" type="button" title="刷新额度" aria-label="刷新官方能力额度">↻</button>
+                <button id="managed-usage-refresh" class="secondary-button managed-usage-refresh" type="button" title="刷新官方能力与额度" aria-label="刷新官方能力与额度" aria-busy="false"><span aria-hidden="true">↻</span><span>刷新</span></button>
               </div>
               <small id="managed-usage-period"></small>
               <div class="managed-capability-list">

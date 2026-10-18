@@ -315,13 +315,13 @@ export class AssistantRuntimeClient {
     return payload.started === true
   }
 
-  /** 请求在当前文件结束后暂停索引。 */
+  /** 请求在当前批次落库后暂停；返回值表示已受理，最终状态由知识库快照确认。 */
   async pauseKnowledgeIndex(libraryId: string): Promise<boolean> {
     const response = await this.request(`/v1/knowledge/library/${encodeURIComponent(libraryId)}/pause`, {
       method: 'POST'
     })
-    const payload = (await response.json()) as { paused?: unknown }
-    return payload.paused === true
+    const payload = (await response.json()) as { accepted?: unknown; paused?: unknown }
+    return typeof payload.accepted === 'boolean' ? payload.accepted : payload.paused === true
   }
 
   /** 删除知识库索引；Runtime 不会修改来源目录。 */
