@@ -126,6 +126,7 @@ assistantManager = new AssistantManager(
   (event) => petWindow?.webContents.send('assistant:event', event),
   {
     updateGate,
+    refreshManagedKnowledgeSession: () => managedRuntimeTokenBroker.refreshForTask(),
     onReady: (client) => managedRuntimeTokenBroker.attachRuntime(client),
     onStopped: (client) => managedRuntimeTokenBroker.detachRuntime(client),
     getManagedChatState: () => managedAuthManager?.getManagedChatState() || {

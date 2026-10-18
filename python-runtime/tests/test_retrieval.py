@@ -247,6 +247,9 @@ def test_stage4_database_migrates_embedding_and_fts_columns(tmp_path) -> None:
     connection.close()
 
     store = KnowledgeStore(str(database))
+    library_columns = {
+        row["name"] for row in store._connection.execute("PRAGMA table_info(knowledge_libraries)").fetchall()
+    }
     document_columns = {
         row["name"] for row in store._connection.execute("PRAGMA table_info(documents)").fetchall()
     }
@@ -256,6 +259,7 @@ def test_stage4_database_migrates_embedding_and_fts_columns(tmp_path) -> None:
     ]
     store.close()
 
+    assert "embedding_failure_code" in library_columns
     assert {"embedding_signature", "chunk_strategy_version"} <= document_columns
     assert fts_columns == [
         "chunk_id",

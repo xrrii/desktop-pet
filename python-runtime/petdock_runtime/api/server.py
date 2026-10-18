@@ -471,7 +471,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
     ) -> dict[str, object]:
         """返回知识库、索引进度和可用于聊天的状态。"""
         authorize(authorization)
-        return knowledge_store.snapshot()
+        return knowledge.snapshot()
 
     @app.get("/v1/skills")
     async def skill_snapshot(
@@ -601,7 +601,7 @@ def create_app(config: RuntimeConfig, request_shutdown: Callable[[], None] | Non
         """启动、恢复或手动刷新知识库索引。"""
         authorize(authorization)
         try:
-            return {"started": await knowledge.start_index(library_id)}
+            return {"started": await knowledge.start_index(library_id, retry_embedding=True)}
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Knowledge library not found") from error
 

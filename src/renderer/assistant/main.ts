@@ -35,6 +35,7 @@ import {
   type AssistantCommandOption
 } from './commandPalette'
 import { renderAssistantMarkdownInto } from './markdown'
+import { knowledgeIndexAction, knowledgeIndexNotice, knowledgeStatusText } from './knowledgeStatus'
 
 type PendingEmbeddingAction =
   | { kind: 'download'; modelId: string }
@@ -2378,8 +2379,10 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       indexAction.type = 'button'
       indexAction.className = 'icon-button'
       const isIndexing = library.status === 'indexing'
-      indexAction.textContent = isIndexing ? 'Ⅱ' : '↻'
-      indexAction.title = isIndexing ? '暂停索引' : library.status === 'ready' ? '刷新索引' : '继续索引'
+      const needsRebuild = !isIndexing && library.embeddingIndex?.requiresRebuild === true
+      indexAction.textContent = isIndexing ? 'Ⅱ' : needsRebuild ? '补建语义索引' : '↻'
+      indexAction.classList.toggle('knowledge-rebuild-button', needsRebuild)
+      indexAction.title = knowledgeIndexAction(library)
       indexAction.setAttribute('aria-label', `${indexAction.title}${library.name}`)
       indexAction.addEventListener('click', () => void toggleKnowledgeIndex(library))
       const remove = document.createElement('button')
@@ -2391,6 +2394,14 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       remove.addEventListener('click', () => beginKnowledgeDelete(library))
       actions.append(indexAction, remove)
       row.append(selector, main, actions)
+      const notice = knowledgeIndexNotice(library)
+      if (notice) {
+        const warning = document.createElement('p')
+        warning.className = 'knowledge-index-notice'
+        warning.setAttribute('role', 'status')
+        warning.textContent = notice
+        row.append(warning)
+      }
       knowledgeContent.append(row)
     })
   }
@@ -3369,7 +3380,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       const notice = document.createElement('p')
       notice.className = 'knowledge-degradation-notice'
       notice.textContent = payload.degradedReason === 'managed_quota_exhausted'
-        ? '官方文本向量额度已用尽，当前使用本地检索，语义召回效果可能下降。'
+        ? '官方文本向量本次请求额度不足，当前使用本地检索，语义召回效果可能下降。'
         : '官方文本向量暂不可用，当前使用本地检索。'
       details.append(notice)
     }
@@ -4319,21 +4330,6 @@ function toolLabel(name: string): string {
     open_file_or_folder: '打开文件或文件夹'
   }
   return labels[name] || name
-}
-
-function knowledgeStatusText(library: AssistantKnowledgeLibrary): string {
-  switch (library.status) {
-    case 'indexing':
-      return `正在索引 ${library.processedFiles}/${library.totalFiles}`
-    case 'paused':
-      return `已暂停 · ${library.documentCount} 个文档`
-    case 'ready':
-      return `${library.documentCount} 个文档 · ${library.chunkCount} 个片段`
-    case 'error':
-      return '索引失败'
-    default:
-      return '等待索引'
-  }
 }
 
 function embeddingModelStatus(model: AssistantEmbeddingModelSnapshot): string {

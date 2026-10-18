@@ -326,6 +326,18 @@ export interface AssistantKnowledgeLibrary {
   createdAt: string
   updatedAt: string
   lastIndexedAt: string | null
+  embeddingIndex?: AssistantKnowledgeEmbeddingIndex
+}
+
+/** 知识库在当前向量模型下的覆盖情况；旧 Runtime 可以不返回该字段。 */
+export interface AssistantKnowledgeEmbeddingIndex {
+  mode: 'hash' | 'semantic'
+  totalDocuments: number
+  readyDocuments: number
+  fallbackDocuments: number
+  pendingDocuments: number
+  requiresRebuild: boolean
+  lastFailureCode: string | null
 }
 
 export type AssistantEmbeddingProvider = 'hash' | 'local' | 'online'

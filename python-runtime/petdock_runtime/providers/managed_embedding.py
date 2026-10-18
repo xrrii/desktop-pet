@@ -12,8 +12,14 @@ from typing import Any
 
 import httpx
 
-from ..managed.session import ManagedSessionStore
+from ..managed.session import ManagedSessionLease, ManagedSessionStore
 from .embeddings import EmbeddingDescriptor, EmbeddingProvider, _normalize, _validate_vectors
+
+
+# 与 Managed v1 Embedding 路由的条数和总字符预算保持一致。
+MAX_BATCH_ITEMS = 128
+MAX_BATCH_INPUT_UNITS = 50_000
+LOGGER = logging.getLogger("petdock.providers.managed_embedding")
 
 
 class ManagedEmbeddingError(RuntimeError):
@@ -58,36 +64,56 @@ class ManagedEmbeddingProvider:
         )
         self._client = httpx.Client(timeout=httpx.Timeout(50.0, connect=10.0), follow_redirects=False)
         self._state_lock = RLock()
-        self._quota_exhausted = False
+        self._quota_rejected_input_units: int | None = None
 
     def reset_degraded(self) -> None:
         """在服务器能力快照或会话更新后允许重新探测官方额度。"""
         with self._state_lock:
-            self._quota_exhausted = False
+            self._quota_rejected_input_units = None
 
-    def _is_quota_exhausted(self) -> bool:
-        """读取当前 Runtime 是否已进入官方 Embedding 额度熔断状态。"""
+    def _is_quota_exhausted(self, input_units: int) -> bool:
+        """只拦截不小于已拒绝批次的请求，保留小查询使用剩余额度的机会。"""
         with self._state_lock:
-            return self._quota_exhausted
+            return (
+                self._quota_rejected_input_units is not None
+                and input_units >= self._quota_rejected_input_units
+            )
 
-    def _mark_quota_exhausted(self) -> bool:
-        """标记额度耗尽并返回是否为首次标记，用于抑制重复告警。"""
+    def _mark_quota_exhausted(self, input_units: int) -> bool:
+        """记住最小被拒批次的规模；预占不足不代表余额已经为零。"""
         with self._state_lock:
-            first = not self._quota_exhausted
-            self._quota_exhausted = True
-            return first
+            reduced = self._quota_rejected_input_units is None or input_units < self._quota_rejected_input_units
+            if reduced:
+                self._quota_rejected_input_units = input_units
+            return reduced
 
     def health_check(self) -> None:
         """通过最小文本请求验证认证、能力和模型维度。"""
         self.embed_documents(["PetDock embedding health check"])
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """按输入顺序批量生成向量。"""
-        return self._embed(texts)
+        """按条数与总字符预算分批，顺序合并向量；失败不自动重放已结算批次。"""
+        # 先检查全部单项，避免遇到不可分割的超长文本时已有前序批次消耗额度。
+        if any(not text.strip() or len(text) > MAX_BATCH_INPUT_UNITS for text in texts):
+            raise ManagedEmbeddingError("embedding_provider_invalid_input")
+        vectors: list[list[float]] = []
+        batch: list[str] = []
+        batch_units = 0
+        for text in texts:
+            units = self.count_tokens(text)
+            if batch and (len(batch) >= MAX_BATCH_ITEMS or batch_units + units > MAX_BATCH_INPUT_UNITS):
+                vectors.extend(self._embed(batch))
+                batch = []
+                batch_units = 0
+            batch.append(text)
+            batch_units += units
+        if batch:
+            vectors.extend(self._embed(batch))
+        return vectors
 
     def embed_query(self, text: str) -> list[float]:
         """生成单条查询向量。"""
-        return self._embed([text])[0]
+        return self.embed_documents([text])[0]
 
     def count_tokens(self, text: str) -> int:
         """使用与 Cloud 一致的保守字符计数。"""
@@ -98,40 +124,40 @@ class ManagedEmbeddingProvider:
         self._client.close()
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
-        """执行一次不可自动重放的请求，避免重复扣费。"""
-        if self._is_quota_exhausted():
+        """仅在 401 且已有新 Lease 时重试当前批次一次，绝不重放前序成功批次。"""
+        # Cloud 校验后会剔除首尾空白，熔断阈值也按实际预占规模比较。
+        input_units = sum(max(1, len(text.strip())) for text in texts)
+        if self._is_quota_exhausted(input_units):
             raise ManagedEmbeddingError("managed_quota_exhausted")
         lease = self._session.lease()
         if lease is None:
             raise ManagedEmbeddingError("managed_authentication_required")
-        trace_id, request_id, attempt_id = (str(uuid.uuid4()) for _ in range(3))
-        headers = {
-            "Authorization": f"Bearer {lease.access_token}",
-            "X-PetDock-Trace-Id": trace_id,
-            "X-PetDock-Request-Id": request_id,
-            "X-PetDock-Attempt-Id": attempt_id,
-            "X-PetDock-Client-Version": self._client_version,
-            # Runtime Session JWT 中的设备 Claim 才是控制面签发的有效设备标识。
-            "X-PetDock-Device-Id": _device_id_from_token(lease.access_token, self._device_id),
-            "Accept": "application/json",
-        }
-        payload = {
-            "descriptorId": "embedding-standard",
-            "input": texts,
-        }
-        try:
-            response = self._client.post(self._url, headers=headers, json=payload)
-        except httpx.TimeoutException as error:
-            raise ManagedEmbeddingError("embedding_provider_timeout") from error
-        except httpx.HTTPError as error:
-            raise ManagedEmbeddingError("embedding_provider_unavailable") from error
+        trace_id, request_id = (str(uuid.uuid4()) for _ in range(2))
+        response = self._post_batch(texts, lease, trace_id, request_id)
+        if response.status_code == 401:
+            # Main 定时轮换会在注入新 Lease 后撤销旧会话；并发请求可能恰好使用旧 Token。
+            # 只补发明确被认证拒绝的当前请求；超时、5xx、额度拒绝不自动重试。
+            refreshed = self._session.lease()
+            if refreshed is not None and refreshed.access_token != lease.access_token:
+                LOGGER.info("官方 Embedding 会话已轮换，恢复当前被拒批次 requestId=%s", request_id)
+                response = self._post_batch(texts, refreshed, trace_id, request_id)
         if response.status_code != 200:
-            error_code = _response_error(response.content)
+            error_code = (
+                "managed_authentication_required" if response.status_code == 401
+                else _response_error(response.content)
+            )
             if error_code == "managed_quota_exhausted":
-                if self._mark_quota_exhausted():
-                    logging.getLogger("petdock.providers.managed_embedding").warning(
-                        "官方 Embedding 额度已用尽，本次 Runtime 后续请求将降级本地 Hash"
+                if self._mark_quota_exhausted(input_units):
+                    LOGGER.warning(
+                        "官方 Embedding 本批预占额度不足，同等或更大批次降级本地 Hash；"
+                        "较小请求仍可尝试 requestId=%s items=%s inputUnits=%s",
+                        request_id, len(texts), input_units,
                     )
+            else:
+                LOGGER.warning(
+                    "官方 Embedding 请求失败 requestId=%s status=%s reason=%s items=%s inputUnits=%s",
+                    request_id, response.status_code, error_code, len(texts), input_units,
+                )
             raise ManagedEmbeddingError(error_code)
         try:
             body = response.json()
@@ -144,6 +170,29 @@ class ManagedEmbeddingProvider:
             return [_normalize(vector) for vector in vectors]
         except (ValueError, TypeError, KeyError, IndexError, json.JSONDecodeError) as error:
             raise ManagedEmbeddingError("embedding_provider_invalid_response") from error
+
+    def _post_batch(
+        self, texts: list[str], lease: ManagedSessionLease, trace_id: str, request_id: str,
+    ) -> httpx.Response:
+        """提交单次尝试；重试沿用逻辑请求标识并生成新的尝试标识。"""
+        headers = {
+            "Authorization": f"Bearer {lease.access_token}",
+            "X-PetDock-Trace-Id": trace_id,
+            "X-PetDock-Request-Id": request_id,
+            "X-PetDock-Attempt-Id": str(uuid.uuid4()),
+            "X-PetDock-Client-Version": self._client_version,
+            # Runtime Session JWT 中的设备 Claim 才是控制面签发的有效设备标识。
+            "X-PetDock-Device-Id": _device_id_from_token(lease.access_token, self._device_id),
+            "Accept": "application/json",
+        }
+        try:
+            return self._client.post(self._url, headers=headers, json={
+                "descriptorId": "embedding-standard", "input": texts,
+            })
+        except httpx.TimeoutException as error:
+            raise ManagedEmbeddingError("embedding_provider_timeout") from error
+        except httpx.HTTPError as error:
+            raise ManagedEmbeddingError("embedding_provider_unavailable") from error
 
 
 def _response_error(body: bytes) -> str:

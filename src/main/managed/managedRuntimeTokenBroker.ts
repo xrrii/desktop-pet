@@ -158,7 +158,7 @@ export class ManagedRuntimeTokenBroker {
     this.setStatus({ state: 'idle', errorCode: null })
   }
 
-  /** 任务内认证事件要求立即换发新 Lease，成功后由调用方提交恢复结果。 */
+  /** 任务认证恢复或主动建库时换发新 Lease，复用并发签发与账号恢复链路。 */
   async refreshForTask(): Promise<void> {
     if (!this.context) {
       throw new ManagedControlPlaneError(401, 'authentication_required', false)

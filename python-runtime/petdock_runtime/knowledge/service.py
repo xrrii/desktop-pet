@@ -16,7 +16,7 @@ from ..documents.chunking import (
     split_document,
 )
 from ..documents.parser import DocumentParseError, DocumentParserRegistry
-from ..providers.embeddings import EmbeddingProvider
+from ..providers.embeddings import EmbeddingProvider, LocalHashEmbedding
 from ..providers.rerank import RerankProvider
 from ..rag.planner import retrieval_query_terms, retrieval_terms
 from ..rag.scoring import content_similarity, normalized_similarity
@@ -46,6 +46,11 @@ VECTOR_CANDIDATES = 40
 LEXICAL_CANDIDATES = 40
 RRF_K = 60
 FINAL_MIN_SCORE = 0.18
+EMBEDDING_FAILURE_CODES = {
+    "managed_quota_exhausted", "managed_authentication_required", "managed_capability_not_entitled",
+    "embedding_provider_timeout", "embedding_provider_unavailable", "embedding_provider_invalid_response",
+    "embedding_provider_invalid_input",
+}
 SINGLE_RESULT_LOW_CONFIDENCE = 0.30
 SINGLE_RESULT_SCORE_RATIO = 0.55
 
@@ -175,6 +180,14 @@ class KnowledgeService:
         """返回后台索引任务数，不使用可能滞后的数据库展示状态判断空闲。"""
         return sum(not task.done() for task in self._tasks.values())
 
+    def snapshot(self) -> dict[str, list[dict[str, Any]]]:
+        """返回任务状态和当前模型的真实索引覆盖率，区别就绪与语义完整。"""
+        return self.store.snapshot(
+            self.vectors.descriptor.signature,
+            self.fallback_vectors.descriptor.signature if self.fallback_vectors else None,
+            semantic=self.vectors.descriptor.id != LocalHashEmbedding.name,
+        )
+
     def reset_embedding_degradation(self) -> None:
         """在官方会话或能力快照更新后清除本次 Runtime 的 Hash 降级标记。"""
         with self._degraded_lock:
@@ -184,7 +197,7 @@ class KnowledgeService:
             reset()
 
     def _is_embedding_degraded(self, library_id: str | None) -> bool:
-        """判断指定知识库是否已因官方额度耗尽进入 Hash 降级。"""
+        """判断指定知识库是否已因官方预占额度不足进入 Hash 降级。"""
         if library_id is None:
             return False
         with self._degraded_lock:
@@ -203,12 +216,19 @@ class KnowledgeService:
         await self.start_index(str(library["id"]))
         return self.store.get_library(str(library["id"]))
 
-    async def start_index(self, library_id: str) -> bool:
-        """启动或恢复一个索引任务；同一知识库同一时间只允许一个任务。"""
+    async def start_index(self, library_id: str, retry_embedding: bool = False) -> bool:
+        """启动增量索引；手动补建可清除本库门禁，同库禁止并行任务。"""
         current = self._tasks.get(library_id)
         if current and not current.done():
             return False
         self.store.get_library(library_id)
+        if retry_embedding:
+            # 手动补建代表用户明确要求重新探测，不沿用上一次任务的额度门禁。
+            with self._degraded_lock:
+                self._degraded_libraries.discard(library_id)
+            reset = getattr(self.vectors.embedding, "reset_degraded", None)
+            if callable(reset):
+                reset()
         control = _IndexControl(threading.Event())
         self._controls[library_id] = control
         self.store.set_progress(library_id, "indexing", error=None)
@@ -332,7 +352,7 @@ class KnowledgeService:
                         not embedding_ready
                     ):
                         records = self.store.document_chunks(str(state["id"]))
-                        written_signature = self._upsert_vectors(records, library_id)
+                        written_signature = self._upsert_vectors(records, library_id, control)
                         self.store.mark_document_ready(str(state["id"]), written_signature)
                     self.store.set_progress(library_id, "indexing", processed, len(files))
                     continue
@@ -380,18 +400,24 @@ class KnowledgeService:
                     parsed.title,
                 )
                 self._delete_vector_ids(old_ids)
-                written_signature = self._upsert_vectors(records, library_id)
+                written_signature = self._upsert_vectors(records, library_id, control)
                 self.store.mark_document_ready(document_id, written_signature)
                 self.store.set_progress(library_id, "indexing", processed, len(files))
 
+            # 最后一个文件认证失败或被暂停时，同样保留进度，不能误标整库完成。
+            if control.stop.is_set():
+                self.store.set_progress(library_id, "paused", len(files), len(files))
+                return
             removed_ids = self.store.remove_missing_documents(library_id, existing_paths)
             self._delete_vector_ids(removed_ids)
-            self.store.finish_index(library_id)
+            self.store.finish_index(library_id, self.vectors.descriptor.signature)
+            completed = next(item for item in self.snapshot()["libraries"] if item["id"] == library_id)
+            coverage = completed["embeddingIndex"]
             LOGGER.info(
-                "知识库索引完成 library=%s files=%s signature=%s",
-                library_id,
-                len(files),
-                self.vectors.descriptor.signature,
+                "知识库索引任务结束 library=%s files=%s mode=%s readyDocuments=%s/%s "
+                "fallbackDocuments=%s requiresRebuild=%s",
+                library_id, len(files), coverage["mode"], coverage["readyDocuments"], coverage["totalDocuments"],
+                coverage["fallbackDocuments"], coverage["requiresRebuild"],
             )
         except Exception as error:
             LOGGER.error("知识库索引失败 library=%s error=%s", library_id, error.__class__.__name__)
@@ -400,7 +426,10 @@ class KnowledgeService:
             except Exception:
                 LOGGER.exception("知识库失败状态写入失败 library=%s", library_id)
 
-    def _upsert_vectors(self, records: list[dict[str, Any]], library_id: str | None = None) -> str:
+    def _upsert_vectors(
+        self, records: list[dict[str, Any]], library_id: str | None = None,
+        control: _IndexControl | None = None,
+    ) -> str:
         """独立写入活动和 Hash 影子索引，主索引失败时允许降级完成。"""
         primary_error: Exception | None = None
         if self._is_embedding_degraded(library_id):
@@ -410,10 +439,17 @@ class KnowledgeService:
                 self.vectors.upsert(records)
             except Exception as error:
                 primary_error = error
-                if getattr(error, "code", None) == "managed_quota_exhausted":
+                code = getattr(error, "code", None)
+                if code == "managed_authentication_required" and control is not None:
+                    # 当前文件仍保留 Hash 影子索引；后续文件暂停，避免整个库连续请求 401。
+                    control.stop.set()
+                    if library_id is not None:
+                        self.store.record_embedding_failure(library_id, code)
+                    LOGGER.warning("官方建库会话认证被拒绝，暂停后续索引；补建前将自动刷新会话 library=%s", library_id)
+                elif code == "managed_quota_exhausted":
                     self._mark_embedding_degraded(library_id)
                     LOGGER.warning(
-                        "官方 Embedding 额度已用尽，知识库切换 Hash 索引 library=%s",
+                        "官方 Embedding 本批预占额度不足，知识库切换 Hash 索引 library=%s",
                         library_id,
                     )
                 else:
@@ -430,6 +466,12 @@ class KnowledgeService:
         if primary_error is None and not self._is_embedding_degraded(library_id):
             return self.vectors.descriptor.signature
         if fallback_written and self.fallback_vectors:
+            if library_id is not None and primary_error is not None:
+                code = getattr(primary_error, "code", None)
+                self.store.record_embedding_failure(
+                    library_id, code if isinstance(code, str) and code in EMBEDDING_FAILURE_CODES
+                    else "embedding_provider_unavailable",
+                )
             return self.fallback_vectors.descriptor.signature
         raise primary_error
 

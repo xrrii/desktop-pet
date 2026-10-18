@@ -44,6 +44,7 @@ import { writeToolAudit } from './auditLog'
 import { AssistantRuntimeProcess, type AssistantRuntimeLifecycle } from './runtimeProcess'
 import type { AssistantRuntimeClient } from './runtimeClient'
 import type { ManagedAuthRefreshRequiredEvent } from '../managed/managedRuntimeAuthRefreshHandler'
+import { ManagedControlPlaneError } from '../managed/managedControlPlaneClient'
 import type {
   ManagedCapabilityPreferencesSnapshot,
   ManagedRuntimeSessionErrorCode
@@ -100,6 +101,7 @@ export class AssistantManager {
     webSearch: this.webSettings.snapshot()
   }))
   private readonly runtime: AssistantRuntimeProcess
+  private readonly refreshManagedKnowledgeSession: () => Promise<void>
   private readonly updateGate: UpdateActivityGate
   private readonly toolHost = new AssistantToolHost(this.webSearch)
   private readonly activeTasks = new Map<string, ActiveTask>()
@@ -148,6 +150,7 @@ export class AssistantManager {
     private readonly onEvent: (event: AssistantEvent) => void,
     runtimeLifecycle: AssistantRuntimeLifecycle & {
       updateGate?: UpdateActivityGate
+      refreshManagedKnowledgeSession?: () => Promise<void>
       getManagedChatState?: () => {
         enabled: boolean
         authenticated: boolean
@@ -194,6 +197,7 @@ export class AssistantManager {
     }
   ) {
     this.updateGate = runtimeLifecycle.updateGate || new UpdateActivityGate()
+    this.refreshManagedKnowledgeSession = runtimeLifecycle.refreshManagedKnowledgeSession || (async () => undefined)
     this.getManagedChatState = runtimeLifecycle.getManagedChatState || (() => ({
       enabled: false,
       authenticated: false,
@@ -772,14 +776,36 @@ export class AssistantManager {
 
   /** 接收 Main 已经通过原生选择器授权的目录，Renderer 无法传入路径。 */
   async addKnowledgeLibrary(name: string, path: string): Promise<AssistantKnowledgeLibrary> {
-    const client = await this.runtime.start()
+    const client = await this.prepareKnowledgeIndex()
     return client.addKnowledgeLibrary(name, path)
   }
 
+  /** 手动补建前换发官方会话，避免继续使用额度或授权变更前的旧 Lease。 */
   async startKnowledgeIndex(libraryId: string): Promise<boolean> {
     validateKnowledgeLibraryId(libraryId)
-    const client = await this.runtime.start()
+    const client = await this.prepareKnowledgeIndex()
     return client.startKnowledgeIndex(libraryId)
+  }
+
+  /** 等待 Runtime 注入就绪后刷新官方凭据，失败时不启动索引或覆盖已有结果。 */
+  private async prepareKnowledgeIndex(): Promise<AssistantRuntimeClient> {
+    const client = await this.runtime.start()
+    if (this.capabilitySettings.snapshot().capabilities.embedding.effectiveSource !== 'managed') return client
+    try {
+      await this.refreshManagedKnowledgeSession()
+      logInfo('知识库索引前官方会话刷新完成')
+    } catch (error) {
+      const code = error instanceof ManagedControlPlaneError ? error.code : null
+      logError('知识库索引前官方会话刷新失败，未启动索引', { errorCode: code })
+      if (code === 'authentication_required' || code === 'token_expired' || code === 'device_revoked') {
+        throw new Error('官方会话自动恢复失败，请检查登录状态，必要时重新登录后补建索引。')
+      }
+      if (code === 'capability_not_entitled') {
+        throw new Error('当前账号未获得官方向量能力授权，请检查能力设置后重试。')
+      }
+      throw new Error('暂时无法刷新官方向量会话，请稍后重试；已有索引仍可使用。')
+    }
+    return client
   }
 
   async pauseKnowledgeIndex(libraryId: string): Promise<boolean> {

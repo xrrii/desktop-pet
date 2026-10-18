@@ -114,9 +114,16 @@ class KnowledgeStore:
                     ON CONFLICT(key) DO UPDATE SET value=excluded.value;
                 """
             )
+            self._ensure_library_columns()
             self._ensure_document_columns()
             self._ensure_chunk_columns()
             self._ensure_fts_v2()
+
+    def _ensure_library_columns(self) -> None:
+        """为旧库增加持久化降级原因，重启后仍能解释语义索引缺失。"""
+        columns = {str(row["name"]) for row in self._connection.execute("PRAGMA table_info(knowledge_libraries)")}
+        if "embedding_failure_code" not in columns:
+            self._connection.execute("ALTER TABLE knowledge_libraries ADD COLUMN embedding_failure_code TEXT")
 
     def _ensure_document_columns(self) -> None:
         """为已有阶段 4 数据库补充向量签名和 Chunk 策略版本。"""
@@ -232,13 +239,54 @@ class KnowledgeStore:
             raise KeyError(library_id)
         return Path(row["source_path"])
 
-    def snapshot(self) -> dict[str, list[dict[str, Any]]]:
-        """返回全部知识库状态，不向 Renderer 暴露真实绝对路径。"""
+    def snapshot(
+        self,
+        embedding_signature: str | None = None,
+        fallback_signature: str | None = None,
+        semantic: bool = False,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """聚合当前向量空间覆盖情况，不暴露路径、正文和内部索引签名。"""
         with self._lock:
             rows = self._connection.execute(
                 "SELECT * FROM knowledge_libraries ORDER BY updated_at DESC"
             ).fetchall()
-        return {"libraries": [_library_row(row) for row in rows]}
+            coverage = self._connection.execute(
+                """
+                SELECT library_id, COUNT(*) AS total,
+                    SUM(CASE WHEN embedding_state='ready' AND embedding_signature=? THEN 1 ELSE 0 END) AS ready,
+                    SUM(CASE WHEN embedding_state='ready' AND embedding_signature=? THEN 1 ELSE 0 END) AS fallback
+                FROM documents GROUP BY library_id
+                """,
+                (embedding_signature, fallback_signature if fallback_signature != embedding_signature else None),
+            ).fetchall() if embedding_signature is not None else []
+        counts = {str(item["library_id"]): item for item in coverage}
+        libraries = []
+        for row in rows:
+            library = _library_row(row)
+            if embedding_signature is not None:
+                count = counts.get(str(row["id"]))
+                total, ready, fallback = (
+                    (int(count["total"]), int(count["ready"]), int(count["fallback"])) if count else (0, 0, 0)
+                )
+                requires_rebuild = semantic and ready < total
+                library["embeddingIndex"] = {
+                    "mode": "semantic" if semantic else "hash",
+                    "totalDocuments": total,
+                    "readyDocuments": ready,
+                    "fallbackDocuments": fallback,
+                    "pendingDocuments": total - ready - fallback,
+                    "requiresRebuild": requires_rebuild,
+                    "lastFailureCode": row["embedding_failure_code"] if requires_rebuild else None,
+                }
+            libraries.append(library)
+        return {"libraries": libraries}
+
+    def record_embedding_failure(self, library_id: str, code: str) -> None:
+        """仅持久化调用方提供的稳定错误码，保留最后一次降级原因。"""
+        with self._lock, self._connection:
+            self._connection.execute(
+                "UPDATE knowledge_libraries SET embedding_failure_code=? WHERE id=?", (code, library_id),
+            )
 
     def set_progress(
         self,
@@ -430,7 +478,7 @@ class KnowledgeStore:
             )
         return chunk_ids
 
-    def finish_index(self, library_id: str) -> None:
+    def finish_index(self, library_id: str, embedding_signature: str | None = None) -> None:
         """重新统计文档和分块数量并标记索引完成。"""
         now = _now()
         with self._lock, self._connection:
@@ -445,6 +493,17 @@ class KnowledgeStore:
                 """,
                 (library_id, library_id, now, now, library_id),
             )
+            if embedding_signature is not None:
+                # 只有全部文档均已补齐活动向量，才清除历史降级原因。
+                self._connection.execute(
+                    """
+                    UPDATE knowledge_libraries SET embedding_failure_code=NULL WHERE id=? AND NOT EXISTS (
+                        SELECT 1 FROM documents WHERE library_id=? AND
+                            (embedding_state!='ready' OR COALESCE(embedding_signature, '')!=?)
+                    )
+                    """,
+                    (library_id, library_id, embedding_signature),
+                )
 
     def delete_library(self, library_id: str) -> bool:
         """删除知识库业务数据和 FTS 行，原始文件不会被修改。"""

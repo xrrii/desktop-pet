@@ -1023,6 +1023,29 @@ button:disabled {
   accent-color: #2e7767;
 }
 
+.knowledge-index-notice {
+  grid-column: 2 / -1;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ui-warning, #936216);
+  overflow-wrap: anywhere;
+}
+
+.knowledge-actions .knowledge-rebuild-button {
+  width: auto;
+  max-width: 92px;
+  height: auto;
+  min-height: 29px;
+  padding: 4px 6px;
+  font-size: 11px;
+  white-space: normal;
+}
+
+body[data-theme="glass"] .knowledge-index-notice {
+  --ui-warning: #f2c878;
+}
+
 .knowledge-button {
   width: 34px;
   font-size: 17px;

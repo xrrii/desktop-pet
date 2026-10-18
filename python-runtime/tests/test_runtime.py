@@ -224,6 +224,7 @@ def test_knowledge_api_requires_token_and_emits_sources(tmp_path) -> None:
                 if snapshot.json()["libraries"][0]["status"] != "indexing":
                     break
                 await asyncio.sleep(0.02)
+            assert snapshot.json()["libraries"][0]["embeddingIndex"]["mode"] == "hash"
             request = make_request("task-rag").model_copy(
                 update={"input": "发布口令是什么", "knowledgeLibraryIds": [library_id]}
             )
