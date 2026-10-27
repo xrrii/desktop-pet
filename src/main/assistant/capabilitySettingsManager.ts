@@ -308,7 +308,12 @@ function resolveSnapshot(
       rerank: selected.capabilities.rerank === 'managed'
         ? resolveManagedCapability('rerank', state.managedRerank)
         : available('disabled', 'disabled', 'disabled', 'user_disabled'),
-      web_search: webSearch
+      web_search: webSearch,
+      // 路由随知识库增强开关启用，无独立用户设置；上游失败由 Runtime 本地降级。
+      route: embedding.effectiveSource === 'managed' ||
+        (selected.capabilities.rerank === 'managed' && state.managedRerank?.runtimeReady)
+        ? available('managed', 'managed')
+        : available('disabled', 'disabled', 'disabled', 'knowledge_base_disabled')
     }
   }
 }

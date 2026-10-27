@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 import logging
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -10,7 +12,8 @@ from ..attachments.models import AttachmentDatasetContext
 from ..attachments.store import AttachmentRecord, AttachmentStore
 from ..knowledge.service import KnowledgeService, RetrievalSource
 from ..protocol import AssistantRequest, ToolResultRequest
-from ..rag.planner import plan_retrieval
+from ..rag.planner import build_retrieval_plan, plan_retrieval
+from ..providers.managed_route import ManagedRouteError
 from ..skills.manifest import SkillActivation
 
 """模型后端共用的任务上下文组装与展示辅助逻辑。"""
@@ -39,11 +42,33 @@ async def retrieve_sources(
     tool_result: ToolResultRequest | None,
 ) -> tuple[list[RetrievalSource], bool, str | None]:
     """统一执行检索路由，只把最终准入来源交给聊天后端。"""
-    plan = plan_retrieval(
-        request.input,
-        request.knowledgeLibraryIds,
-        has_tool_result=tool_result is not None,
-    )
+    current = asyncio.current_task()
+    if current is not None and current.cancelling():
+        raise asyncio.CancelledError
+    selected = tuple(dict.fromkeys(request.knowledgeLibraryIds[:20]))
+    if knowledge is None or not selected or tool_result is not None:
+        # 前置只按状态跳过，不运行任何语义规则。
+        return [], False, None
+    started = time.monotonic()
+    route_provider = knowledge.route_provider
+    source, fallback_reason = "jev", None
+    if route_provider is not None:
+        try:
+            decision = await route_provider.classify(request.input, len(selected))
+            plan = build_retrieval_plan(decision.route, "官方语义路由", decision.confidence,
+                                        request.input.strip(), selected)
+        except ManagedRouteError as error:
+            fallback_reason = error.code
+    else:
+        fallback_reason = "route_not_configured"
+    if fallback_reason is not None:
+        # 只有官方结果不可用才调用正则；取消异常不得进入此分支。
+        if current is not None and current.cancelling():
+            raise asyncio.CancelledError
+        source = "regex_fallback"
+        plan = plan_retrieval(request.input, list(selected))
+    LOGGER.info("RAG 路由来源 source=%s fallbackReason=%s durationMs=%s",
+                source, fallback_reason, round((time.monotonic() - started) * 1000))
     LOGGER.info(
         "RAG 路由 route=%s reason=%s confidence=%.2f libraries=%s",
         plan.route,

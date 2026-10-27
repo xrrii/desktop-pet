@@ -56,6 +56,7 @@ export interface ManagedUsageSummary {
   periodEnd: string
   capabilities: {
     chat: ManagedUsageCapability
+    knowledge_base?: ManagedUsageCapability
     embedding?: ManagedUsageCapability
     vision?: ManagedUsageCapability
     web_search?: ManagedUsageCapability

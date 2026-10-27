@@ -207,6 +207,7 @@ export interface AssistantCapabilitySettingsSnapshot {
     embedding: AssistantCapabilityResolution<AssistantEmbeddingSelectedSource, AssistantEmbeddingEffectiveSource>
     vision: AssistantCapabilityResolution<AssistantVisionSelectedSource, AssistantVisionEffectiveSource>
     rerank: AssistantCapabilityResolution<AssistantRerankSelectedSource, AssistantRerankEffectiveSource>
+    route?: AssistantCapabilityResolution<AssistantRerankSelectedSource, AssistantRerankEffectiveSource>
     web_search: AssistantCapabilityResolution<AssistantWebSearchSelectedSource, AssistantWebSearchEffectiveSource>
   }
 }

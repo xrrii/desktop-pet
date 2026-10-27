@@ -1,0 +1,6 @@
+{
+  "route": "RETRIEVE",
+  "confidence": 0.72,
+  "probabilities": { "SKIP": 0.1, "RETRIEVE": 0.72, "BOTH": 0.13, "CLARIFY": 0.05 },
+  "usage": { "inputUnits": 123, "outputUnits": 7 }
+}

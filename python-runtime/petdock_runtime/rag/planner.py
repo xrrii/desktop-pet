@@ -76,27 +76,27 @@ def plan_retrieval(
     original = query.strip()
     selected_ids = tuple(dict.fromkeys(library_ids[:20]))
     if has_tool_result:
-        return _plan("SKIP", "工具结果续轮不重复检索", 1.0, original, selected_ids)
+        return build_retrieval_plan("SKIP", "工具结果续轮不重复检索", 1.0, original, selected_ids)
     if not selected_ids:
-        return _plan("SKIP", "没有选择知识库", 1.0, original, selected_ids)
+        return build_retrieval_plan("SKIP", "没有选择知识库", 1.0, original, selected_ids)
     if GREETING_PATTERN.fullmatch(original):
-        return _plan("SKIP", "寒暄或确认消息", 0.99, original, selected_ids)
+        return build_retrieval_plan("SKIP", "寒暄或确认消息", 0.99, original, selected_ids)
 
     contains_url = bool(URL_PATTERN.search(original))
     contains_path = bool(WINDOWS_PATH_PATTERN.search(original))
     tool_action = bool(OPEN_ACTION_PATTERN.search(original))
     knowledge_dependent = bool(KNOWLEDGE_DEPENDENCY_PATTERN.search(original))
     if knowledge_dependent and (tool_action or FOLLOWUP_TOOL_PATTERN.search(original)):
-        return _plan("BOTH", "工具参数需要先从知识库确定", 0.96, original, selected_ids)
+        return build_retrieval_plan("BOTH", "工具参数需要先从知识库确定", 0.96, original, selected_ids)
     if tool_action and (contains_url or contains_path or _looks_like_direct_target(original)):
-        return _plan("SKIP", "包含明确目标的桌面工具请求", 0.99, original, selected_ids)
+        return build_retrieval_plan("SKIP", "包含明确目标的桌面工具请求", 0.99, original, selected_ids)
     if tool_action:
-        return _plan("CLARIFY", "桌面工具请求缺少明确目标", 0.94, original, selected_ids)
+        return build_retrieval_plan("CLARIFY", "桌面工具请求缺少明确目标", 0.94, original, selected_ids)
     if NON_RETRIEVAL_ACTION_PATTERN.search(original):
-        return _plan("SKIP", "不依赖知识库的生成或控制请求", 0.92, original, selected_ids)
+        return build_retrieval_plan("SKIP", "不依赖知识库的生成或控制请求", 0.92, original, selected_ids)
     if RETRIEVAL_CUE_PATTERN.search(original) or original.endswith(("?", "？")):
-        return _plan("RETRIEVE", "问题需要知识库依据", 0.9, original, selected_ids)
-    return _plan("SKIP", "没有检测到知识库依赖", 0.72, original, selected_ids)
+        return build_retrieval_plan("RETRIEVE", "问题需要知识库依据", 0.9, original, selected_ids)
+    return build_retrieval_plan("SKIP", "没有检测到知识库依赖", 0.72, original, selected_ids)
 
 
 def clean_retrieval_query(query: str) -> str:
@@ -147,7 +147,7 @@ def retrieval_query_terms(text: str, *, max_terms: int = 24) -> list[str]:
     return expanded
 
 
-def _plan(
+def build_retrieval_plan(
     route: RetrievalRoute,
     reason: str,
     confidence: float,

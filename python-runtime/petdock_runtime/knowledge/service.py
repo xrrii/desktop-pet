@@ -23,6 +23,7 @@ from ..providers.embeddings import (
     check_embedding_pause,
 )
 from ..providers.rerank import RerankProvider
+from ..providers.managed_route import RouteProvider
 from ..rag.planner import retrieval_query_terms, retrieval_terms
 from ..rag.scoring import content_similarity, normalized_similarity
 from ..rag.vector_store import ChromaVectorStore
@@ -175,6 +176,7 @@ class KnowledgeService:
         fallback_vectors: ChromaVectorStore | None = None,
         parser_registry: DocumentParserRegistry | None = None,
         rerank: RerankProvider | None = None,
+        route_provider: RouteProvider | None = None,
     ) -> None:
         """绑定存储、向量索引和 Runtime 唯一 Parser Registry。"""
         self.store = store
@@ -182,6 +184,7 @@ class KnowledgeService:
         self.fallback_vectors = fallback_vectors
         self.registry = parser_registry or DocumentParserRegistry(vision_enabled=False)
         self.rerank = rerank
+        self.route_provider = route_provider
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._controls: dict[str, _IndexControl] = {}
         self._degraded_libraries: set[str] = set()
@@ -302,6 +305,8 @@ class KnowledgeService:
 
     async def close(self) -> None:
         """暂停全部后台任务并关闭 SQLite。"""
+        if self.route_provider is not None:
+            await self.route_provider.close()
         pending: list[asyncio.Task[None]] = []
         for library_id, task in self._tasks.items():
             if task.done():

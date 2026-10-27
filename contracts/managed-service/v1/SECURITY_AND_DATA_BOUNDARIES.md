@@ -19,6 +19,7 @@
 | Chat | 用户消息、系统提示、必要检索片段、工具结果摘要 | Prompt、回答和工具正文 |
 | Embedding | 查询或文档 Chunk 文本 | 原始文本和向量输入正文日志 |
 | Vision | 用户明确加入会话的图片或派生图片 | 图片、Base64 和视觉 Prompt 正文 |
+| Route | 当前输入和已选知识库数量（不含本地 ID、路径或历史） | 输入正文与上游响应正文 |
 | Rerank | 查询和候选片段 | 查询及候选正文 |
 | Web Search | 搜索关键词和必要搜索选项 | 搜索关键词正文日志 |
 
@@ -26,7 +27,9 @@
 
 Managed Web Search 第一版不接收网页正文读取 URL，也不提供 `/ai/v1/web/fetch`。URL 校验、DNS 固定、SSRF 防护和正文抓取由 Electron Main 执行。
 
-Phase 4 进一步冻结以下边界：Embedding 只接收用户明确加入知识库或会话的 Chunk/查询，并仅在服务器内网进入本地 `bge-base-zh-v1.5` 模型；Vision 只接收单张安全派生图片并校验魔数、解码尺寸和像素预算；Rerank 只接收本地召回且通过准入的候选，不得新增候选或修改正文。四项能力分别使用独立 Feature Flag、Entitlement、配额和 Provider Secret，任一校验失败都必须在 Provider 调用前失败关闭。
+Phase 4 进一步冻结以下边界：Embedding 只接收用户明确加入知识库或会话的 Chunk/查询，并仅在服务器内网进入本地 `bge-base-zh-v1.5` 模型；Vision 只接收单张安全派生图片并校验魔数、解码尺寸和像素预算；Rerank 只接收本地召回且通过准入的候选，不得新增候选或修改正文。各操作使用独立 Feature Flag 和 Provider 配置；知识库操作的 Entitlement 与配额按 [知识库增量契约](KNOWLEDGE_BASE.md) 共享，任一校验失败都必须在 Provider 调用前失败关闭。
+
+Route 会将最小分类输入转发到配置的 Jev 上游；指定源站不等于已经完成部署环境和数据驻留验收，默认关闭。
 
 全部 Managed 用户数据只允许在中国大陆境内传输和处理。上游 Provider、日志、监控、对象存储和备份只要接触用户数据，也必须使用中国大陆境内资源；第一版不做跨境或跨 Provider 自动故障切换。
 

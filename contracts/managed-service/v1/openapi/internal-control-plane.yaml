@@ -145,8 +145,8 @@ components:
         sessionId: { type: string, format: uuid }
         userId: { type: string, format: uuid }
         deviceId: { type: string, format: uuid }
-        capability: { type: string, enum: [chat, embedding, vision, web_search, rerank] }
-        logicalModel: { type: string, enum: [chat-standard, embedding-standard, vision-standard, web-search-standard, rerank-standard] }
+        capability: { type: string, enum: [chat, embedding, vision, web_search, rerank, route] }
+        logicalModel: { type: string, enum: [chat-standard, embedding-standard, vision-standard, web-search-standard, rerank-standard, route-standard] }
         requestFingerprint:
           type: string
           pattern: '^[a-f0-9]{64}$'

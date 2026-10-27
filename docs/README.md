@@ -55,6 +55,7 @@
 | [Nacos 配置与桌面更新现行基线](features/NACOS_AND_DESKTOP_AUTO_UPDATE.md) | Active | 方案已整体收尾；最终范围、日常发布、续签、Chat 回退与历史证据入口 |
 | [桌面更新签名与 Lighthouse 下载边界](features/DESKTOP_UPDATE_TRUST.md) | Active | 应用层签名、离线工具、私有桶路径及费用防护的本地实施基线 |
 | [RAG_RETRIEVAL_OPTIMIZATION.md](features/RAG_RETRIEVAL_OPTIMIZATION.md) | Active | 检索路由、召回、评分、Embedding 和评测基线 |
+| [MANAGED_KNOWLEDGE_BASE_ENHANCEMENT.md](features/MANAGED_KNOWLEDGE_BASE_ENHANCEMENT.md) | Draft | 知识库增强共享额度、Jev 实施基线与待完成灰度/公平预算 |
 | [SKILL_SYSTEM_DEVELOPMENT.md](features/SKILL_SYSTEM_DEVELOPMENT.md) | Active | Skill 格式、安全边界、安装、激活和验收要求 |
 | [EMBEDDING_MODEL_WHITELIST.md](features/EMBEDDING_MODEL_WHITELIST.md) | Active | 本地 Embedding 模型来源、校验和白名单规则 |
 | [MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md](features/MANAGED_SERVICE_PHASE2_IDENTITY_AND_SESSION.md) | Active | Phase 2 身份、设备、会话、共享开发环境和跨仓库实施细节 |
@@ -84,7 +85,7 @@ Nacos 与桌面自动更新方案已完成，日常操作从[现行基线](featu
 | 部署 Managed Phase 2 共享开发依赖 | Phase 2 身份与会话方案、Shared Dev 部署指南、部署基线契约 |
 | 修改 Managed Service API、Token、错误码或 SSE | `contracts/managed-service/v1`、双模式实施方案、官方托管服务进度 |
 | 修改附件、文件生成、视觉或联网搜索 | 对话资源能力、AI 助手总体架构 |
-| 修改知识库、Embedding 或检索 | RAG 优化方案、Embedding 白名单 |
+| 修改知识库、Embedding、路由、重排或官方知识库能力 | 知识库增强官方能力方向、RAG 优化方案、Embedding 白名单 |
 | 修改 Skill | Skill 系统开发文档、AI 助手总体架构 |
 | 修改 Renderer UI | UI 风格约定、开发指南 |
 | 更新阶段状态或验收数据 | 对应进度记录及专项文档；官方托管服务必须更新专用进度文档 |

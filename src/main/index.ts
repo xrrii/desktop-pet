@@ -680,7 +680,11 @@ function registerIpc(): void {
       throw new TypeError('Embedding 来源无效。')
     }
     if (managedAuthManager.getStatus().state === 'authenticated') {
-      await updateManagedCapabilityPreference('embedding', source === 'managed')
+      const preferences = requireManagedCapabilityPreferences()
+      // 产品侧一次切换同时保存两项旧字段，服务端原子更新，保留旧客户端协议。
+      await managedAuthManager.updateCapabilityPreferences({
+        ...preferences, embedding: source === 'managed', rerank: source === 'managed'
+      })
       if (source === 'managed') return assistantManager.getCapabilitySettings()
     }
     return assistantManager.setEmbeddingSource(source)

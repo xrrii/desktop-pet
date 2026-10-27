@@ -1181,6 +1181,7 @@ export class AssistantManager {
       await this.cancelAll()
       try {
         this.capabilitySettings.setSelectedSource('embedding', source)
+        this.capabilitySettings.setSelectedSource('rerank', source === 'managed' ? 'managed' : 'disabled')
         const client = await this.runtime.restart()
         await client.reindexAllKnowledge()
         logInfo('助手 Embedding 来源已切换', { source })

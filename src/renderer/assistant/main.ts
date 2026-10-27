@@ -167,15 +167,12 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
   const managedEmbeddingEnabled = requireElement<HTMLInputElement>('#managed-embedding-enabled')
   const managedVisionStatus = requireElement<HTMLElement>('#managed-vision-status')
   const managedVisionEnabled = requireElement<HTMLInputElement>('#managed-vision-enabled')
-  const managedRerankEnabled = requireElement<HTMLInputElement>('#managed-rerank-enabled')
-  const managedRerankStatus = requireElement<HTMLElement>('#managed-rerank-status')
   const managedUsageRefresh = requireElement<HTMLButtonElement>('#managed-usage-refresh')
   const managedUsagePeriod = requireElement<HTMLElement>('#managed-usage-period')
   const managedUsageChat = requireElement<HTMLElement>('#managed-usage-chat')
   const managedUsageWebSearch = requireElement<HTMLElement>('#managed-usage-web-search')
   const managedUsageEmbedding = requireElement<HTMLElement>('#managed-usage-embedding')
   const managedUsageVision = requireElement<HTMLElement>('#managed-usage-vision')
-  const managedUsageRerank = requireElement<HTMLElement>('#managed-usage-rerank')
   const managedUsageStatus = requireElement<HTMLElement>('#managed-usage-status')
   const modelBaseUrl = requireElement<HTMLInputElement>('#model-base-url')
   const modelName = requireElement<HTMLInputElement>('#model-name')
@@ -537,7 +534,6 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     void loadManagedUsageSummary()
   })
   managedVisionEnabled.addEventListener('change', () => void changeManagedVision())
-  managedRerankEnabled.addEventListener('change', () => void changeManagedRerank())
   modelClearKey.addEventListener('click', () => void clearModelKey())
   managedLogin.addEventListener('click', () => void startManagedLogin())
   managedCancelLogin.addEventListener('click', () => void cancelManagedLogin())
@@ -840,15 +836,14 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     }
     chatSourceStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[chat.status] || '状态未知'
     managedWebSearchStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[webSearch.status] || '状态未知'
-    managedEmbeddingStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[embedding.status] || '状态未知'
+    managedEmbeddingStatus.textContent = subscriptionUnavailable ? '当前账号未授权'
+      : embedding.status === 'available' && rerank.status !== 'available' ? '部分可用'
+      : labels[embedding.status] || '状态未知'
     managedVisionStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[vision.status] || '状态未知'
-    managedRerankStatus.textContent = subscriptionUnavailable ? '当前账号未授权' : labels[rerank.status] || '状态未知'
-    managedEmbeddingEnabled.checked = embedding.selectedSource === 'managed'
+    managedEmbeddingEnabled.checked = embedding.selectedSource === 'managed' || rerank.selectedSource === 'managed'
     managedEmbeddingEnabled.disabled = modelBusy || !managedSelected || subscriptionUnavailable
     managedVisionEnabled.checked = vision.selectedSource === 'managed'
     managedVisionEnabled.disabled = modelBusy || !managedSelected || subscriptionUnavailable
-    managedRerankEnabled.checked = rerank.selectedSource === 'managed'
-    managedRerankEnabled.disabled = modelBusy || !managedSelected || subscriptionUnavailable
     serviceModeStatus.textContent = managedSelected
       ? subscriptionUnavailable ? '当前账号尚未开通套餐' : '账号、额度和官方能力'
       : '使用本机保存的模型与搜索配置'
@@ -866,7 +861,6 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       managedUsageWebSearch.textContent = '-'
       managedUsageEmbedding.textContent = '-'
       managedUsageVision.textContent = '-'
-      managedUsageRerank.textContent = '-'
       managedUsageStatus.textContent = ''
     } else if (!managedAuthStatus || managedAuthStatus.state !== 'authenticated') {
       managedUsageStatus.textContent = '登录后可查看额度。'
@@ -903,14 +897,20 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       managedUsageWebSearch.textContent = managedUsage.capabilities.web_search
         ? formatManagedCapabilityUsage(managedUsage.capabilities.web_search)
         : '未授权'
-      managedUsageEmbedding.textContent = managedUsage.capabilities.embedding
-        ? formatManagedCapabilityUsage(managedUsage.capabilities.embedding)
+      const legacyKnowledgeUsage = [managedUsage.capabilities.embedding, managedUsage.capabilities.rerank]
+        .filter((item): item is ManagedUsageSummary['capabilities']['chat'] => !!item)
+      const knowledgeUsage = managedUsage.capabilities.knowledge_base ?? (legacyKnowledgeUsage.length ? {
+        quotaMode: legacyKnowledgeUsage.some(item => item.quotaMode === 'metered') ? 'metered' as const : 'quota' as const,
+        used: legacyKnowledgeUsage.reduce((sum, item) => sum + item.used, 0),
+        remaining: legacyKnowledgeUsage.some(item => item.remaining === null)
+          ? null : legacyKnowledgeUsage.reduce((sum, item) => sum + item.remaining!, 0),
+        unit: 'tokens' as const
+      } : undefined)
+      managedUsageEmbedding.textContent = knowledgeUsage
+        ? formatManagedCapabilityUsage(knowledgeUsage)
         : '未授权'
       managedUsageVision.textContent = managedUsage.capabilities.vision
         ? formatManagedCapabilityUsage(managedUsage.capabilities.vision)
-        : '未授权'
-      managedUsageRerank.textContent = managedUsage.capabilities.rerank
-        ? formatManagedCapabilityUsage(managedUsage.capabilities.rerank)
         : '未授权'
       managedUsageStatus.textContent = `已刷新 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`
     } catch (error) {
@@ -952,27 +952,6 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     managedUsageRefresh.setAttribute('aria-label', managedUsageRefresh.title)
   }
 
-  /** 切换服务器本地 Rerank；失败时恢复开关并保留本地排序。 */
-  async function changeManagedRerank(): Promise<void> {
-    if (modelBusy) return
-    modelBusy = true
-    renderModelBusyState()
-    try {
-      capabilitySettings = await window.desktopPet.setAssistantRerankSource(
-        managedRerankEnabled.checked ? 'managed' : 'disabled'
-      )
-      renderServiceMode()
-      clearError()
-      if (managedRerankEnabled.checked) void loadManagedUsageSummary()
-    } catch (error) {
-      managedRerankEnabled.checked = !managedRerankEnabled.checked
-      showError(error)
-    } finally {
-      modelBusy = false
-      renderModelBusyState()
-    }
-  }
-
   /** 清空只属于已登录账号的额度展示，避免登出后残留旧账号数据。 */
   function clearManagedUsageDisplay(): void {
     managedUsage = null
@@ -981,7 +960,6 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     managedUsageWebSearch.textContent = '-'
     managedUsageEmbedding.textContent = '-'
     managedUsageVision.textContent = '-'
-    managedUsageRerank.textContent = '-'
     managedUsageStatus.textContent = managedAuthStatus?.state === 'authenticated'
       ? ''
       : '登录后可查看额度。'
@@ -996,7 +974,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       (typeof value.message === 'string' && value.message.includes('authentication_required'))
   }
 
-  /** 官方文本向量是独立开关；切换后 Runtime 会按新向量签名重建索引。 */
+  /** 统一切换知识库增强；来源变化后 Runtime 按新签名重建索引。 */
   async function changeManagedEmbedding(): Promise<void> {
     if (modelBusy) return
     modelBusy = true
@@ -1799,7 +1777,6 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     renderManagedUsageRefreshState()
     managedEmbeddingEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
     managedVisionEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
-    managedRerankEnabled.disabled = modelBusy || selectedServiceMode() !== 'managed' || subscriptionUnavailable
   }
 
   /** 保存主模型设置；Runtime 重启期间短暂显示启动状态。 */
@@ -2477,7 +2454,7 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
     if (managed) {
       embeddingOnlineForm.hidden = true
       embeddingProgress.hidden = true
-      embeddingStatus.textContent = '当前使用官方文本向量 · bge-base-zh-v1.5（768 维）'
+      embeddingStatus.textContent = '当前使用官方知识库增强'
       return
     }
     const previous = embeddingSelect.value
@@ -3446,8 +3423,8 @@ export function initializeAssistant(initialTheme: AssistantThemeId = 'quiet'): v
       const notice = document.createElement('p')
       notice.className = 'knowledge-degradation-notice'
       notice.textContent = payload.degradedReason === 'managed_quota_exhausted'
-        ? '官方文本向量本次请求额度不足，当前使用本地检索，语义召回效果可能下降。'
-        : '官方文本向量暂不可用，当前使用本地检索。'
+        ? '知识库增强本次请求额度不足，当前使用本地检索，回答效果可能下降。'
+        : '知识库增强暂不可用，当前使用本地检索。'
       details.append(notice)
     }
     sources.forEach((source, index) => {

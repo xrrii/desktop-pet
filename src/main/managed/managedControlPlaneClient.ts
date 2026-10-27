@@ -285,7 +285,7 @@ function requireUsageSummary(value: unknown): ManagedUsageSummary {
   const parsedCapabilities: ManagedUsageSummary['capabilities'] = {
     chat: requireUsageCapability(chat)
   }
-  for (const name of ['embedding', 'vision', 'web_search', 'rerank'] as const) {
+  for (const name of ['embedding', 'vision', 'web_search', 'rerank', 'knowledge_base'] as const) {
     if (source[name] !== undefined) parsedCapabilities[name] = requireUsageCapability(source[name])
   }
   return {

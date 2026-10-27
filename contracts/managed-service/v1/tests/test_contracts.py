@@ -32,6 +32,26 @@ EXAMPLE_SCHEMAS = {
 }
 
 
+def test_knowledge_route_has_bounded_payload_and_complete_result() -> None:
+    """冻结官方语义路由的最小输入、四路由输出和独立超时预算。"""
+    document = _read_yaml(OPENAPI_ROOT / "ai-data-plane.yaml")
+    validator = Draft202012Validator(document)
+    request = document["components"]["schemas"]["KnowledgeRouteRequest"]
+    response = document["components"]["schemas"]["KnowledgeRouteResponse"]
+    validator.evolve(schema=request).validate(_read_json(EXAMPLE_ROOT / "knowledge-route-request.json"))
+    sample = _read_json(EXAMPLE_ROOT / "knowledge-route-response.json")
+    validator.evolve(schema=response).validate(sample)
+    assert not validator.evolve(schema=request).is_valid({
+        "logicalModel": "route-standard", "input": "合成输入", "selectedLibraryCount": 0,
+    })
+    assert not validator.evolve(schema=response).is_valid({**sample, "route": "UNKNOWN"})
+    assert not validator.evolve(schema=response).is_valid({**sample, "probabilities": {"SKIP": 1}})
+    operation = document["paths"]["/ai/v1/knowledge/route"]["post"]
+    assert operation["x-petdock-concurrency-limit"] == 4
+    assert operation["x-petdock-timeouts-seconds"]["total"] == 15
+    assert operation["x-petdock-request-body-max-bytes"] == 65536
+
+
 def test_site_analytics_is_minimal_anonymous_and_preserves_gaps() -> None:
     """固定样例校验空数据、字段白名单及唯一无凭据采集例外。"""
     document = _read_yaml(OPENAPI_ROOT / "web-control-plane.yaml")
@@ -47,7 +67,7 @@ def test_site_analytics_is_minimal_anonymous_and_preserves_gaps() -> None:
     operation = document["paths"]["/api/v1/web/analytics/events"]["post"]
     assert operation["security"] == []
     assert "CsrfToken" not in str(operation.get("parameters", []))
-    assert document["components"]["schemas"]["AdminUserDetail"]["properties"]["capabilities"]["minItems"] == 5
+    assert document["components"]["schemas"]["AdminUserDetail"]["properties"]["capabilities"]["minItems"] == 4
     overview = _read_json(EXAMPLE_ROOT / "site-analytics-unavailable.json")
     assert overview["today"]["counts"] is None
     assert overview["collectionStartedAt"] is None
@@ -500,14 +520,13 @@ def test_web_trial_offer_is_limited_and_one_time() -> None:
     }
     capability = document["components"]["schemas"]["WebTrialCapability"]
     assert set(capability["properties"]["capability"]["enum"]) == {
-        "chat", "embedding", "rerank", "vision", "web_search"
+        "chat", "embedding", "rerank", "vision", "web_search", "knowledge_base"
     }
 
     register = (CONTRACT_ROOT / "DECISION_REGISTER.md").read_text(encoding="utf-8")
     for configured in (
         "Chat 100,000 tokens",
-        "Embedding 50,000 tokens",
-        "Rerank 50,000 tokens",
+        "知识库增强 100,000 tokens",
         "Vision 100,000 tokens",
         "Web Search 5 requests",
     ):
@@ -599,13 +618,14 @@ def test_p3_00_internal_usage_protocol_is_frozen() -> None:
     reserve_operation = internal["paths"]["/internal/v1/usage/reservations"]["post"]
     assert "已有任一终态" in reserve_operation["description"]
     reserve = internal["components"]["schemas"]["UsageReservationRequest"]
-    assert reserve["properties"]["capability"]["enum"] == ["chat", "embedding", "vision", "web_search", "rerank"]
+    assert reserve["properties"]["capability"]["enum"] == ["chat", "embedding", "vision", "web_search", "rerank", "route"]
     assert reserve["properties"]["logicalModel"]["enum"] == [
         "chat-standard",
         "embedding-standard",
         "vision-standard",
         "web-search-standard",
         "rerank-standard",
+        "route-standard",
     ]
     assert reserve["properties"]["requestFingerprint"]["pattern"] == "^[a-f0-9]{64}$"
     terminal = internal["components"]["schemas"]["UsageTerminalResponse"]
@@ -746,13 +766,14 @@ def test_p4_00_capabilities_have_independent_contract_boundaries() -> None:
     assert "/ai/v1/web/fetch" not in ai["paths"]
 
     reservation = internal["components"]["schemas"]["UsageReservationRequest"]
-    assert set(reservation["properties"]["capability"]["enum"]) == {"chat", "embedding", "vision", "web_search", "rerank"}
+    assert set(reservation["properties"]["capability"]["enum"]) == {"chat", "embedding", "vision", "web_search", "rerank", "route"}
     assert set(reservation["properties"]["logicalModel"]["enum"]) == {
         "chat-standard",
         "embedding-standard",
         "vision-standard",
         "web-search-standard",
         "rerank-standard",
+        "route-standard",
     }
     usage_schema = _read_json(SCHEMA_ROOT / "usage-event.schema.json")
     assert set(usage_schema["properties"]["logicalModel"]["enum"]) == set(
@@ -770,7 +791,7 @@ def test_p4_00_web_summary_supports_real_capability_breakdown() -> None:
     assert set(capability["properties"]["unit"]["enum"]) == {"tokens", "requests"}
     assert "null" in capability["properties"]["remaining"]["type"]
     example = _read_json(EXAMPLE_ROOT / "web-usage-summary.json")
-    assert set(example) >= {"chat", "embedding", "vision", "web_search", "rerank"}
+    assert set(example) >= {"chat", "embedding", "vision", "web_search", "rerank", "knowledge_base"}
     assert example["vision"]["unit"] == "tokens"
 
 
@@ -784,7 +805,7 @@ def test_p5_web_usage_history_is_daily_and_minimal() -> None:
     assert history["required"] == ["version", "periodStart", "periodEnd", "granularity", "items"]
     assert history["properties"]["granularity"]["enum"] == ["day"]
     item = web["components"]["schemas"]["WebUsageHistoryItem"]
-    assert set(item["properties"]) == {"date", "chat", "embedding", "vision", "web_search", "rerank"}
+    assert set(item["properties"]) == {"date", "chat", "embedding", "vision", "web_search", "rerank", "knowledge_base"}
     assert "prompt" not in item["properties"]
     assert "provider" not in item["properties"]
 

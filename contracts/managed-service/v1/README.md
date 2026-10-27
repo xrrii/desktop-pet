@@ -36,6 +36,8 @@ SECURITY_AND_DATA_BOUNDARIES.md
   WEB_IDENTITY_AND_SESSION.md
 ```
 
+知识库增强的产品授权、共享额度、路由协议和兼容说明见 [KNOWLEDGE_BASE.md](KNOWLEDGE_BASE.md)。
+
 ## 版本规则
 
 - 契约版本为 `v1`，OpenAPI 使用 `x-petdock-contract-version: 1`。

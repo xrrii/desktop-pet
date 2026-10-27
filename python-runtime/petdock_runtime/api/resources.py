@@ -21,6 +21,7 @@ from ..protocol import AssistantRequest
 from ..providers.chat import ChatModelFactory
 from ..providers.embeddings import EmbeddingProvider, LocalHashEmbedding, create_embedding_provider
 from ..providers.rerank import ManagedRerankProvider, RerankProvider
+from ..providers.managed_route import ManagedRouteProvider
 from ..rag.vector_store import ChromaVectorStore
 from ..skills.installer import SkillInstaller
 from ..skills.registry import SkillRegistry
@@ -124,6 +125,8 @@ def create_runtime_resources(config: RuntimeConfig) -> RuntimeResources:
         fallback_vectors,
         parser_registry,
         rerank,
+        ManagedRouteProvider(config.managed_ai_base_url, config.managed_client_version,
+                             config.managed_device_id, managed_session) if config.route_source == "managed" else None,
     )
     skill_store = SkillStore(config.skills_db_path)
     skills = SkillRegistry(config.skills_root, skill_store)

@@ -74,6 +74,7 @@ class RuntimeConfig:
     managed_client_version: str = field(default_factory=resolve_client_version)
     managed_device_id: str = ""
     rerank_source: Literal["managed", "disabled"] = "disabled"
+    route_source: Literal["managed", "disabled"] = "disabled"
 
     @classmethod
     def from_environment(cls) -> "RuntimeConfig":
@@ -209,6 +210,7 @@ class RuntimeConfig:
             managed_client_version=managed_client_version,
             managed_device_id=managed_device_id,
             rerank_source=capabilities.rerank,
+            route_source=capabilities.route,
         )
 
 

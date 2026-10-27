@@ -16,7 +16,7 @@
     "capabilities": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "enum": ["chat", "embedding", "vision", "rerank", "web_search"] }
+      "items": { "enum": ["chat", "embedding", "vision", "rerank", "web_search", "route"] }
     },
     "entitlement_version": { "type": "integer", "minimum": 1 },
     "iat": { "type": "integer", "minimum": 0 },

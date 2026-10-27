@@ -26,5 +26,10 @@
     "used": 0,
     "remaining": 200000,
     "unit": "tokens"
+  },
+  "knowledge_base": {
+    "used": 0,
+    "remaining": 400000,
+    "unit": "tokens"
   }
 }

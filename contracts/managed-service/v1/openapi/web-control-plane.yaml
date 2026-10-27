@@ -1322,7 +1322,7 @@ components:
         expiresAt: {type: [string, 'null'], format: date-time}
         capabilities:
           type: array
-          minItems: 5
+          minItems: 4
           maxItems: 5
           items:
             $ref: '#/components/schemas/AdminCapabilityUser'
@@ -1370,12 +1370,12 @@ components:
       properties:
         capability:
           type: string
-          enum: [chat, embedding, rerank, vision, web_search]
+          enum: [chat, embedding, rerank, vision, web_search, knowledge_base]
         limit:
           type: integer
           format: int64
           minimum: 0
-          maximum: 2000000000
+          maximum: 4000000000
         unit:
           type: string
           enum: [tokens, requests]
@@ -1460,7 +1460,7 @@ components:
           maximum: 2000000000
     AdminManagedCapability:
       type: string
-      enum: [chat, embedding, web_search, vision, rerank]
+      enum: [chat, embedding, web_search, vision, rerank, knowledge_base]
     AdminCreditRequest:
       type: object
       additionalProperties: false
@@ -1493,7 +1493,8 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 2000000000
+          maximum: 4000000000
+          description: 知识库增强最高 40 亿，其他能力仍最高 20 亿；服务端按能力校验。
     AdminCapabilityUser:
       type: object
       additionalProperties: false
@@ -1591,7 +1592,7 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 2000000000
+          maximum: 4000000000
         unit:
           type: string
           enum: [requests, tokens]
@@ -1786,6 +1787,8 @@ components:
           $ref: '#/components/schemas/WebUsageCapabilitySummary'
         rerank:
           $ref: '#/components/schemas/WebUsageCapabilitySummary'
+        knowledge_base:
+          $ref: '#/components/schemas/WebUsageCapabilitySummary'
     WebUsageCapabilitySummary:
       type: object
       additionalProperties: false
@@ -1833,6 +1836,10 @@ components:
         date:
           type: string
           format: date
+        knowledge_base:
+          type: integer
+          format: int64
+          minimum: 0
         chat:
           type: integer
           format: int64

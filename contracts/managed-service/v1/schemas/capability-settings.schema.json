@@ -16,6 +16,7 @@
         "embedding": { "$ref": "#/$defs/embedding" },
         "vision": { "$ref": "#/$defs/vision" },
         "rerank": { "$ref": "#/$defs/rerank" },
+        "route": { "$ref": "#/$defs/rerank" },
         "web_search": { "$ref": "#/$defs/webSearch" }
       }
     }

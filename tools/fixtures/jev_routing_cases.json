@@ -1,0 +1,89 @@
+[
+  {
+    "id": "skip-explicit-url",
+    "query": "打开网站 https://example.com",
+    "expectedRoute": "SKIP"
+  },
+  {
+    "id": "retrieve-deployment",
+    "query": "根据项目部署文档，说明 staging 环境的部署顺序，并引用相关依据。",
+    "expectedRoute": "RETRIEVE"
+  },
+  {
+    "id": "both-documented-url",
+    "query": "打开项目文档里提到的 staging 控制台网址。",
+    "expectedRoute": "BOTH"
+  },
+  {
+    "id": "clarify-missing-url",
+    "query": "打开网站",
+    "expectedRoute": "CLARIFY"
+  },
+  {
+    "id": "skip-keywords-in-poem",
+    "query": "写一首包含“知识库”和“文档”的诗",
+    "expectedRoute": "SKIP"
+  },
+  {
+    "id": "both-paraphrased-action",
+    "query": "根据部署说明，帮我把 staging 控制台打开",
+    "expectedRoute": "BOTH"
+  },
+  {
+    "id": "retrieve-negated-action",
+    "query": "不要打开网页，只告诉我项目文档里记录的 staging 地址",
+    "expectedRoute": "RETRIEVE"
+  },
+  {
+    "id": "clarify-missing-app",
+    "query": "启动应用",
+    "expectedRoute": "CLARIFY"
+  },
+  {
+    "id": "skip-greeting",
+    "query": "你好",
+    "expectedRoute": "SKIP"
+  },
+  {
+    "id": "retrieve-config-identifier",
+    "query": "PETDOCK_CHROMA_PATH 有什么作用？",
+    "expectedRoute": "RETRIEVE"
+  },
+  {
+    "id": "retrieve-possibly-missing-fact",
+    "query": "项目文档有没有说明量子发动机的维护周期？",
+    "expectedRoute": "RETRIEVE"
+  },
+  {
+    "id": "skip-no-library",
+    "query": "根据项目文档说明部署顺序",
+    "knowledgeLibraryIds": [],
+    "expectedRoute": "SKIP"
+  },
+  {
+    "id": "skip-tool-result-round",
+    "query": "打开项目文档里提到的网址",
+    "hasToolResult": true,
+    "expectedRoute": "SKIP"
+  },
+  {
+    "id": "skip-explicit-path",
+    "query": "打开文件 C:\\Temp\\report.txt",
+    "expectedRoute": "SKIP"
+  },
+  {
+    "id": "both-deployment-directory",
+    "query": "找到部署说明并打开对应目录",
+    "expectedRoute": "BOTH"
+  },
+  {
+    "id": "skip-translation",
+    "query": "翻译 hello world",
+    "expectedRoute": "SKIP"
+  },
+  {
+    "id": "retrieve-build-output",
+    "query": "打包产物保存在哪里？",
+    "expectedRoute": "RETRIEVE"
+  }
+]

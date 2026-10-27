@@ -22,6 +22,7 @@ class RuntimeCapabilitySettings:
     vision: VisionSource
     rerank: RerankSource
     web_search: WebSearchSource
+    route: RerankSource = "disabled"
 
 
 def parse_runtime_capabilities(
@@ -68,6 +69,7 @@ def parse_runtime_capabilities(
         vision=vision,  # type: ignore[arg-type]
         rerank=rerank,  # type: ignore[arg-type]
         web_search=web_search,  # type: ignore[arg-type]
+        route=_effective_source(capabilities, "route", {"managed", "disabled"}) if "route" in capabilities else "disabled",  # type: ignore[arg-type]
     )
 
 

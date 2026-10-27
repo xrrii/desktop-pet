@@ -12,6 +12,7 @@ x-petdock-phase4-public-operations:
   - POST /ai/v1/embeddings
   - POST /ai/v1/vision/analyze
   - POST /ai/v1/rerank
+  - POST /ai/v1/knowledge/route
   - POST /ai/v1/web/search
 servers:
   - url: https://ai.petdock.site
@@ -162,6 +163,41 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '413': { $ref: '#/components/responses/ErrorResponse' }
         '429': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
+  /ai/v1/knowledge/route:
+    post:
+      operationId: routeKnowledgeRequest
+      summary: 知识库增强语义路由
+      tags: [KnowledgeBase]
+      x-petdock-availability: phase-4
+      x-petdock-capability: route
+      x-petdock-logical-model: route-standard
+      x-petdock-request-body-max-bytes: 65536
+      x-petdock-concurrency-limit: 4
+      x-petdock-timeouts-seconds: { total: 15 }
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AttemptId'
+        - $ref: '#/components/parameters/ClientVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KnowledgeRouteRequest' }
+      responses:
+        '200':
+          description: 单一路由及诊断概率
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KnowledgeRouteResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+        '502': { $ref: '#/components/responses/ErrorResponse' }
         '503': { $ref: '#/components/responses/ErrorResponse' }
   /ai/v1/rerank:
     post:
@@ -527,6 +563,31 @@ components:
       properties:
         descriptorRevision: { type: string, minLength: 1, maxLength: 64 }
         summary: { $ref: '#/components/schemas/VisionSummary' }
+        usage: { $ref: '#/components/schemas/Usage' }
+    KnowledgeRouteRequest:
+      type: object
+      additionalProperties: false
+      required: [logicalModel, input, selectedLibraryCount]
+      properties:
+        logicalModel: { type: string, const: route-standard }
+        input: { type: string, minLength: 1, maxLength: 8192 }
+        selectedLibraryCount: { type: integer, minimum: 1, maximum: 20 }
+    KnowledgeRouteResponse:
+      type: object
+      additionalProperties: false
+      required: [route, confidence, probabilities, usage]
+      properties:
+        route: { type: string, enum: [SKIP, RETRIEVE, BOTH, CLARIFY] }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        probabilities:
+          type: object
+          additionalProperties: false
+          required: [SKIP, RETRIEVE, BOTH, CLARIFY]
+          properties:
+            SKIP: { type: number, minimum: 0, maximum: 1 }
+            RETRIEVE: { type: number, minimum: 0, maximum: 1 }
+            BOTH: { type: number, minimum: 0, maximum: 1 }
+            CLARIFY: { type: number, minimum: 0, maximum: 1 }
         usage: { $ref: '#/components/schemas/Usage' }
     RerankCandidate:
       type: object

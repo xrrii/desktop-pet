@@ -62,11 +62,11 @@
                   <strong id="managed-usage-web-search">-</strong>
                 </div>
                 <label class="managed-capability-row" for="managed-embedding-enabled">
-                  <span><strong>文本向量</strong><small id="managed-embedding-status" role="status"></small></span>
+                  <span><strong>知识库增强</strong><small id="managed-embedding-status" role="status"></small></span>
                   <span class="managed-capability-control">
                     <strong id="managed-usage-embedding">-</strong>
                     <span class="managed-toggle">
-                      <input id="managed-embedding-enabled" type="checkbox" aria-label="使用官方文本向量" />
+                      <input id="managed-embedding-enabled" type="checkbox" aria-label="使用官方知识库增强" />
                       <span class="managed-toggle-track" aria-hidden="true"></span>
                     </span>
                   </span>
@@ -77,16 +77,6 @@
                     <strong id="managed-usage-vision">-</strong>
                     <span class="managed-toggle">
                       <input id="managed-vision-enabled" type="checkbox" aria-label="使用官方图片理解" />
-                      <span class="managed-toggle-track" aria-hidden="true"></span>
-                    </span>
-                  </span>
-                </label>
-                <label class="managed-capability-row" for="managed-rerank-enabled">
-                  <span><strong>检索重排</strong><small id="managed-rerank-status" role="status"></small></span>
-                  <span class="managed-capability-control">
-                    <strong id="managed-usage-rerank">-</strong>
-                    <span class="managed-toggle">
-                      <input id="managed-rerank-enabled" type="checkbox" aria-label="使用本地检索重排" />
                       <span class="managed-toggle-track" aria-hidden="true"></span>
                     </span>
                   </span>
@@ -126,7 +116,7 @@
           </div>
 
           <nav class="settings-links" aria-label="其他助手配置">
-            <button id="settings-open-knowledge" class="settings-link" type="button"><strong>知识库</strong><small>索引目录与文本向量来源</small><span aria-hidden="true">›</span></button>
+            <button id="settings-open-knowledge" class="settings-link" type="button"><strong>知识库</strong><small>资料目录与检索设置</small><span aria-hidden="true">›</span></button>
             <button id="settings-open-pet-manager" class="settings-link" type="button"><strong>桌宠管理</strong><small>创建、切换和删除用户桌宠</small><span aria-hidden="true">›</span></button>
             <button id="settings-open-skill" class="settings-link" type="button"><strong>Skill</strong><small>安装、启停和更新 Skill</small><span aria-hidden="true">›</span></button>
           </nav>
@@ -213,7 +203,7 @@
             <button id="embedding-delete" class="icon-button" type="button" title="删除本地模型" aria-label="删除本地向量模型">⌫</button>
           </div>
           <div id="embedding-managed-summary" class="embedding-managed-summary" hidden>
-            <strong>官方文本向量</strong>
+            <strong>知识库增强</strong>
             <small>由 PetDock 官方服务处理，无需在桌面端选择模型。</small>
           </div>
           <small id="embedding-status"></small>

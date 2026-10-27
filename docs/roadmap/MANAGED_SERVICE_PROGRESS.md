@@ -1,6 +1,6 @@
 # desktop-pet 当前进度与交接
 
-状态：Tracking。更新时间：2026-10-18。已结束方案的过程见归档，当前页只保留现状与日常交接。
+状态：Tracking。更新时间：2026-10-27。已结束方案的过程见归档，当前页只保留现状与日常交接。
 
 ## 当前状态
 
@@ -12,6 +12,23 @@
 | Jenkins | 用户已搭建并使用；默认分支与制品复用改动已推送，上传环境变量修复提交为 `46a0614`；修复后的生产重跑结果未在本次整理中确认 |
 | Nacos 与桌面自动更新 | 已按用户确认整体完成；P1/P3/P4 关闭，P2 多能力迁移与 Jenkins 新接入取消，进入日常运维 |
 | 正式支付、按量结算 | 仍为延后范围，不因为维护功能上线而标记完成 |
+
+## 2026-10-26 知识库增强本地实施
+
+- 用户确认将路由、文本向量和重排聚合为一个“知识库增强”官方能力，共享用户额度，内部保留分项用量和故障状态；方向见[知识库增强方案](../features/MANAGED_KNOWLEDGE_BASE_ENHANCEMENT.md)。
+- 本次明确路由策略：Jev 可用时仅由 Jev 完成语义判断，正则仅用于降级；保留状态、授权和额度校验，不用正则提前截断正常请求。
+- 已实现官方 Jev 独立路由与错误降级、单一知识库开关、共享余额和官网聚合展示；上游采用 `https://api.xrrii.xyz`，Secret 仅在 Cloud 读取。Cloud `D-P4-05` 已冻结本轮增量规则。
+- 用户确认旧文本向量与重排剩余额度按 1:1 相加。Cloud V11 合并套餐与用户余额（V10 保留为已有官网统计迁移），历史 Usage 保留分项，旧请求的扣款退款映射到共享行；新聚合字段存在时不会重复相加别名。
+- 本轮未部署、未发布、未使用真实 Jev Key。真实上游评测、迁移执行与安装版验收仍待完成；公平调度尚待 query/index 维度和交互保留预算，不能将现有批次限制当作完整额度保护。
+
+
+### 本轮验证与快照
+
+- Managed Service v1 对应 Cloud 提交 `95ecf0ef29db6ecb48b808199a2f01b0436c7e41`；完成 Python、TypeScript、Spring 和制品 build/verify 后整体同步 60 个源文件，SHA-256 逐文件一致。2026-10-27 Cloud 与 Web 已推送 GitHub；配套 Web 提交 `5d6a8c35602c95652fac1af4ecd2320f0233249a`，包含知识库路由精确代理；尚未执行生产部署。
+- Desktop：`npm run typecheck`、`npm test -- --reporter=dot`（357 项）、`npm run test:runtime`（156 项）、`npm run test:contracts`（31 项）、`npm run build`（含生产端点检查）均通过。
+- `npm run test:retrieval` 正则降级基线通过：routeAccuracy=1、toolFalseRetrievalRate=0、zeroResultAccuracy=1、finalDocumentRecall=1、precisionAt3=1、mrrAt3=1；这是现有离线集，不代表真实 Jev 上游验收。
+- Cloud：根目录 pytest 44 项、Gateway 153 项、契约 TypeScript 2 项、契约 Spring 2 项通过；控制面 Java 21 清理构建后共 214 项中 179 项通过、35 项因 Docker 不可用跳过。Web 72 项及生成类型/生产构建、Nginx 精确路由检查通过。三仓差异、编码、敏感内容和新增文档链接检查通过，生成物已忽略。
+- 未运行真实 Jev、PostgreSQL 迁移和真实模型评测、安装版验收或部署；没有读取或保存真实上游 Key。既有 pytest 缓存 ACL、合成重复 ZIP 警告已记录，不改写成无警告或完整集成验收。
 
 ## 2026-10-18 官方文本向量降级排障
 
